@@ -1,0 +1,213 @@
+{
+  "templateDimensions": [
+    2550,
+    3300
+  ],
+  "bubbleDimensions": [
+    32,
+    32
+  ],
+  "processingImageShape": [
+    1640,
+    1332
+  ],
+  "preProcessors": [
+    {
+      "name": "CropOnMarkers",
+      "options": {
+        "processingImageShape": [
+          1640,
+          1332
+        ],
+        "type": "FOUR_MARKERS",
+        "referenceImage": "omr_marker.jpg",
+        "markerDimensions": [
+          40,
+          40
+        ]
+      }
+    }
+  ],
+  "customLabels": {
+    "Roll_no": [
+      "r1",
+      "r2",
+      "r3",
+      "r4"
+    ]
+  },
+  "fieldBlocks": {
+    "Roll_no": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_INT",
+      "origin": [
+        2169,
+        180
+      ],
+      "fieldLabels": [
+        "r1",
+        "r2",
+        "r3",
+        "r4"
+      ],
+      "bubblesGap": 61,
+      "labelsGap": 93
+    },
+    "MCQBlock1a1": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        197,
+        300
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q1..17"
+      ]
+    },
+    "MCQBlock1a2": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        197,
+        1310
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q18..34"
+      ]
+    },
+    "MCQBlock1a3": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        197,
+        2316
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q35..50"
+      ]
+    },
+    "MCQBlock1a4": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        725,
+        300
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q51..67"
+      ]
+    },
+    "MCQBlock1a5": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        725,
+        1310
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q68..84"
+      ]
+    },
+    "MCQBlock1a6": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        725,
+        2316
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q85..100"
+      ]
+    },
+    "MCQBlock1a7": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1250,
+        300
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q101..117"
+      ]
+    },
+    "MCQBlock1a8": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1250,
+        1310
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q118..134"
+      ]
+    },
+    "MCQBlock1a9": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1250,
+        2316
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q135..150"
+      ]
+    },
+    "MCQBlock1a10": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1770,
+        300
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q151..167"
+      ]
+    },
+    "MCQBlock1a11": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1770,
+        1310
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q168..184"
+      ]
+    },
+    "MCQBlock1a12": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        1770,
+        2316
+      ],
+      "bubblesGap": 92,
+      "labelsGap": 59.6,
+      "fieldLabels": [
+        "q185..200"
+      ]
+    }
+  }
+}

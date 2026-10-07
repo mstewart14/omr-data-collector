@@ -1,0 +1,36 @@
+{
+  "templateDimensions": [
+    299,
+    328
+  ],
+  "bubbleDimensions": [
+    20,
+    20
+  ],
+  "emptyValue": "no",
+  "preProcessors": [],
+  "customBubbleFieldTypes": {
+    "CUSTOM_YES_NO": {
+      "bubbleValues": [
+        "yes"
+      ],
+      "direction": "horizontal"
+    }
+  },
+  "fieldBlocks": {
+    "YesNoBlock1": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "CUSTOM_YES_NO",
+      "origin": [
+        15,
+        55
+      ],
+      "emptyValue": "no",
+      "bubblesGap": 48,
+      "labelsGap": 48,
+      "fieldLabels": [
+        "q1..5"
+      ]
+    }
+  }
+}
