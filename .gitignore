@@ -1,0 +1,22 @@
+# Environments
+.venv/
+venv/
+
+# Python
+**/__pycache__
+*.egg-info/
+build/
+dist/
+
+# Tests and tools
+.pytest_cache/
+.coverage
+htmlcov/
+pytestdebug.log
+.ruff_cache/
+
+# OMRChecker run outputs
+outputs/
+
+# Misc
+**/.DS_Store

@@ -1,0 +1,54 @@
+[project]
+name = "omr-data-collector"
+version = "0.1.0"
+description = "Build paper data-collection forms and turn photos of filled-in forms into data."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyside6==6.11.2",
+    # OMRChecker v2's runtime dependencies (vendor/omrchecker/pyproject.toml), at the
+    # versions it pins. Two deliberate differences:
+    # - OpenCV is the single headless contrib build instead of both opencv-python and
+    #   opencv-contrib-python: those two packages overwrite each other's cv2 module,
+    #   and the GUI builds ship their own Qt, which clashes with PySide6's on Linux.
+    #   The app shows images through Qt, so OpenCV never needs a window.
+    # - mike (a docs tool) and easyocr (optional OCR) are left out; the app only uses
+    #   OCR scan zones for where to crop, not for recognising handwriting.
+    "deepmerge==2.0",
+    "dotmap==1.3.30",
+    "jsonschema==4.25.0",
+    "matplotlib==3.10.5",
+    "numpy==2.2.6",
+    "opencv-contrib-python-headless==4.12.0.88",
+    "pandas==2.3.1",
+    "pyzbar==0.1.9",
+    "rich==13.8.0",
+    "scipy==1.15.1",
+    "screeninfo==0.8.1",
+    "shapely==2.1.1",
+]
+
+[project.scripts]
+omr-data-collector = "omr_data_collector.app:main"
+
+[dependency-groups]
+dev = [
+    "coverage==7.6.0",
+    "freezegun>=1.4.0",
+    "pre-commit>=4.3.0",
+    "pyright>=1.1.392.post0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock==3.14.0",
+    "pytest-qt>=4.5.0",
+    "pytest>=8.3.4",
+    # Matches the ruff-pre-commit rev, as OMRChecker v2 does, so both run the same rules.
+    "ruff==0.12.8",
+    "syrupy==4.6.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["omr_data_collector"]

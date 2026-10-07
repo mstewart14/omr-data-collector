@@ -1,0 +1,27 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "All",
+  "venv": ".venv",
+  "venvPath": ".",
+  "typeCheckingMode": "basic",
+  "include": [
+    "omr_data_collector",
+    "tests"
+  ],
+  "extraPaths": [
+    "vendor/omrchecker"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "vendor"
+  ],
+  "reportIncompatibleMethodOverride": "none",
+  "reportArgumentType": "warning",
+  "reportCallIssue": "none",
+  "reportOptionalMemberAccess": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "reportAssignmentType": "warning"
+}
