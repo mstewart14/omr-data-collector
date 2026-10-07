@@ -1,0 +1,36 @@
+{
+  "templateDimensions": [
+    299,
+    398
+  ],
+  "bubbleDimensions": [
+    42,
+    42
+  ],
+  "preProcessors": [
+    {
+      "name": "CropPage",
+      "options": {
+        "morphKernel": [
+          10,
+          10
+        ]
+      }
+    }
+  ],
+  "fieldBlocks": {
+    "MCQBlock1": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ5",
+      "origin": [
+        65,
+        79
+      ],
+      "bubblesGap": 43,
+      "labelsGap": 50,
+      "fieldLabels": [
+        "q1..6"
+      ]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "templateDimensions": [
+    300,
+    400
+  ],
+  "bubbleDimensions": [
+    20,
+    20
+  ],
+  "preProcessors": [],
+  "fieldBlocks": {
+    "MCQBlock1": {
+      "fieldDetectionType": "BUBBLES_THRESHOLD",
+      "bubbleFieldType": "QTYPE_MCQ4",
+      "origin": [
+        78,
+        41
+      ],
+      "fieldLabels": [
+        "q21..28"
+      ],
+      "bubblesGap": 56,
+      "labelsGap": 46
+    }
+  }
+}
