@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAccessible, QColor, QFont, QPalette
+from PySide6.QtGui import QAccessible, QColor, QFont, QKeySequence, QPalette
 from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit, QWidget
 
 from omr_data_collector.models.Organization import Organization
@@ -288,15 +288,17 @@ def test_formatting_buttons_show_icons_but_keep_their_names(
     qtbot.addWidget(page)
     fields = page.text_fields
 
-    for button, name, tooltip in (
-        (fields.bold_button, "Bold", "Bold (Ctrl+B)"),
-        (fields.italic_button, "Italic", "Italic (Ctrl+I)"),
-        (fields.bulleted_button, "Bulleted list", "Bulleted list (Ctrl+Shift+8)"),
-        (fields.numbered_button, "Numbered list", "Numbered list (Ctrl+Shift+7)"),
+    for button, name, shortcut in (
+        (fields.bold_button, "Bold", "Ctrl+B"),
+        (fields.italic_button, "Italic", "Ctrl+I"),
+        (fields.bulleted_button, "Bulleted list", "Ctrl+Shift+8"),
+        (fields.numbered_button, "Numbered list", "Ctrl+Shift+7"),
     ):
+        # Shortcuts read the platform's way: "Ctrl+B" here, "⌘B" on a Mac.
+        native = QKeySequence(shortcut).toString(QKeySequence.SequenceFormat.NativeText)
         assert button.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonIconOnly
         assert not button.icon().isNull()
-        assert button.toolTip() == tooltip
+        assert button.toolTip() == f"{name} ({native})"
         assert accessible_name(button) == name
 
 
