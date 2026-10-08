@@ -31,11 +31,13 @@ from omr_data_collector.i18n import (
     TRANSLATIONS_DIR,
     PseudoTranslator,
     install_translators,
+    language_choices,
     pseudo_translate,
     tr,
 )
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
+from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
 
@@ -122,6 +124,8 @@ def untranslated(root: QWidget) -> list[tuple[str, str]]:
         for where, text in shown_texts(root)
         if PseudoTranslator.START not in text
         and text not in PROPER_NAMES
+        # Each language is named in itself, whatever the app is showing.
+        and text not in {name for _, name in language_choices()[1:]}
         and re.search(r"[A-Za-z]{2}", text.split("\t")[0])
         and not re.fullmatch(r"(Ctrl|Shift|Alt|Meta|\+|[A-Z0-9]|\s)+", text)
     ]
@@ -159,8 +163,17 @@ def test_every_page_and_menu_is_translatable(
         lambda: BlockPickerDialog(None, BLOCK_KINDS.TEXT, [], can_write_new=True),
         lambda: BlockPickerDialog(None, BLOCK_KINDS.TABLE, [], can_write_new=False),
         lambda: OpenFormDialog(None, [], set()),
+        lambda: LanguageDialog(None, ""),
     ],
-    ids=["column", "text", "question", "text picker", "table picker", "open form"],
+    ids=[
+        "column",
+        "text",
+        "question",
+        "text picker",
+        "table picker",
+        "open form",
+        "language",
+    ],
 )
 def test_every_dialog_is_translatable(qtbot: QtBot, make_dialog) -> None:
     dialog = make_dialog()

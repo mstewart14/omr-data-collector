@@ -84,8 +84,13 @@ source language; the catalogs live in `omr_data_collector/translations/`.
   and commit the updated .ts and .qm files. It collects every `tr()` string,
   keeps existing translations, fills in English's plural forms and compiles the
   .qm files the app loads. A test fails if they are out of date.
-- **Trying a language:** the app follows the system language;
-  `OMR_DATA_COLLECTOR_LANGUAGE=fr uv run omr-data-collector` overrides it, and
+- **Choosing a language:** the app follows the desktop's language unless one is
+  chosen in Preferences > Language (kept per person, with QSettings, and used from
+  the next start). A language without a translation shows in English. Each
+  catalog names its own language: translate "English" (noted "the name of this
+  language, in this language") as, say, "Français".
+- **Trying a language:** `OMR_DATA_COLLECTOR_LANGUAGE=fr uv run omr-data-collector`
+  overrides both, and
   `OMR_DATA_COLLECTOR_LANGUAGE=pseudo` shows every translatable string accented and
   about a third longer, to spot untranslated text and layouts that can't stretch.
 

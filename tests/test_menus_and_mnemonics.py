@@ -15,6 +15,7 @@ from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
+from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 
 if TYPE_CHECKING:
@@ -131,8 +132,9 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: BlockContentDialog(None, BLOCK_KINDS.TEXT, None),
         lambda: BlockContentDialog(None, BLOCK_KINDS.QUESTION, None),
         lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
+        lambda: LanguageDialog(None, ""),
     ],
-    ids=["column", "text", "question", "picker"],
+    ids=["column", "text", "question", "picker", "language"],
 )
 @pytest.mark.usefixtures("language")
 def test_each_dialog_has_unique_mnemonics(qtbot: QtBot, make_dialog) -> None:
@@ -204,7 +206,8 @@ def test_each_library_menu_opens_its_library_first(
         "&New table",
     ]
     assert menu_texts(window.preferences_menu) == [
-        f"&Organization details…\t{section_key(5)}"
+        f"&Organization details…\t{section_key(5)}",
+        "&Language…",
     ]
 
     window.question_menu.actions()[0].trigger()
@@ -254,7 +257,7 @@ def test_organization_details_opens_the_organization_section(
 ) -> None:
     window = make_window(qtbot, connection)
     window.open_section(3)
-    (organization,) = window.preferences_menu.actions()
+    organization, _language = window.preferences_menu.actions()
 
     organization.trigger()
 

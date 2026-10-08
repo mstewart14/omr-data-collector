@@ -26,7 +26,15 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QCoreApplication, QLibraryInfo, QLocale, QTranslator
+from PySide6.QtCore import (
+    QCoreApplication,
+    QLibraryInfo,
+    QLocale,
+    QSettings,
+    QTranslator,
+)
+
+from omr_data_collector import APP_NAME
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
@@ -41,6 +49,10 @@ PRINTED_CONTEXT = "PrintedForm"
 # shows every translatable string accented and lengthened (see PseudoTranslator).
 LANGUAGE_VARIABLE = "OMR_DATA_COLLECTOR_LANGUAGE"
 PSEUDO_LANGUAGE = "pseudo"
+# The Preferences setting holding the chosen language's code.
+LANGUAGE_SETTING = "language"
+ENGLISH_NAME = "English"
+LANGUAGE_NAME_NOTE = "the name of this language, in this language"
 
 # The translators must outlive the call that installs them.
 _installed: list[QTranslator] = []
@@ -75,9 +87,83 @@ def available_languages() -> list[str]:
     )
 
 
+def preferences() -> QSettings:
+    """This person's own settings (not the organization's, kept in the database)."""
+    return QSettings(
+        QSettings.Format.IniFormat, QSettings.Scope.UserScope, APP_NAME, "preferences"
+    )
+
+
+def saved_language() -> str:
+    """The language chosen in Preferences > Language, or "" for the system's."""
+    value = preferences().value(LANGUAGE_SETTING, "")
+    return value if isinstance(value, str) else ""
+
+
+def save_language(language: str) -> None:
+    """Remember the language to use from the next start ("" for the system's)."""
+    settings = preferences()
+    settings.setValue(LANGUAGE_SETTING, language)
+    settings.sync()
+
+
+def language_choices() -> list[tuple[str, str]]:
+    """The languages to offer, as (code, name), the system's first.
+
+    Then each language the app has a translation for, named in that language
+    itself, so people can find their own whatever the app is showing.
+    """
+    system = QLocale.system()
+    choices = [
+        (
+            "",
+            tr("System language ({language})").format(
+                language=system.nativeLanguageName() or system.name()
+            ),
+        )
+    ]
+    choices += [
+        (language, language_name(language))
+        for language in [SOURCE_LANGUAGE, *available_languages()]
+    ]
+    return choices
+
+
+def language_name(language: str) -> str:
+    """A translated language's name, in that language: as its translators put it.
+
+    Qt's own names add a region to a bare language code ("American English" for
+    "en", "español de España" for "es"), so they're only the fallback.
+    """
+    translator = QTranslator()
+    if language != SOURCE_LANGUAGE and translator.load(
+        f"{CATALOG_NAME}_{language}", str(TRANSLATIONS_DIR)
+    ):
+        name = translator.translate("", ENGLISH_NAME, LANGUAGE_NAME_NOTE)
+        if name:
+            return name
+    if language == SOURCE_LANGUAGE:
+        return ENGLISH_NAME
+    name = QLocale(language).nativeLanguageName() or language
+    return name[:1].upper() + name[1:]
+
+
+def shown_language_name() -> str:
+    """The name of the language the app is showing, in that language.
+
+    Its tr() call is what asks every catalog's translators for their language's
+    name, which ``language_name`` reads.
+    """
+    return tr("English", "the name of this language, in this language")
+
+
 def chosen_locale() -> QLocale:
-    """The language to show: the override variable's, else the system's."""
-    language = os.environ.get(LANGUAGE_VARIABLE, "")
+    """The language to show.
+
+    The override variable's if set, else the one chosen in Preferences, else the
+    system's. A language without a translation shows in English.
+    """
+    language = os.environ.get(LANGUAGE_VARIABLE, "") or saved_language()
     if language and language != PSEUDO_LANGUAGE:
         return QLocale(language)
     return QLocale.system()

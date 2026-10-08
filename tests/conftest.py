@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 import pytest
-from PySide6.QtCore import QLocale
+from PySide6.QtCore import QLocale, QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from omr_data_collector.i18n import available_languages, install_translators
@@ -34,6 +34,14 @@ if sys.platform == "win32":
 def english(qapp: QApplication) -> None:
     """The app's text as people see it: English, with its plural forms."""
     install_translators(qapp, QLocale(QLocale.Language.English))
+
+
+@pytest.fixture(autouse=True)
+def own_preferences(tmp_path: Path) -> None:
+    """Keep each test's preferences (the language) out of the real ones."""
+    QSettings.setPath(
+        QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "config")
+    )
 
 
 @pytest.fixture(params=["en", *available_languages()])

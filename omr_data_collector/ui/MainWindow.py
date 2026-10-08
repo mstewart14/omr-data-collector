@@ -5,14 +5,27 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
-from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QMessageBox, QStackedWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QMainWindow,
+    QMenu,
+    QMenuBar,
+    QMessageBox,
+    QStackedWidget,
+)
 
 from omr_data_collector import APP_NAME
-from omr_data_collector.i18n import tr
+from omr_data_collector.i18n import (
+    language_choices,
+    save_language,
+    saved_language,
+    tr,
+)
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
 from omr_data_collector.ui.FormsPage import FormsPage
+from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.OrganizationPage import OrganizationPage
 from omr_data_collector.ui.QuestionsPage import QuestionsPage
 from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
@@ -31,12 +44,21 @@ STATUS_MESSAGE_TIMEOUT_MS = 5000
 MNEMONIC = re.compile(r"&([^&])")
 
 
+def choose_language(parent: QWidget, current: str) -> str | None:
+    """Ask which language to use; its code ("" for the system's), or None."""
+    dialog = LanguageDialog(parent, current)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.chosen_language()
+
+
 class MainWindow(QMainWindow):
     """The app window: the menu bar, and one section's page filling the rest.
 
     The menus are how sections are reached, like a document editor's: File is
     the form editor (forms are the documents this app makes); Text, Question and
-    Table are the block libraries; Preferences holds the organization's details.
+    Table are the block libraries; Preferences holds the organization's details and the
+    language.
     Ctrl+1 to Ctrl+5 open them in that order.
 
     Every page provides ``status_message``, ``has_unsaved_changes()``, ``save()``
@@ -223,6 +245,8 @@ class MainWindow(QMainWindow):
         self._go_to_action(
             self.preferences_menu, tr("&Organization details…"), self.organization_page
         )
+        language_action = self.preferences_menu.addAction(tr("&Language…"))
+        language_action.triggered.connect(self.change_language)
 
     def _library_menu(
         self,
@@ -281,6 +305,24 @@ class MainWindow(QMainWindow):
         return next(
             index for index, (_, other) in enumerate(self.pages) if other is page
         )
+
+    def change_language(self) -> None:
+        """Preferences > Language: choose the language for the next start."""
+        current = saved_language()
+        chosen = choose_language(self, current)
+        if chosen is None or chosen == current:
+            return
+        save_language(chosen)
+        if chosen:
+            name = dict(language_choices()).get(chosen, chosen)
+            message = tr(
+                "The app will be in {language} the next time it starts."
+            ).format(language=name)
+        else:
+            message = tr(
+                "The app will follow the system language the next time it starts."
+            )
+        self.show_status(message)
 
     def menu_mnemonics(self) -> set[str]:
         """The menu bar's Alt+letter keys, in the language shown.

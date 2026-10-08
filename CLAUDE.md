@@ -54,7 +54,7 @@ engine bridge.
 - **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
   `save()` and `initial_focus`. There is no sections list: the menu bar is the
   way around (File = form editor, Text, Question, Table = libraries, Preferences
-  = organization details; Ctrl+1 to Ctrl+5 in that order), so each page gets the
+  = organization details and language; Ctrl+1 to Ctrl+5 in that order), so each page gets the
   whole window. The window also handles the unsaved-changes prompt on close.
 - **Block libraries** (text blocks, questions, and next tables) subclass
   `ui/LibraryPage.py`, which owns the list, New/Duplicate/Delete, the name field,
