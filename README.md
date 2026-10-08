@@ -18,6 +18,9 @@ Product epics and user stories live on the team wiki:
 
 Needs [uv](https://docs.astral.sh/uv/) and, for QR/barcode reading, the system zbar
 library (`apt install libzbar0`, `brew install zbar`; bundled with the Windows wheel).
+On Linux under X11, Qt also needs `libxcb-cursor0` to open windows
+(`apt install libxcb-cursor0`); without it the app exits with "Could not load the Qt
+platform plugin xcb".
 On Apple Silicon Macs, also `export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"`
 so Python can find Homebrew's zbar.
 
