@@ -35,3 +35,48 @@ ORGANIZATION_NAME_MAX_LENGTH = 100
 
 # Text blocks are picked by name in the form builder, so names stay list-sized.
 TEXT_BLOCK_NAME_MAX_LENGTH = 100
+
+QUESTION_NAME_MAX_LENGTH = 100
+
+# How an answer is collected. Values are stored, so never rename one.
+ANSWER_TYPES = DotMap(
+    {
+        "YES_NO": "YES_NO",
+        "ONE_CHOICE": "ONE_CHOICE",
+        "MANY_CHOICES": "MANY_CHOICES",
+        "WRITTEN": "WRITTEN",
+    },
+    _dynamic=False,
+)
+
+# What a written answer must look like, checked when it is keyed in.
+WRITTEN_DATA_TYPES = DotMap(
+    {
+        "FREE_TEXT": "FREE_TEXT",
+        "NUMBER": "NUMBER",
+        "DATE_TIME": "DATE_TIME",
+        "ID": "ID",
+    },
+    _dynamic=False,
+)
+
+# Date/time answers are written in one of these fixed layouts, one character per
+# printed box, so the layout also sets how many boxes are printed.
+DATE_TIME_FORMATS = ("YYYY-MM-DD", "HH:MM", "YYYY-MM-DD HH:MM")
+
+CHECK_DIGIT_SCHEMES = DotMap(
+    {
+        "NONE": "NONE",
+        "DAMM": "DAMM",
+        "VERHOEFF": "VERHOEFF",
+    },
+    _dynamic=False,
+)
+
+YES_NO_CHOICE_COUNT = 2
+# The stories ask for at least three choices for list answers; with fewer, a
+# yes/no answer fits.
+MIN_LIST_CHOICES = 3
+# More bubbles than this no longer fit across a portrait page.
+MAX_CHOICES = 20
+MAX_WRITTEN_CHARACTERS = 60

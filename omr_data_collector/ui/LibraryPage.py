@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QSpacerItem,
     QVBoxLayout,
     QWidget,
 )
@@ -254,6 +256,12 @@ class LibraryPage(QWidget):
         self.field_labels: dict[str, QLabel] = {"name": name_label}
         self.error_labels: dict[str, QLabel] = {"name": name_error}
         self._field_focus_chain = self.build_fields(self.form)
+        # Takes up spare height when no field can grow (a written answer, say);
+        # otherwise the form spreads its rows apart. Growing fields (the text
+        # editor, the choices table) share the space with it.
+        self.form.addItem(
+            QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        )
 
         self.save_button = QPushButton("&Save")
         self.save_button.setDefault(True)

@@ -44,6 +44,16 @@ engine bridge.
 - **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
   `save()` and `initial_focus`; the window handles section switching (Ctrl+1, 2, …)
   and the unsaved-changes prompt on close.
+- **Block libraries** (text blocks, questions, and next tables) subclass
+  `ui/LibraryPage.py`, which owns the list, New/Duplicate/Delete, the name field,
+  Save/Revert and unsaved-change prompts; a subclass adds its fields in
+  `build_fields` and says how to read, load, store and copy its item. How an answer
+  is collected (yes/no, one or many choices, written) is an `AnswerSpec`, edited by
+  `ui/AnswerFields.py`, which adds its rows to the page's own form; table columns
+  reuse both.
+- **Forms keep their own copy of every block** (wiki 50011-50012): editing a
+  library block later asks "going forward only" or "everywhere", and "everywhere"
+  makes new form versions so sheets already printed still scan.
 - **Tests never show a real dialog**: an autouse fixture in `tests/conftest.py` makes
   unpatched message boxes fail, because offscreen they would wait forever. Patch the
   helper the code calls (e.g. `ask_save_discard_cancel`) in the test.

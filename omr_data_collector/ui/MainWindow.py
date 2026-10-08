@@ -17,12 +17,15 @@ from omr_data_collector import APP_NAME
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
 from omr_data_collector.ui.OrganizationPage import OrganizationPage
+from omr_data_collector.ui.QuestionsPage import QuestionsPage
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
 
 if TYPE_CHECKING:
     import sqlite3
 
     from PySide6.QtGui import QCloseEvent
+
+    from omr_data_collector.ui.LibraryPage import LibraryPage
 
 STATUS_MESSAGE_TIMEOUT_MS = 5000
 # Room beside the longest section name, so it never truncates at larger fonts.
@@ -42,9 +45,11 @@ class MainWindow(QMainWindow):
 
         self.organization_page = OrganizationPage(connection)
         self.text_blocks_page = TextBlocksPage(connection)
-        self.pages: list[tuple[str, OrganizationPage | TextBlocksPage]] = [
+        self.questions_page = QuestionsPage(connection)
+        self.pages: list[tuple[str, OrganizationPage | LibraryPage]] = [
             ("Organization", self.organization_page),
             ("Text blocks", self.text_blocks_page),
+            ("Questions", self.questions_page),
         ]
 
         self.sections = QListWidget()

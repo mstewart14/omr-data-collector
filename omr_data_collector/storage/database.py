@@ -39,6 +39,21 @@ MIGRATIONS: list[list[str]] = [
         # Names are unique ignoring case, matching TextBlock.validation_errors.
         "CREATE UNIQUE INDEX text_block_name ON text_block (name COLLATE NOCASE)",
     ],
+    [
+        """
+        CREATE TABLE question (
+            question_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            prompt TEXT NOT NULL,
+            example TEXT NOT NULL DEFAULT '',
+            -- AnswerSpec.to_dict() as JSON: the same shape forms copy.
+            answer TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """,
+        "CREATE UNIQUE INDEX question_name ON question (name COLLATE NOCASE)",
+    ],
 ]
 
 
