@@ -33,9 +33,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libzbar0 libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
 
+      # pyzbar finds zbar through ctypes, which doesn't search Homebrew's prefix on
+      # Apple Silicon (/opt/homebrew/lib) unless told to.
       - name: Install system libraries (macOS)
         if: runner.os == 'macOS'
-        run: brew install zbar
+        run: |
+          brew install zbar
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       - name: Setup Python ${{ matrix.python-version }} with uv
         uses: ./.github/actions/setup-python-with-uv
