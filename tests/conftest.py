@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 import pytest
@@ -11,13 +13,19 @@ from omr_data_collector.storage.database import open_database
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator
-    from pathlib import Path
 
     from pytest_mock import MockerFixture
 
 # Lets Qt run without a display (CI, containers, SSH sessions). Set before pytest-qt
 # creates the QApplication.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Offscreen Qt on Windows looks for fonts only in its own (empty) fonts folder.
+# Without real fonts nothing can be bold or italic, and Qt's Markdown writer, which
+# checks the font it actually found, silently drops ** and * from saved text.
+if sys.platform == "win32":
+    os.environ.setdefault(
+        "QT_QPA_FONTDIR", str(Path(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
+    )
 
 
 @pytest.fixture

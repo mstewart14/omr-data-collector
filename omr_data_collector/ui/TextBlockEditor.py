@@ -46,6 +46,9 @@ class TextBlockEditor(QTextEdit):
         self.setTabChangesFocus(True)
 
     def markdown(self) -> str:
+        # Qt writes ** and * from the font it actually resolved, not the formatting
+        # requested, so bold and italic need real fonts installed. Every desktop
+        # has them; tests/conftest.py supplies them to offscreen Qt on Windows.
         return self.document().toMarkdown(MARKDOWN_FEATURES)
 
     def set_markdown(self, text: str) -> None:
