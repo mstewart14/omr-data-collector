@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from omr_data_collector.models.Form import Form
 
@@ -90,14 +90,42 @@ def save_form(connection: sqlite3.Connection, form: Form) -> Form:
     return replace(form, version=version)
 
 
-def mark_printed(connection: sqlite3.Connection, form_id: str, version: int) -> None:
-    """Record that a version has been printed (or saved as a PDF), freezing it."""
+def mark_printed(
+    connection: sqlite3.Connection,
+    form_id: str,
+    version: int,
+    printed_layout: dict[str, Any] | None = None,
+) -> None:
+    """Record that a version has been printed (or saved as a PDF), freezing it.
+
+    ``printed_layout`` (from ``omr_template.printed_layout``) is the OMR template
+    of every page as printed; only the first printing's is kept, since every copy
+    of the version must scan the same way.
+    """
     with connection:
         connection.execute(
-            "UPDATE form_version SET printed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+            "UPDATE form_version SET printed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
+            " printed_layout = ?"
             " WHERE form_id = ? AND version = ? AND printed_at IS NULL",
-            (form_id, version),
+            (
+                json.dumps(printed_layout) if printed_layout is not None else None,
+                form_id,
+                version,
+            ),
         )
+
+
+def load_printed_layout(
+    connection: sqlite3.Connection, form_id: str, version: int
+) -> dict[str, Any] | None:
+    """The page templates stored when the version was first printed, if any."""
+    row = connection.execute(
+        "SELECT printed_layout FROM form_version WHERE form_id = ? AND version = ?",
+        (form_id, version),
+    ).fetchone()
+    if row is None or row["printed_layout"] is None:
+        return None
+    return json.loads(row["printed_layout"])
 
 
 def delete_form(connection: sqlite3.Connection, form_id: str) -> None:

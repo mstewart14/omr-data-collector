@@ -26,6 +26,7 @@ from omr_data_collector.layout.form_layout import (
     HEADER_HEIGHT_MM,
     QR_SIZE_MM,
 )
+from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
 from omr_data_collector.layout.table_layout import BUBBLE_DIAMETER_MM
 from omr_data_collector.layout.text import (
     draw_document,
@@ -66,15 +67,27 @@ def paint_page(
     layout: FormLayout,
     page: PageLayout,
 ) -> None:
-    """Draw one page: its header, then its blocks."""
+    """Draw one page: its corner markers, its header, then its blocks."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _paint_markers(painter, layout)
     _paint_header(painter, form, organization, layout, page)
     for placed in page.blocks:
         painter.save()
         painter.translate(0, placed.y_mm)
         _paint_block(painter, placed, layout.width_mm)
         painter.restore()
+    painter.restore()
+
+
+def _paint_markers(painter: QPainter, layout: FormLayout) -> None:
+    """The four registration markers, in the margins (negative coordinates)."""
+    painter.save()
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(INK)
+    radius = MARKER_DIAMETER_MM / 2
+    for x, y in marker_centres_mm(layout.paper_width_mm, layout.paper_height_mm):
+        painter.drawEllipse(QPointF(x, y), radius, radius)
     painter.restore()
 
 

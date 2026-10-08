@@ -35,6 +35,7 @@ from omr_data_collector.constants import (
     TABLE_BREAKS,
 )
 from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import KIND_NAMES, Form, FormBlock, content_id
 from omr_data_collector.models.ordering import move_by, move_to
@@ -609,7 +610,9 @@ class FormsPage(LibraryPage):
             QMessageBox.warning(self, "Couldn't save the PDF", str(error))
             return
         self._after_printing(
-            form, f"Saved {pages} page{'s' if pages != 1 else ''} to {path}"
+            form,
+            organization,
+            f"Saved {pages} page{'s' if pages != 1 else ''} to {path}",
         )
 
     def print_form(self) -> None:
@@ -622,7 +625,7 @@ class FormsPage(LibraryPage):
         if not run_print_dialog(self, printer):
             return
         render_form(printer, form, organization, organization.paper_size)
-        self._after_printing(form, "Sent the form to the printer")
+        self._after_printing(form, organization, "Sent the form to the printer")
 
     def print_preview(self) -> None:
         """File > Print preview: see the pages as they will print, and print them."""
@@ -639,7 +642,7 @@ class FormsPage(LibraryPage):
             ),
         )
         if printed:
-            self._after_printing(form, "Sent the form to the printer")
+            self._after_printing(form, organization, "Sent the form to the printer")
 
     def _ready_to_print(self, action: str) -> tuple[Form, Organization] | None:
         """The saved form and the organization, once both are ready to print.
@@ -675,9 +678,15 @@ class FormsPage(LibraryPage):
             return None
         return form, organization
 
-    def _after_printing(self, form: Form, done: str) -> None:
-        # Printed sheets are scanned against this version, so it's kept as it is.
-        mark_printed(self._connection, form.form_id, form.version)
+    def _after_printing(
+        self, form: Form, organization: Organization, done: str
+    ) -> None:
+        # Printed sheets are scanned against this version, so it's kept as it is,
+        # with the exact page templates that went to paper.
+        layout = layout_form(form, organization.paper_size)
+        mark_printed(
+            self._connection, form.form_id, form.version, printed_layout(layout)
+        )
         self._update_version_note(form)
         self.status_message.emit(
             f"{done}. Version {form.version} is now kept as printed; changes from "

@@ -14,8 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from PySide6.QtGui import QPageLayout
+
 from omr_data_collector.constants import ANSWER_TYPES, TABLE_BREAKS
-from omr_data_collector.layout.page_setup import printable_size_mm
+from omr_data_collector.layout.page_setup import (
+    page_layout_for,
+    printable_size_mm,
+)
 from omr_data_collector.layout.table_layout import (
     BUBBLE_DIAMETER_MM,
     WRITTEN_BOX_WIDTH_MM,
@@ -64,6 +69,8 @@ class Bubble:
     centre_y_mm: float
     label: str
     choice_index: int
+    # Which row of the question's choices it is on (they wrap when many).
+    row: int = 0
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,8 @@ class QuestionGeometry:
     example_top_mm: float
     example_height_mm: float
     answer_top_mm: float
+    # Distance between neighbouring bubbles' centres in a row of choices.
+    choice_pitch_mm: float
     bubbles: tuple[Bubble, ...]
     boxes: tuple[WrittenBox, ...]
     lines: tuple[WritingLine, ...]
@@ -146,14 +155,21 @@ class PageLayout:
 @dataclass(frozen=True)
 class FormLayout:
     pages: tuple[PageLayout, ...]
+    # The printable area, inside the margins, which the coordinates are within.
     width_mm: float
     height_mm: float
     warnings: tuple[str, ...]
+    # The whole sheet, margins included: where the corner markers go.
+    paper_width_mm: float = 0.0
+    paper_height_mm: float = 0.0
 
 
 def layout_form(form: Form, paper_size: str) -> FormLayout:
     """Stack the form's blocks down pages of ``paper_size`` in its orientation."""
     width, height = printable_size_mm(paper_size, form.orientation)
+    paper = page_layout_for(paper_size, form.orientation).fullRect(
+        QPageLayout.Unit.Millimeter
+    )
     builder = _PageBuilder(width, height)
     for index, block in enumerate(form.blocks):
         builder.place(index, block)
@@ -162,6 +178,8 @@ def layout_form(form: Form, paper_size: str) -> FormLayout:
         width_mm=width,
         height_mm=height,
         warnings=tuple(builder.warnings),
+        paper_width_mm=paper.width(),
+        paper_height_mm=paper.height(),
     )
 
 
@@ -186,44 +204,55 @@ def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
             lines = _writing_lines(question.answer.characters(), width_mm, answer_top)
             bottom = lines[-1].y_mm + (ANSWER_ROW_HEIGHT_MM - WRITING_LINE_DROP_MM)
             return QuestionGeometry(
-                prompt, example_top, example, answer_top, (), (), lines, bottom
+                prompt, example_top, example, answer_top, 0.0, (), (), lines, bottom
             )
         boxes = _written_boxes(cells, width_mm, answer_top)
         bottom = max(box.y_mm + box.height_mm for box in boxes)
         return QuestionGeometry(
-            prompt, example_top, example, answer_top, (), boxes, (), bottom
+            prompt, example_top, example, answer_top, 0.0, (), boxes, (), bottom
         )
-    bubbles = _choice_bubbles(question, width_mm, answer_top)
+    pitch = _choice_pitch_mm(question)
+    bubbles = _choice_bubbles(question, width_mm, answer_top, pitch)
     bottom = max(bubble.centre_y_mm for bubble in bubbles) + ANSWER_ROW_HEIGHT_MM / 2
     return QuestionGeometry(
-        prompt, example_top, example, answer_top, bubbles, (), (), bottom
+        prompt, example_top, example, answer_top, pitch, bubbles, (), (), bottom
     )
 
 
+def _choice_pitch_mm(question: Question) -> float:
+    """The spacing of a question's bubbles: room for the widest label.
+
+    Evenly spaced bubbles line up neatly, and OMRChecker reads a row of them as
+    one field only when they are evenly spaced.
+    """
+    widest = max(
+        (
+            text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
+            for choice in question.answer.choices
+        ),
+        default=0.0,
+    )
+    return BUBBLE_DIAMETER_MM + BUBBLE_LABEL_GAP_MM + widest + CHOICE_SPACING_MM
+
+
 def _choice_bubbles(
-    question: Question, width_mm: float, top: float
+    question: Question, width_mm: float, top: float, pitch: float
 ) -> tuple[Bubble, ...]:
     """Bubbles left to right, each followed by its label, wrapping onto new rows."""
-    bubbles = []
-    x, row = 0.0, 0
-    for index, choice in enumerate(question.answer.choices):
-        item = (
-            BUBBLE_DIAMETER_MM
-            + BUBBLE_LABEL_GAP_MM
-            + text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
+    item = pitch - CHOICE_SPACING_MM
+    per_row = max(int((width_mm - item) // pitch) + 1, 1)
+    return tuple(
+        Bubble(
+            centre_x_mm=(index % per_row) * pitch + BUBBLE_DIAMETER_MM / 2,
+            centre_y_mm=top
+            + (index // per_row) * ANSWER_ROW_HEIGHT_MM
+            + ANSWER_ROW_HEIGHT_MM / 2,
+            label=choice.label,
+            choice_index=index,
+            row=index // per_row,
         )
-        if x > 0 and x + item > width_mm:
-            x, row = 0.0, row + 1
-        bubbles.append(
-            Bubble(
-                centre_x_mm=x + BUBBLE_DIAMETER_MM / 2,
-                centre_y_mm=top + row * ANSWER_ROW_HEIGHT_MM + ANSWER_ROW_HEIGHT_MM / 2,
-                label=choice.label,
-                choice_index=index,
-            )
-        )
-        x += item + CHOICE_SPACING_MM
-    return tuple(bubbles)
+        for index, choice in enumerate(question.answer.choices)
+    )
 
 
 def _written_boxes(

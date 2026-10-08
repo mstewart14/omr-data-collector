@@ -99,6 +99,12 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    [
+        # The OMR templates of every page, as printed (omr_template.printed_layout),
+        # so sheets are scanned with exactly the geometry that went to paper,
+        # whatever fonts or paper size the computer scanning them has.
+        "ALTER TABLE form_version ADD COLUMN printed_layout TEXT",
+    ],
 ]
 
 

@@ -15,6 +15,7 @@ from omr_data_collector.layout.form_layout import (
     layout_form,
     question_geometry,
 )
+from omr_data_collector.layout.markers import marker_centres_mm
 from omr_data_collector.layout.table_layout import WRITTEN_BOX_WIDTH_MM
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
@@ -275,3 +276,29 @@ def test_warns_about_a_table_too_wide_for_the_page() -> None:
     assert layout.warnings == (
         'The table "Wide" is 264 mm wide but the page has 191 mm.',
     )
+
+
+def test_question_choices_are_evenly_spaced_for_omr() -> None:
+    geometry = question_geometry(
+        question("q", "A", "A much longer label", "B").content,  # type: ignore[arg-type]
+        width_mm=180,
+    )
+
+    xs = [bubble.centre_x_mm for bubble in geometry.bubbles]
+    assert xs[1] - xs[0] == pytest.approx(geometry.choice_pitch_mm)
+    assert xs[2] - xs[1] == pytest.approx(geometry.choice_pitch_mm)
+
+
+def test_the_layout_knows_the_whole_sheet_for_the_corner_markers() -> None:
+    layout = layout_form(form(text()), LETTER)
+
+    assert layout.paper_width_mm == pytest.approx(215.9, abs=0.1)
+    assert layout.paper_height_mm == pytest.approx(279.4, abs=0.1)
+    (left, top), _, (right, bottom), _ = marker_centres_mm(
+        layout.paper_width_mm, layout.paper_height_mm
+    )
+    # Out in the margins, clear of the printable area.
+    assert left < 0
+    assert top < 0
+    assert right > layout.width_mm
+    assert bottom > layout.height_mm

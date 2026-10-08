@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import QMarginsF
 from PySide6.QtGui import QPainter, QPdfWriter
+from PySide6.QtPrintSupport import QPrinter
 
 from omr_data_collector.layout.form_layout import layout_form
-from omr_data_collector.layout.page_setup import page_layout_for
+from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM, page_layout_for
 from omr_data_collector.rendering.page_painter import paint_page
 
 if TYPE_CHECKING:
@@ -29,14 +31,20 @@ def render_form(
 ) -> int:
     """Draw every page of ``form`` on ``device`` (a printer or PDF writer).
 
-    The device is given the form's page size, orientation and margins first, so
-    the painter's origin is the top-left of the printable area, as the layout
-    expects.
+    The device draws the whole sheet (no margins of its own), and the painter is
+    moved to the top-left of the printable area, as the layout expects: the
+    corner markers are drawn out in the margins, which a device's own margins
+    would clip.
 
     Returns:
         The number of pages drawn.
     """
-    device.setPageLayout(page_layout_for(paper_size, form.orientation))
+    full_sheet = page_layout_for(paper_size, form.orientation)
+    full_sheet.setMargins(QMarginsF(0, 0, 0, 0))
+    if isinstance(device, QPrinter):
+        # Coordinates from the paper's corner, not the printer's printable area.
+        device.setFullPage(True)
+    device.setPageLayout(full_sheet)
     layout = layout_form(form, paper_size)
     painter = QPainter()
     if not painter.begin(device):
@@ -49,6 +57,7 @@ def render_form(
                 device.newPage()
             painter.save()
             painter.scale(pixels_per_mm, pixels_per_mm)
+            painter.translate(PAGE_MARGIN_MM, PAGE_MARGIN_MM)
             paint_page(painter, form, organization, layout, page)
             painter.restore()
     finally:

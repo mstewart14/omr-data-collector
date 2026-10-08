@@ -78,6 +78,15 @@ engine bridge.
   `FormsPage._ready_to_print` (organization entered, form saved, layout problems
   confirmed) and finish with `mark_printed`; a preview alone doesn't freeze the
   version, printing from it does.
+- **Scanning:** every page has four solid corner markers in the margins
+  (`layout/markers.py`), so prints are drawn full-page. `layout/omr_template.py`
+  builds each page's OMRChecker template from the layout (one field per row of
+  question choices, which is why choices are evenly spaced, and one per table
+  cell); bubble values are letters, mapped back to choices by `TemplateField`.
+  Printing stores those templates with the version (`printed_layout`), and
+  `engine/scanning.scan_sheet` reads the QR code, runs OMRChecker on a copy of the
+  image with the stored template, and returns answers, flagging double marks.
+  `tests/test_scanning.py` is the round-trip test.
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact
