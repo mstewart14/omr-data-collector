@@ -12,6 +12,7 @@ from omr_data_collector.constants import (
     PAGE_ORIENTATIONS,
     TABLE_BREAKS,
 )
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
@@ -24,11 +25,24 @@ CONTENT_TYPES: dict[str, type[TextBlock | Question | TableBlock]] = {
     BLOCK_KINDS.QUESTION: Question,
     BLOCK_KINDS.TABLE: TableBlock,
 }
-KIND_NAMES = {
-    BLOCK_KINDS.TEXT: "text",
-    BLOCK_KINDS.QUESTION: "question",
-    BLOCK_KINDS.TABLE: "table",
-}
+
+
+def kind_name(kind: str) -> str:
+    """What a block of ``kind`` is called, as a noun inside a sentence."""
+    return {
+        BLOCK_KINDS.TEXT: tr("text block"),
+        BLOCK_KINDS.QUESTION: tr("question"),
+        BLOCK_KINDS.TABLE: tr("table"),
+    }[kind]
+
+
+def kind_title(kind: str) -> str:
+    """What a block of ``kind`` is called, on its own (a heading or list entry)."""
+    return {
+        BLOCK_KINDS.TEXT: tr("Text block"),
+        BLOCK_KINDS.QUESTION: tr("Question"),
+        BLOCK_KINDS.TABLE: tr("Table"),
+    }[kind]
 
 
 def content_id(content: BlockContent) -> str:
@@ -123,16 +137,18 @@ class Form:
         """
         errors: dict[str, str] = {}
         if not self.name:
-            errors["name"] = "Enter a name for the form."
+            errors["name"] = tr("Enter a name for the form.")
         elif len(self.name) > FORM_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {FORM_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.", None, FORM_NAME_MAX_LENGTH
             )
         elif self.name.casefold() in {name.casefold() for name in other_names}:
-            errors["name"] = f'Another form is already called "{self.name}".'
+            errors["name"] = tr('Another form is already called "{name}".').format(
+                name=self.name
+            )
 
         if self.orientation not in PAGE_ORIENTATIONS.values():
-            errors["orientation"] = "Choose an orientation."
+            errors["orientation"] = tr("Choose an orientation.")
 
         blocks_error = self._blocks_error()
         if blocks_error:
@@ -167,14 +183,19 @@ class Form:
 
     def _blocks_error(self) -> str:
         if not self.blocks:
-            return "Add at least one block."
+            return tr("Add at least one block.")
         for number, block in enumerate(self.blocks, start=1):
             # A form's blocks are checked on their own: their names only need to
             # be unique within the form, which is checked below.
             content_errors = block.content.validation_errors(set())
             if content_errors:
                 first = next(iter(content_errors.values()))
-                return f'Block {number} ({KIND_NAMES[block.kind]} "{block.content.name}"): {first}'
+                return tr('Block {number} ({kind} "{name}"): {problem}').format(
+                    number=number,
+                    kind=kind_name(block.kind),
+                    name=block.content.name,
+                    problem=first,
+                )
         # Question and table names become export column and file names, so two
         # blocks of the same kind can't share one.
         for kind in (BLOCK_KINDS.QUESTION, BLOCK_KINDS.TABLE):
@@ -184,10 +205,19 @@ class Form:
                     continue
                 key = block.content.name.casefold()
                 if key in seen:
-                    return (
-                        f"Blocks {seen[key]} and {number} are both "
-                        f'{KIND_NAMES[kind]}s called "{block.content.name}"; '
-                        "rename one so their data can be told apart."
+                    message = (
+                        tr(
+                            "Blocks {first} and {second} are both questions called "
+                            '"{name}"; rename one so their data can be told apart.'
+                        )
+                        if kind == BLOCK_KINDS.QUESTION
+                        else tr(
+                            "Blocks {first} and {second} are both tables called "
+                            '"{name}"; rename one so their data can be told apart.'
+                        )
+                    )
+                    return message.format(
+                        first=seen[key], second=number, name=block.content.name
                     )
                 seen[key] = number
         return ""

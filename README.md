@@ -72,6 +72,38 @@ keyboard, or large fonts and high-contrast themes:
 reach the app through AT-SPI; Qt's `qt.accessibility.atspi` log lines are its
 bridge talking to that service, not errors.
 
+## Translations
+
+All the app's text can be translated, with Qt's translation tools. English is the
+source language; the catalogs live in `omr_data_collector/translations/`.
+
+- **Starting a language:** `uv run python scripts/update_translations.py --add fr`
+  creates `omr_data_collector_fr.ts`. Translate it with Qt Linguist
+  (`uv run pyside6-linguist`) or any tool that reads .ts files, such as Weblate.
+- **After changing any text:** run `uv run python scripts/update_translations.py`
+  and commit the updated .ts and .qm files. It collects every `tr()` string,
+  keeps existing translations, fills in English's plural forms and compiles the
+  .qm files the app loads. A test fails if they are out of date.
+- **Trying a language:** the app follows the system language;
+  `OMR_DATA_COLLECTOR_LANGUAGE=fr uv run omr-data-collector` overrides it, and
+  `OMR_DATA_COLLECTOR_LANGUAGE=pseudo` shows every translatable string accented and
+  about a third longer, to spot untranslated text and layouts that can't stretch.
+
+Writing translatable text (see `omr_data_collector/i18n.py`):
+
+- wrap it in `tr()` as one literal sentence; put values in afterwards with named
+  placeholders: `tr('Saved "{name}".').format(name=name)`. Never build sentences
+  from pieces or f-strings: word order, gender and case differ between languages
+- counts use plural forms, passed by position: `tr("%n page(s)", None, pages)`
+- text in module-level constants is translated too early; keep it in functions
+- words printed on the forms use `tr_printed()`, kept apart from the app's own text
+- each language's labels need their own Alt+letter shortcuts, unique on each page
+  and clear of the menu bar's; the mnemonic tests run in every language
+
+`tests/test_translations.py` checks that every page, menu and dialog is
+translatable (under the pseudo-translation), that no prose is left outside `tr()`,
+and that translations keep their placeholders.
+
 ## The vendored OMR engine
 
 `vendor/omrchecker/` is OMRChecker v2 (its `dev` branch), added as a squashed git

@@ -20,6 +20,8 @@ def test_main_shows_main_window_and_returns_exit_code(
     # whose event loop returns at once.
     application_class = mocker.patch.object(app, "QApplication")
     application_class.return_value.exec.return_value = 3
+    # The real application keeps the tests' translators.
+    install_translators = mocker.patch.object(app, "install_translators")
     database_path = tmp_path / "app-data" / DATABASE_FILENAME
     mocker.patch.object(app, "default_database_path", return_value=database_path)
 
@@ -36,6 +38,7 @@ def test_main_shows_main_window_and_returns_exit_code(
     assert app.main() == 3
 
     application_class.return_value.setApplicationName.assert_called_once_with(APP_NAME)
+    install_translators.assert_called_once_with(application_class.return_value)
     assert len(windows) == 1
     assert windows[0].isVisible()
     assert database_path.exists()

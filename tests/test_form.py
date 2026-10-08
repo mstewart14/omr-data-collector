@@ -82,7 +82,7 @@ def test_a_blocks_own_errors_name_the_block() -> None:
     form = intake(blocks=(empty_text,))
 
     assert form.validation_errors(set()) == {
-        "blocks": 'Block 1 (text "Notes"): Enter the text for the block.'
+        "blocks": 'Block 1 (text block "Notes"): Enter the text for the block.'
     }
 
 

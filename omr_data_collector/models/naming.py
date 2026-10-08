@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from omr_data_collector.i18n import tr
+
 
 def copy_name(name: str, taken_names: set[str]) -> str:
     """A name for a duplicate of ``name``: "Name (copy)", then "Name (copy 2)"."""
     taken = {taken_name.casefold() for taken_name in taken_names}
-    candidate = f"{name} (copy)"
+    candidate = tr("{name} (copy)").format(name=name)
     number = 2
     while candidate.casefold() in taken:
-        candidate = f"{name} (copy {number})"
+        candidate = tr("{name} (copy {number})").format(name=name, number=number)
         number += 1
     return candidate

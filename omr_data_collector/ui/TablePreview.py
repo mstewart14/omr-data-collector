@@ -8,6 +8,7 @@ from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from omr_data_collector.constants import PAGE_ORIENTATIONS, PAPER_SIZES
+from omr_data_collector.i18n import tr
 from omr_data_collector.layout.page_setup import (
     PAGE_MARGIN_MM,
     page_layout_for,
@@ -24,44 +25,66 @@ if TYPE_CHECKING:
 
     from omr_data_collector.models.TableBlock import TableBlock
 
-PAPER_SIZE_NAMES = {
-    PAPER_SIZES.LETTER: "Letter",
-    PAPER_SIZES.LEGAL: "Legal",
-    PAPER_SIZES.A4: "A4",
-}
-ORIENTATION_NAMES = {
-    PAGE_ORIENTATIONS.PORTRAIT: "portrait",
-    PAGE_ORIENTATIONS.LANDSCAPE: "landscape",
-}
 PREVIEW_MIN_SIZE = QSize(300, 380)
 
 
 def fit_summary(table: TableBlock, paper_size: str, orientation: str) -> str:
     """Says in words what the preview shows: whether the table fits the page."""
-    page = f"{PAPER_SIZE_NAMES[paper_size]} {ORIENTATION_NAMES[orientation]}"
+    page = page_name(paper_size, orientation)
     if not table.columns:
-        return f"Add columns to preview the table on {page}."
+        return tr("Add columns to preview the table on {page}.").format(page=page)
     layout = table_layout(table)
     printable_width, printable_height = printable_size_mm(paper_size, orientation)
     width = round(layout.width_mm)
     room = round(printable_width)
     if layout.width_mm > printable_width:
-        sentence = (
-            f"Too wide for {page}: the table is {width} mm wide and the page has "
-            f"{room} mm. Try landscape, fewer columns, or fewer or shorter choices."
-        )
+        sentences = [
+            tr(
+                "Too wide for {page}: the table is {width} mm wide and the page has "
+                "{room} mm. Try landscape, fewer columns, or fewer or shorter choices."
+            ).format(page=page, width=width, room=room)
+        ]
     else:
-        sentence = f"Fits on {page}: {width} of {room} mm wide."
+        sentences = [
+            tr("Fits on {page}: {width} of {room} mm wide.").format(
+                page=page, width=width, room=room
+            )
+        ]
     per_page = layout.rows_per_page(printable_height)
     if table.fill_page:
-        sentence += (
-            f" Fills the page: {per_page} rows on {page} when the table starts at the "
-            "top of a page; fewer if it's placed lower on a form."
+        sentences.append(
+            tr(
+                "Fills the page: %n row(s) on {page} when the table starts at the "
+                "top of a page; fewer if it's placed lower on a form.",
+                None,
+                per_page,
+            ).format(page=page)
         )
     elif 0 < per_page < table.rows:
         pages = -(-table.rows // per_page)
-        sentence += f" {per_page} rows fit on a page, so the table takes {pages} pages."
-    return sentence
+        # Two counts, so two sentences: each gets its own plural form.
+        sentences.append(tr("%n row(s) fit on a page,", None, per_page))
+        sentences.append(tr("so the table takes %n page(s).", None, pages))
+    return " ".join(sentences)
+
+
+def orientation_names() -> dict[str, str]:
+    """Each page orientation's name, for lists to choose from."""
+    return {
+        PAGE_ORIENTATIONS.PORTRAIT: tr("Portrait"),
+        PAGE_ORIENTATIONS.LANDSCAPE: tr("Landscape"),
+    }
+
+
+def page_name(paper_size: str, orientation: str) -> str:
+    """A page's paper and orientation, like "Letter portrait"."""
+    portrait = orientation == PAGE_ORIENTATIONS.PORTRAIT
+    names = {
+        PAPER_SIZES.LETTER: (tr("Letter portrait"), tr("Letter landscape")),
+        PAPER_SIZES.LEGAL: (tr("Legal portrait"), tr("Legal landscape")),
+        PAPER_SIZES.A4: (tr("A4 portrait"), tr("A4 landscape")),
+    }
+    return names[paper_size][0 if portrait else 1]
 
 
 class TablePreview(QWidget):
@@ -71,7 +94,7 @@ class TablePreview(QWidget):
         super().__init__()
         self.setMinimumSize(PREVIEW_MIN_SIZE)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setAccessibleName("Table preview")
+        self.setAccessibleName(tr("Table preview"))
         self._table: TableBlock | None = None
         self._paper_size = PAPER_SIZES.LETTER
         self._orientation = PAGE_ORIENTATIONS.PORTRAIT

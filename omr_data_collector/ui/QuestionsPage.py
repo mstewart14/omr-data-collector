@@ -6,6 +6,7 @@ from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QLineEdit
 
 from omr_data_collector.constants import ANSWER_TYPES
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.Question import Question
 from omr_data_collector.storage.question_store import (
@@ -19,7 +20,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_new_or_keep_working,
 )
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
-from omr_data_collector.ui.LibraryPage import LibraryPage
+from omr_data_collector.ui.LibraryPage import LibraryPage, LibraryTexts
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QFormLayout, QWidget
@@ -34,34 +35,49 @@ class QuestionsPage(LibraryPage):
     on the wiki (stories 40001-40010).
     """
 
-    NOUN = "question"
-    LIST_LABEL = "Question li&brary"
-    NAME_LABEL = "Na&me (required)"
-    NEW_HINT = "Enter a name, the question and how it is answered."
+    def texts(self) -> LibraryTexts:
+        return LibraryTexts(
+            list_label=tr("Question li&brary"),
+            name_label=tr("Na&me (required)"),
+            new_title=tr("New question"),
+            new_status=tr(
+                "New question. Enter a name, the question and how it is answered."
+            ),
+            new_tooltip=tr("Start a new question (Ctrl+N)"),
+            duplicate_tooltip=tr("Save a copy of the selected question"),
+            delete_tooltip=tr("Delete the selected question (Delete key)"),
+            save_tooltip=tr("Save the question (Ctrl+S)"),
+            delete_title=tr("Delete question"),
+            delete_question=tr('Delete the question "{name}"? This can\'t be undone.'),
+            saved=tr('Question "{name}" saved.'),
+            deleted=tr('Question "{name}" deleted.'),
+            name_taken=tr('Another question is already called "{name}".'),
+            save_first=tr("Save your changes to this question first?"),
+        )
 
     def build_fields(self, form: QFormLayout) -> list[QWidget]:
-        self.name_edit.setToolTip("Also the column name when data is exported")
+        self.name_edit.setToolTip(tr("Also the column name when data is exported"))
         self.text_fields = FormattedTextFields(
             form,
             (self.field_widgets, self.field_labels, self.error_labels),
             key="prompt",
-            text_label="Questi&on (required)",
+            text_label=tr("Questi&on (required)"),
             # Not "St&yle": Alt+Y is the answer's Data type on this page.
-            style_label="Sty&le",
+            style_label=tr("Sty&le"),
             visible_lines=PROMPT_VISIBLE_LINES,
             shortcut_parent=self,
             on_change=self.update_state,
         )
         self.shortcuts += self.text_fields.shortcuts
         self.text_fields.editor.setPlaceholderText(
-            "As printed, like: Is this your first visit?"
+            tr("As printed, like: Is this your first visit?")
         )
         self.example_edit = QLineEdit()
         self.example_edit.setPlaceholderText(
-            "Printed with the question, like: Mark one"
+            tr("Printed with the question, like: Mark one")
         )
         self.field_labels["example"], self.error_labels["example"] = add_field_row(
-            form, "&Example or instructions", self.example_edit
+            form, tr("&Example or instructions"), self.example_edit
         )
         self.field_widgets["example"] = self.example_edit
         self.example_edit.textChanged.connect(self.update_state)
@@ -98,7 +114,15 @@ class QuestionsPage(LibraryPage):
 
     def after_user_save(self, item: Question) -> None:
         # Questions are often written one after another, so offer the next one.
-        if ask_new_or_keep_working(self, self.NOUN, item.name):
+        if ask_new_or_keep_working(
+            self,
+            tr("Question saved"),
+            tr(
+                'Question "{name}" saved. Start a new question, or keep working on '
+                "this one?"
+            ).format(name=item.name),
+            tr("&New question"),
+        ):
             self.new_item()
 
     def list_items(self) -> list[Question]:

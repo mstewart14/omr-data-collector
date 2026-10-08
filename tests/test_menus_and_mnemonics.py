@@ -15,7 +15,7 @@ from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
-from omr_data_collector.ui.MainWindow import MENU_MNEMONICS, MainWindow
+from omr_data_collector.ui.MainWindow import MainWindow
 
 if TYPE_CHECKING:
     import sqlite3
@@ -24,6 +24,11 @@ if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
 
 MNEMONIC = re.compile(r"&([^&])")
+NEW_OR_KEEP_WORKING = (
+    "Question saved",
+    'Question "first_visit" saved. Start a new question, or keep working on this one?',
+    "&New question",
+)
 
 
 def mnemonics_in(root: QWidget) -> list[str]:
@@ -85,21 +90,38 @@ def test_menu_letters_are_what_pages_avoid(
     ]
 
     assert titles == ["&File", "&Text", "&Question", "T&able", "&Preferences"]
-    assert set(mnemonics_of(titles)) == MENU_MNEMONICS
+    assert window.menu_mnemonics() == set(mnemonics_of(titles)) == set("ftqap")
 
 
+# The checks below run in every language: translated labels need letters of their
+# own, which translators choose.
+
+
+@pytest.mark.usefixtures("language")
+def test_the_menus_have_their_own_letters(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+
+    titles = [action.text() for action in window.menuBar().actions()]
+
+    assert len(mnemonics_of(titles)) == len(titles) == len(window.menu_mnemonics())
+
+
+@pytest.mark.usefixtures("language")
 @pytest.mark.parametrize("section", range(5))
 def test_each_page_has_unique_mnemonics_clear_of_the_menus(
     qtbot: QtBot, connection: sqlite3.Connection, section: int
 ) -> None:
     window = make_window(qtbot, connection)
     title, page = window.pages[section]
+    menu_letters = window.menu_mnemonics()
 
     letters = mnemonics_in(page)
 
     assert letters, title
     assert len(letters) == len(set(letters)), (title, sorted(letters))
-    assert not set(letters) & MENU_MNEMONICS, (title, set(letters) & MENU_MNEMONICS)
+    assert not set(letters) & menu_letters, (title, set(letters) & menu_letters)
 
 
 @pytest.mark.parametrize(
@@ -108,10 +130,11 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: ColumnDialog(None, None, set()),
         lambda: BlockContentDialog(None, BLOCK_KINDS.TEXT, None),
         lambda: BlockContentDialog(None, BLOCK_KINDS.QUESTION, None),
-        lambda: BlockPickerDialog(None, "question", [], can_write_new=True),
+        lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
     ],
     ids=["column", "text", "question", "picker"],
 )
+@pytest.mark.usefixtures("language")
 def test_each_dialog_has_unique_mnemonics(qtbot: QtBot, make_dialog) -> None:
     dialog = make_dialog()
     qtbot.addWidget(dialog)
@@ -146,6 +169,7 @@ def test_file_menu_holds_the_form_commands(
     ]
 
 
+@pytest.mark.usefixtures("language")
 def test_every_menus_items_have_their_own_letters(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
@@ -266,7 +290,13 @@ def test_saving_a_question_offers_a_new_one(
 
     window.questions_page.save_button.click()
 
-    ask.assert_called_once_with(window.questions_page, "question", "first_visit")
+    ask.assert_called_once_with(
+        window.questions_page,
+        "Question saved",
+        'Question "first_visit" saved. Start a new question, or keep working on '
+        "this one?",
+        "&New question",
+    )
     assert [question.name for question in list_questions(connection)] == ["first_visit"]
     assert window.questions_page.editor_box.title() == editing
 
@@ -319,7 +349,7 @@ def test_new_or_keep_working_dialog(
     parent = QWidget()
     qtbot.addWidget(parent)
 
-    assert ask_new_or_keep_working(parent, "question", "first_visit") is expected
+    assert ask_new_or_keep_working(parent, *NEW_OR_KEEP_WORKING) is expected
 
 
 def test_question_dialog_text_names_the_question(
@@ -336,12 +366,9 @@ def test_question_dialog_text_names_the_question(
     parent = QWidget()
     qtbot.addWidget(parent)
 
-    ask_new_or_keep_working(parent, "question", "first_visit")
+    ask_new_or_keep_working(parent, *NEW_OR_KEEP_WORKING)
 
-    assert seen["text"] == (
-        'Question "first_visit" saved. Start a new question, or keep working on '
-        "this one?"
-    )
+    assert seen["text"] == NEW_OR_KEEP_WORKING[1]
     # macOS message boxes have no title bar, so Qt drops the title there; the
     # text above says the same thing.
     if sys.platform != "darwin":

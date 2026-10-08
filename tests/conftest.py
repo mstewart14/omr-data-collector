@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 import pytest
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QLocale
+from PySide6.QtWidgets import QApplication, QMessageBox
 
+from omr_data_collector.i18n import available_languages, install_translators
 from omr_data_collector.storage.database import open_database
 
 if TYPE_CHECKING:
@@ -26,6 +28,20 @@ if sys.platform == "win32":
     os.environ.setdefault(
         "QT_QPA_FONTDIR", str(Path(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def english(qapp: QApplication) -> None:
+    """The app's text as people see it: English, with its plural forms."""
+    install_translators(qapp, QLocale(QLocale.Language.English))
+
+
+@pytest.fixture(params=["en", *available_languages()])
+def language(request: pytest.FixtureRequest, qapp: QApplication) -> Iterator[str]:
+    """Runs a test once in each language the app is translated into."""
+    install_translators(qapp, QLocale(request.param))
+    yield request.param
+    install_translators(qapp, QLocale(QLocale.Language.English))
 
 
 @pytest.fixture

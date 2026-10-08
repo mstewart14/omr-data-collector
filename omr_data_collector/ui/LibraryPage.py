@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from dataclasses import dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.naming import copy_name
 from omr_data_collector.ui.accessibility import set_field_error, style_error_label
 from omr_data_collector.ui.form_helpers import (
@@ -39,6 +41,31 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QShortcut
 
 
+@dataclass(frozen=True)
+class LibraryTexts:
+    """Everything a library page says about its items, as whole sentences.
+
+    Whole, so translators can word each one as their language needs (the word
+    for "question" may change form, or gender, from sentence to sentence).
+    ``{name}`` is an item's name.
+    """
+
+    list_label: str  # "Question li&brary"
+    name_label: str  # "Na&me (required)"
+    new_title: str  # "New question"
+    new_status: str  # "New question. Enter a name, ..."
+    new_tooltip: str  # "Start a new question (Ctrl+N)"
+    duplicate_tooltip: str
+    delete_tooltip: str
+    save_tooltip: str
+    delete_title: str  # "Delete question"
+    delete_question: str  # 'Delete the question "{name}"? This can't be undone.'
+    saved: str  # 'Question "{name}" saved.'
+    deleted: str
+    name_taken: str  # 'Another question is already called "{name}".'
+    save_first: str  # "Save your changes to this question first?"
+
+
 class LibraryPage(QWidget):
     """A library of reusable blocks: a list to pick from and an editor for one.
 
@@ -50,11 +77,6 @@ class LibraryPage(QWidget):
 
     status_message = Signal(str)
 
-    # What one item is called in messages, e.g. "text block".
-    NOUN = "item"
-    LIST_LABEL = "&Items"
-    NAME_LABEL = "Na&me (required)"
-    NEW_HINT = "Enter a name."
     # Off for pages whose items are opened another way (forms, from File > Open).
     SHOW_LIBRARY = True
 
@@ -130,13 +152,17 @@ class LibraryPage(QWidget):
     def item_id(self, item: Any) -> str:  # noqa: ANN401
         raise NotImplementedError
 
+    def texts(self) -> LibraryTexts:
+        """The page's labels and messages, in the person's language."""
+        raise NotImplementedError
+
     def delete_question(self, item: Any) -> str:  # noqa: ANN401
         """What to ask before deleting ``item``."""
-        return f'Delete the {self.NOUN} "{item.name}"? This can\'t be undone.'
+        return self.texts().delete_question.format(name=item.name)
 
     def saved_message(self, item: Any) -> str:  # noqa: ANN401
         """The status message after ``item`` is saved."""
-        return f'{self.NOUN.capitalize()} "{item.name}" saved.'
+        return self.texts().saved.format(name=item.name)
 
     # --- Public actions -------------------------------------------------------
 
@@ -161,16 +187,14 @@ class LibraryPage(QWidget):
                 self.store_item(item)
             except sqlite3.IntegrityError:
                 # Another window or process took the name since the list loaded.
-                errors = {
-                    "name": f'Another {self.NOUN} is already called "{item.name}".'
-                }
+                errors = {"name": self.texts().name_taken.format(name=item.name)}
         self.show_errors(errors)
         if errors:
             first_invalid = next(key for key in self.field_widgets if key in errors)
             self.field_widgets[first_invalid].setFocus(Qt.FocusReason.OtherFocusReason)
             count = len(errors)
             self.status_message.emit(
-                f"{count} field{'s' if count > 1 else ''} to fix before saving."
+                tr("%n field(s) to fix before saving.", None, count)
             )
             return False
 
@@ -223,7 +247,7 @@ class LibraryPage(QWidget):
         self._select(None)
         self._edit(None)
         self.name_edit.setFocus(Qt.FocusReason.OtherFocusReason)
-        self.status_message.emit(f"New {self.NOUN}. {self.NEW_HINT}")
+        self.status_message.emit(self.texts().new_status)
 
     def duplicate_item(self) -> None:
         if self._current is None or not self._resolve_unsaved_changes():
@@ -238,14 +262,18 @@ class LibraryPage(QWidget):
         self._edit(duplicate)
         self.name_edit.setFocus(Qt.FocusReason.OtherFocusReason)
         self.name_edit.selectAll()
-        self.status_message.emit(f'Duplicated "{original.name}" as "{duplicate.name}".')
+        self.status_message.emit(
+            tr('Duplicated "{original}" as "{copy}".').format(
+                original=original.name, copy=duplicate.name
+            )
+        )
 
     def delete_item(self) -> None:
         if self._current is None:
             return
         doomed = self._current
         if not confirm_destructive(
-            self, f"Delete {self.NOUN}", self.delete_question(doomed), "Delete"
+            self, self.texts().delete_title, self.delete_question(doomed), tr("Delete")
         ):
             return
         row = self.item_list.currentRow()
@@ -259,7 +287,7 @@ class LibraryPage(QWidget):
         else:
             self._select(None)
             self._edit(None)
-        self.status_message.emit(f'{self.NOUN.capitalize()} "{doomed.name}" deleted.')
+        self.status_message.emit(self.texts().deleted.format(name=doomed.name))
 
     def show_errors(self, errors: dict[str, str]) -> None:
         for key, label in self.error_labels.items():
@@ -287,19 +315,20 @@ class LibraryPage(QWidget):
 
     def _build_library_box(self) -> QGroupBox:
         self.item_list = QListWidget()
-        list_label = QLabel(self.LIST_LABEL)
+        texts = self.texts()
+        list_label = QLabel(texts.list_label)
         list_label.setBuddy(self.item_list)
-        self.new_button = QPushButton("&New")
-        self.new_button.setToolTip(f"Start a new {self.NOUN} (Ctrl+N)")
-        self.duplicate_button = QPushButton("D&uplicate")
-        self.duplicate_button.setToolTip(f"Save a copy of the selected {self.NOUN}")
-        self.delete_button = QPushButton("&Delete")
-        self.delete_button.setToolTip(f"Delete the selected {self.NOUN} (Delete key)")
+        self.new_button = QPushButton(tr("&New"))
+        self.new_button.setToolTip(texts.new_tooltip)
+        self.duplicate_button = QPushButton(tr("D&uplicate"))
+        self.duplicate_button.setToolTip(texts.duplicate_tooltip)
+        self.delete_button = QPushButton(tr("&Delete"))
+        self.delete_button.setToolTip(texts.delete_tooltip)
         buttons = QHBoxLayout()
         for button in (self.new_button, self.duplicate_button, self.delete_button):
             buttons.addWidget(button)
 
-        box = QGroupBox("Library")
+        box = QGroupBox(tr("Library"))
         box_layout = QVBoxLayout(box)
         box_layout.addWidget(list_label)
         box_layout.addWidget(self.item_list)
@@ -310,7 +339,7 @@ class LibraryPage(QWidget):
         self.form = QFormLayout()
         self.name_edit = QLineEdit()
         name_label, name_error = add_field_row(
-            self.form, self.NAME_LABEL, self.name_edit
+            self.form, self.texts().name_label, self.name_edit
         )
         self.field_widgets: dict[str, QWidget] = {"name": self.name_edit}
         self.field_labels: dict[str, QLabel] = {"name": name_label}
@@ -323,11 +352,11 @@ class LibraryPage(QWidget):
             QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         )
 
-        self.save_button = QPushButton("&Save")
+        self.save_button = QPushButton(tr("&Save"))
         self.save_button.setDefault(True)
-        self.save_button.setToolTip(f"Save the {self.NOUN} (Ctrl+S)")
-        self.revert_button = QPushButton("&Revert")
-        self.revert_button.setToolTip("Discard unsaved changes")
+        self.save_button.setToolTip(self.texts().save_tooltip)
+        self.revert_button = QPushButton(tr("&Revert"))
+        self.revert_button.setToolTip(tr("Discard unsaved changes"))
         buttons = QHBoxLayout()
         buttons.addStretch()
         buttons.addWidget(self.revert_button)
@@ -430,7 +459,9 @@ class LibraryPage(QWidget):
         # widget's own formatting of the same content never counts as a change.
         self._baseline = self._entered()
         self.editor_box.setTitle(
-            f'Editing "{item.name}"' if item is not None else f"New {self.NOUN}"
+            tr('Editing "{name}"').format(name=item.name)
+            if item is not None
+            else self.texts().new_title
         )
         self.update_state()
 
@@ -452,9 +483,7 @@ class LibraryPage(QWidget):
         """Ask about unsaved changes before leaving them; False means stay."""
         if not self.has_unsaved_changes():
             return True
-        answer = ask_save_discard_cancel(
-            self, f"Save your changes to this {self.NOUN} first?"
-        )
+        answer = ask_save_discard_cancel(self, self.texts().save_first)
         if answer == QMessageBox.StandardButton.Save:
             return self.save()
         return answer == QMessageBox.StandardButton.Discard

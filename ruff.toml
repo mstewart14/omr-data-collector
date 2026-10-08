@@ -226,6 +226,11 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 [lint.pydocstyle]
 convention = "google"
 
+# Our addition: the INT rules (already selected by ALL) check our translation
+# calls too, catching f-strings and pre-formatted text passed to them.
+[lint.flake8-gettext]
+extend-function-names = ["tr", "tr_printed"]
+
 [format]
 # Like Black, use double quotes for strings.
 quote-style = "double"

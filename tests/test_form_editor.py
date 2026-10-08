@@ -184,7 +184,7 @@ def test_canvas_describes_its_pages_for_screen_readers(qtbot: QtBot) -> None:
     description = canvas.accessibleDescription()
 
     assert description.startswith(
-        "2 pages. Page 1: Title, first_visit, Visit log (rows 1 to "
+        "2 pages. Page 1: Title, first_visit and Visit log (rows 1 to "
     )
     assert "Page 2: Visit log (rows " in description
     assert description.endswith(" to 40).")

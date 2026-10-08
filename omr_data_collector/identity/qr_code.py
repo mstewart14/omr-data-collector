@@ -8,6 +8,7 @@ import jsonschema
 import segno
 
 from omr_data_collector.constants import QR_PAYLOAD_TYPES, QR_PAYLOAD_VERSION
+from omr_data_collector.i18n import tr
 from omr_data_collector.schemas.qr_payload_schema import QR_PAYLOAD_SCHEMA
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ def parse_payload(text: str) -> dict[str, Any]:
         payload = json.loads(text)
         jsonschema.validate(instance=payload, schema=QR_PAYLOAD_SCHEMA)
     except (json.JSONDecodeError, jsonschema.ValidationError) as error:
-        msg = "Not an OMR Data Collector QR code"
+        msg = tr("Not an OMR Data Collector QR code")
         raise ValueError(msg) from error
     return payload
 
@@ -93,7 +94,9 @@ def save_qr_code(qr_code: segno.QRCode, path: Path) -> None:
     """
     suffix = path.suffix.lower()
     if suffix not in SAVE_FILE_FORMATS:
-        msg = f"Can't save a QR code as '{suffix}'; use .png, .svg or .pdf."
+        msg = tr("Can't save a QR code as '{suffix}'; use .png, .svg or .pdf.").format(
+            suffix=suffix
+        )
         raise ValueError(msg)
     # 10 pixels per module keeps a PNG sharp when it is enlarged for printing; SVG
     # and PDF are vector, so the scale only sets their nominal size.

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.constants import ANSWER_TYPES, BLOCK_KINDS
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TextBlock import TextBlock
@@ -37,19 +38,53 @@ TEXT_VISIBLE_LINES = 8
 PROMPT_VISIBLE_LINES = 4
 
 
+def _picker_texts(kind: str) -> dict[str, str]:
+    """The block picker's title, list label, notes and button, for one kind."""
+    if kind == BLOCK_KINDS.TEXT:
+        return {
+            "title": tr("Add text block"),
+            "list": tr("&Text blocks in the library"),
+            "empty": tr("There are no text blocks in the library yet."),
+            "empty_or_write": tr(
+                "There are no text blocks in the library yet. Write a new text "
+                "block, or add some in the library first."
+            ),
+            "write_new": tr("&Write a new text block…"),
+        }
+    if kind == BLOCK_KINDS.QUESTION:
+        return {
+            "title": tr("Add question"),
+            "list": tr("&Questions in the library"),
+            "empty": tr("There are no questions in the library yet."),
+            "empty_or_write": tr(
+                "There are no questions in the library yet. Write a new question, "
+                "or add some in the library first."
+            ),
+            "write_new": tr("&Write a new question…"),
+        }
+    return {
+        "title": tr("Add table"),
+        "list": tr("&Tables in the library"),
+        "empty": tr("There are no tables in the library yet."),
+        "empty_or_write": tr("There are no tables in the library yet."),
+        "write_new": tr("&Write a new table…"),
+    }
+
+
 class BlockPickerDialog(QDialog):
     """Choose a library block to copy onto a form, or choose to write a new one."""
 
     def __init__(
         self,
         parent: QWidget | None,
-        noun: str,
+        kind: str,
         items: Sequence[BlockContent],
         *,
         can_write_new: bool,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Add {noun}")
+        texts = _picker_texts(kind)
+        self.setWindowTitle(texts["title"])
         self._items = list(items)
         self.write_new = False
 
@@ -58,15 +93,10 @@ class BlockPickerDialog(QDialog):
             self.item_list.addItem(item.name)
         if self._items:
             self.item_list.setCurrentRow(0)
-        label = QLabel(f"&{noun.capitalize()}s in the library")
+        label = QLabel(texts["list"])
         label.setBuddy(self.item_list)
         self.empty_note = QLabel(
-            f"There are no {noun}s in the library yet."
-            + (
-                f" Write a new {noun}, or add some in the library first."
-                if can_write_new
-                else ""
-            )
+            texts["empty_or_write"] if can_write_new else texts["empty"]
         )
         self.empty_note.setWordWrap(True)
         self.empty_note.setVisible(not self._items)
@@ -75,12 +105,12 @@ class BlockPickerDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         ok_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
-        ok_button.setText("Add copy")
+        ok_button.setText(tr("Add copy"))
         ok_button.setEnabled(bool(self._items))
         self.write_new_button: QPushButton | None = None
         if can_write_new:
             self.write_new_button = self.buttons.addButton(
-                f"&Write a new {noun}…", QDialogButtonBox.ButtonRole.ActionRole
+                texts["write_new"], QDialogButtonBox.ButtonRole.ActionRole
             )
             self.write_new_button.clicked.connect(self._choose_write_new)
         self.buttons.accepted.connect(self.accept)
@@ -125,10 +155,19 @@ class BlockContentDialog(QDialog):
             else None
         )
         self._accepted: BlockContent | None = None
-        noun = "text block" if kind == BLOCK_KINDS.TEXT else "question"
-        self.setWindowTitle(
-            f"Edit {noun} on this form" if content else f"Write a new {noun}"
-        )
+        if kind == BLOCK_KINDS.TEXT:
+            title = (
+                tr("Edit text block on this form")
+                if content
+                else tr("Write a new text block")
+            )
+        else:
+            title = (
+                tr("Edit question on this form")
+                if content
+                else tr("Write a new question")
+            )
+        self.setWindowTitle(title)
 
         self.form = QFormLayout()
         self.field_widgets: dict[str, QWidget] = {}
@@ -136,7 +175,7 @@ class BlockContentDialog(QDialog):
         self.error_labels: dict[str, QLabel] = {}
         self.name_edit = QLineEdit()
         self.field_labels["name"], self.error_labels["name"] = add_field_row(
-            self.form, "Na&me (required)", self.name_edit
+            self.form, tr("Na&me (required)"), self.name_edit
         )
         self.field_widgets["name"] = self.name_edit
         registry = (self.field_widgets, self.field_labels, self.error_labels)
@@ -147,8 +186,8 @@ class BlockContentDialog(QDialog):
                 self.form,
                 registry,
                 key="content",
-                text_label="Te&xt (required)",
-                style_label="St&yle",
+                text_label=tr("Te&xt (required)"),
+                style_label=tr("St&yle"),
                 visible_lines=TEXT_VISIBLE_LINES,
                 shortcut_parent=self,
                 on_change=lambda: None,
@@ -159,15 +198,15 @@ class BlockContentDialog(QDialog):
                 self.form,
                 registry,
                 key="prompt",
-                text_label="Questi&on (required)",
-                style_label="Sty&le",
+                text_label=tr("Questi&on (required)"),
+                style_label=tr("Sty&le"),
                 visible_lines=PROMPT_VISIBLE_LINES,
                 shortcut_parent=self,
                 on_change=lambda: None,
             )
             self.example_edit = QLineEdit()
             self.field_labels["example"], self.error_labels["example"] = add_field_row(
-                self.form, "&Example or instructions", self.example_edit
+                self.form, tr("&Example or instructions"), self.example_edit
             )
             self.field_widgets["example"] = self.example_edit
             self.answer_fields = AnswerFields(

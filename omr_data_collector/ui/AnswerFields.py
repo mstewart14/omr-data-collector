@@ -23,6 +23,7 @@ from omr_data_collector.constants import (
     MAX_WRITTEN_CHARACTERS,
     WRITTEN_DATA_TYPES,
 )
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import (
     CHOICE_ANSWER_TYPES,
     AnswerSpec,
@@ -35,33 +36,65 @@ if TYPE_CHECKING:
 
     from PySide6.QtWidgets import QFormLayout, QLabel
 
-ANSWER_TYPE_LABELS = {
-    ANSWER_TYPES.YES_NO: "Yes/no (one bubble, marked or empty)",
-    ANSWER_TYPES.ONE_CHOICE: "One choice from a list",
-    ANSWER_TYPES.MANY_CHOICES: "Any number of choices from a list",
-    ANSWER_TYPES.WRITTEN: "Written answer",
-}
-DATA_TYPE_LABELS = {
-    WRITTEN_DATA_TYPES.FREE_TEXT: "Free text",
-    WRITTEN_DATA_TYPES.NUMBER: "Number",
-    WRITTEN_DATA_TYPES.DATE_TIME: "Date/time",
-    WRITTEN_DATA_TYPES.ID: "ID",
-}
-CHECK_DIGIT_LABELS = {
-    CHECK_DIGIT_SCHEMES.NONE: "None",
-    CHECK_DIGIT_SCHEMES.DAMM: "Damm",
-    CHECK_DIGIT_SCHEMES.VERHOEFF: "Verhoeff",
-}
-LIST_TABLE_DESCRIPTION = (
-    "Each row is one bubble: the words printed beside it, and what is saved "
-    "when it is marked (blank saves the printed words)."
-)
-YES_NO_ROW_LABELS = ("Marked", "Left empty")
-YES_NO_TABLE_DESCRIPTION = (
-    "A yes/no answer is one bubble. The Marked row's words are printed beside it "
-    "and saved when it is marked; the Left empty row's are saved when it isn't "
-    "(and never printed). Blank Saved as saves the words."
-)
+
+def answer_type_labels() -> dict[str, str]:
+    return {
+        ANSWER_TYPES.YES_NO: tr("Yes/no (one bubble, marked or empty)"),
+        ANSWER_TYPES.ONE_CHOICE: tr("One choice from a list"),
+        ANSWER_TYPES.MANY_CHOICES: tr("Any number of choices from a list"),
+        ANSWER_TYPES.WRITTEN: tr("Written answer"),
+    }
+
+
+def data_type_labels() -> dict[str, str]:
+    return {
+        WRITTEN_DATA_TYPES.FREE_TEXT: tr("Free text"),
+        WRITTEN_DATA_TYPES.NUMBER: tr("Number"),
+        WRITTEN_DATA_TYPES.DATE_TIME: tr("Date/time"),
+        WRITTEN_DATA_TYPES.ID: tr("ID"),
+    }
+
+
+def check_digit_labels() -> dict[str, str]:
+    return {
+        CHECK_DIGIT_SCHEMES.NONE: tr("None", "no check digit"),
+        # Named after their inventors.
+        CHECK_DIGIT_SCHEMES.DAMM: "Damm",
+        CHECK_DIGIT_SCHEMES.VERHOEFF: "Verhoeff",
+    }
+
+
+def date_time_format_labels() -> dict[str, str]:
+    """How each date/time format is shown, in the language's letters.
+
+    Y, M, D, H and M stand for year, month, day, hour and minute.
+    """
+    return {
+        "YYYY/MM/DD": tr("YYYY/MM/DD"),
+        "HH:MM": tr("HH:MM"),
+        "YYYY/MM/DD HH:MM": tr("YYYY/MM/DD HH:MM"),
+    }
+
+
+def list_table_description() -> str:
+    return tr(
+        "Each row is one bubble: the words printed beside it, and what is saved "
+        "when it is marked (blank saves the printed words)."
+    )
+
+
+def yes_no_row_labels() -> list[str]:
+    return [tr("Marked"), tr("Left empty")]
+
+
+def yes_no_table_description() -> str:
+    return tr(
+        "A yes/no answer is one bubble. The Marked row's words are printed beside "
+        "it and saved when it is marked; the Left empty row's are saved when it "
+        "isn't (and never printed). Blank Saved as saves the words."
+    )
+
+
 LABEL_COLUMN, OUTPUT_COLUMN = 0, 1
 # Number limits are optional; the spin box's lowest value stands for "no limit".
 NO_LIMIT = -(2**31) + 1
@@ -92,16 +125,18 @@ class AnswerFields:
         self._list_choices = AnswerSpec.default(ANSWER_TYPES.ONE_CHOICE).choices
         self._showing_type = ANSWER_TYPES.YES_NO
 
-        self.answer_type_combo = _combo(ANSWER_TYPE_LABELS)
+        self.answer_type_combo = _combo(answer_type_labels())
         self.choices_table = QTableWidget(0, 2)
-        self.choices_table.setHorizontalHeaderLabels(["Printed", "Saved as"])
+        self.choices_table.setHorizontalHeaderLabels([tr("Printed"), tr("Saved as")])
         header = self.choices_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         header.setToolTip(
-            '"Saved as" is the value in exported data; leave it blank to save the '
-            "printed words."
+            tr(
+                '"Saved as" is the value in exported data; leave it blank to save the '
+                "printed words."
+            )
         )
-        self.choices_table.setAccessibleDescription(LIST_TABLE_DESCRIPTION)
+        self.choices_table.setAccessibleDescription(list_table_description())
         self.choices_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -116,12 +151,12 @@ class AnswerFields:
             row_height * (CHOICE_ROWS_VISIBLE + 1) + 2 * self.choices_table.frameWidth()
         )
 
-        self.add_choice_button = QPushButton("Add &choice")
-        self.remove_choice_button = QPushButton("Remo&ve choice")
-        self.move_up_button = QPushButton("Move up")
-        self.move_down_button = QPushButton("Move down")
+        self.add_choice_button = QPushButton(tr("Add &choice"))
+        self.remove_choice_button = QPushButton(tr("Remo&ve choice"))
+        self.move_up_button = QPushButton(tr("Move up"))
+        self.move_down_button = QPushButton(tr("Move down"))
         self.choice_buttons = QWidget()
-        self.choice_buttons.setAccessibleName("Choice actions")
+        self.choice_buttons.setAccessibleName(tr("Choice actions"))
         buttons_layout = QHBoxLayout(self.choice_buttons)
         buttons_layout.setContentsMargins(0, 0, 0, 0)
         for button in (
@@ -135,21 +170,23 @@ class AnswerFields:
 
         self.characters_spin = QSpinBox()
         self.characters_spin.setRange(1, MAX_WRITTEN_CHARACTERS)
-        self.characters_spin.setToolTip("How many boxes are printed for the answer")
-        self.data_type_combo = _combo(DATA_TYPE_LABELS)
-        self.minimum_spin = _limit_spin("No minimum")
-        self.maximum_spin = _limit_spin("No maximum")
+        self.characters_spin.setToolTip(tr("How many boxes are printed for the answer"))
+        self.data_type_combo = _combo(data_type_labels())
+        self.minimum_spin = _limit_spin(tr("No minimum"))
+        self.maximum_spin = _limit_spin(tr("No maximum"))
         self.date_format_combo = QComboBox()
         for date_format in DATE_TIME_FORMATS:
-            self.date_format_combo.addItem(date_format, date_format)
-        self.check_digit_combo = _combo(CHECK_DIGIT_LABELS)
+            self.date_format_combo.addItem(
+                date_time_format_labels()[date_format], date_format
+            )
+        self.check_digit_combo = _combo(check_digit_labels())
         self.check_digit_combo.setToolTip(
-            "The last digit of each ID is checked, catching most mistyped IDs"
+            tr("The last digit of each ID is checked, catching most mistyped IDs")
         )
 
         for key, label_text, widget in (
-            ("answer_type", "&Kind of answer", self.answer_type_combo),
-            ("choices", "C&hoices", self.choices_table),
+            ("answer_type", tr("&Kind of answer"), self.answer_type_combo),
+            ("choices", tr("C&hoices"), self.choices_table),
         ):
             field_labels[key], error_labels[key] = add_field_row(
                 form, label_text, widget
@@ -157,12 +194,12 @@ class AnswerFields:
             field_widgets[key] = widget
         form.addRow("", self.choice_buttons)
         for key, label_text, widget in (
-            ("data_type", "Data t&ype", self.data_type_combo),
-            ("max_characters", "Si&ze (characters)", self.characters_spin),
-            ("number_minimum", "M&inimum", self.minimum_spin),
-            ("number_maximum", "Ma&ximum", self.maximum_spin),
-            ("date_time_format", "Date &written as", self.date_format_combo),
-            ("check_digit", "Check di&git", self.check_digit_combo),
+            ("data_type", tr("Data t&ype"), self.data_type_combo),
+            ("max_characters", tr("Si&ze (characters)"), self.characters_spin),
+            ("number_minimum", tr("M&inimum"), self.minimum_spin),
+            ("number_maximum", tr("Ma&ximum"), self.maximum_spin),
+            ("date_time_format", tr("Date &written as"), self.date_format_combo),
+            ("check_digit", tr("Check di&git"), self.check_digit_combo),
         ):
             field_labels[key], error_labels[key] = add_field_row(
                 form, label_text, widget
@@ -344,9 +381,9 @@ class AnswerFields:
         yes_no = self._showing_type == ANSWER_TYPES.YES_NO
         self.choices_table.verticalHeader().setVisible(yes_no)
         if yes_no:
-            self.choices_table.setAccessibleDescription(YES_NO_TABLE_DESCRIPTION)
+            self.choices_table.setAccessibleDescription(yes_no_table_description())
         else:
-            self.choices_table.setAccessibleDescription(LIST_TABLE_DESCRIPTION)
+            self.choices_table.setAccessibleDescription(list_table_description())
         for row, choice in enumerate(choices):
             self.choices_table.insertRow(row)
             self.choices_table.setItem(
@@ -356,7 +393,7 @@ class AnswerFields:
             output = "" if choice.output == choice.label else choice.output
             self.choices_table.setItem(row, OUTPUT_COLUMN, QTableWidgetItem(output))
         if yes_no:
-            self.choices_table.setVerticalHeaderLabels(list(YES_NO_ROW_LABELS))
+            self.choices_table.setVerticalHeaderLabels(yes_no_row_labels())
 
     def _update_rows(self) -> None:
         answer_type = self.answer_type_combo.currentData()

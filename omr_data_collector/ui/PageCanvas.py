@@ -4,11 +4,21 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QByteArray, QMimeData, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QLocale,
+    QMimeData,
+    QPoint,
+    QPointF,
+    QRectF,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QColor, QDrag, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QApplication, QSizePolicy, QWidget
 
 from omr_data_collector.constants import PAPER_SIZES
+from omr_data_collector.i18n import tr
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM, page_layout_for
 from omr_data_collector.rendering.page_painter import paint_page
@@ -73,7 +83,7 @@ class PageCanvas(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setAcceptDrops(True)
-        self.setAccessibleName("Form pages")
+        self.setAccessibleName(tr("Form pages"))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         # Takes focus when clicked, so Delete works on what was clicked, but isn't
         # a Tab stop: the Outline list does the same things from the keyboard.
@@ -119,11 +129,19 @@ class PageCanvas(QWidget):
                 part = placed.table_part
                 if part is not None:
                     last = part.first_row + part.row_count
-                    name += f" (rows {part.first_row + 1} to {last})"
+                    name = tr("{name} (rows {first} to {last})").format(
+                        name=name, first=part.first_row + 1, last=last
+                    )
                 names.append(name)
-            pages.append(f"Page {page.number}: {', '.join(names) or 'empty'}.")
+            pages.append(
+                tr("Page {number}: {blocks}.").format(
+                    number=page.number, blocks=QLocale().createSeparatedList(names)
+                )
+                if names
+                else tr("Page {number}: empty.").format(number=page.number)
+            )
         count = len(self._layout.pages)
-        return f"{count} page{'s' if count != 1 else ''}. " + " ".join(pages)
+        return " ".join([tr("%n page(s).", None, count), *pages])
 
     # --- Geometry -----------------------------------------------------------------
 

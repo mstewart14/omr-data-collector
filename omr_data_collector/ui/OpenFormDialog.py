@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from omr_data_collector.i18n import tr
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -27,18 +29,24 @@ class OpenFormDialog(QDialog):
     ) -> None:
         """``printed`` holds the IDs of forms whose latest version has been printed."""
         super().__init__(parent)
-        self.setWindowTitle("Open form")
+        self.setWindowTitle(tr("Open form"))
         self.form_list = QListWidget()
         for form in forms:
-            state = "printed" if form.form_id in printed else "not printed yet"
-            item = QListWidgetItem(f"{form.name} (version {form.version}, {state})")
+            text = (
+                tr("{name} (version {version}, printed)")
+                if form.form_id in printed
+                else tr("{name} (version {version}, not printed yet)")
+            )
+            item = QListWidgetItem(text.format(name=form.name, version=form.version))
             item.setData(Qt.ItemDataRole.UserRole, form.form_id)
             self.form_list.addItem(item)
         if forms:
             self.form_list.setCurrentRow(0)
-        label = QLabel("&Forms")
+        label = QLabel(tr("&Forms"))
         label.setBuddy(self.form_list)
-        self.empty_note = QLabel("No forms have been saved yet. Use File > New form.")
+        self.empty_note = QLabel(
+            tr("No forms have been saved yet. Use File > New form.")
+        )
         self.empty_note.setVisible(not forms)
 
         self.buttons = QDialogButtonBox(

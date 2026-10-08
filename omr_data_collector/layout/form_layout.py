@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QPageLayout
 
 from omr_data_collector.constants import ANSWER_TYPES, TABLE_BREAKS
+from omr_data_collector.i18n import tr
 from omr_data_collector.layout.page_setup import (
     page_layout_for,
     printable_size_mm,
@@ -339,7 +340,9 @@ class _PageBuilder:
             self.new_page()
         if height > self.height - CONTENT_TOP_MM:
             self.warnings.append(
-                f'"{content.name}" is taller than a page and runs off the bottom.'
+                tr('"{name}" is taller than a page and runs off the bottom.').format(
+                    name=content.name
+                )
             )
         self.put(PlacedBlock(index, block, self.y, height, question=question))
 
@@ -347,8 +350,11 @@ class _PageBuilder:
         full = table_layout(table)
         if full.width_mm > self.width:
             self.warnings.append(
-                f'The table "{table.name}" is {round(full.width_mm)} mm wide but the '
-                f"page has {round(self.width)} mm."
+                tr(
+                    'The table "{name}" is {width} mm wide but the page has {room} mm.'
+                ).format(
+                    name=table.name, width=round(full.width_mm), room=round(self.width)
+                )
             )
         instructions = 0.0
         if table.instructions.strip():

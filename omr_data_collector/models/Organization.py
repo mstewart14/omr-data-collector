@@ -10,6 +10,7 @@ from omr_data_collector.constants import (
     PAGE_ORIENTATIONS,
     PAPER_SIZES,
 )
+from omr_data_collector.i18n import tr
 
 # Deliberately loose: these catch typos, not every invalid address. The email
 # pattern only insists on something@something.something.
@@ -57,16 +58,18 @@ class Organization:
         errors: dict[str, str] = {}
 
         if not self.name:
-            errors["name"] = "Enter the organization's name."
+            errors["name"] = tr("Enter the organization's name.")
         elif len(self.name) > ORGANIZATION_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {ORGANIZATION_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.",
+                None,
+                ORGANIZATION_NAME_MAX_LENGTH,
             )
 
         if self.phone:
             digit_count = sum(character.isdigit() for character in self.phone)
             if not PHONE_REGEX.match(self.phone) or digit_count < PHONE_MIN_DIGITS:
-                errors["phone"] = "Enter a phone number, like 613-555-0123."
+                errors["phone"] = tr("Enter a phone number, like 613-555-0123.")
 
         if self.url:
             parsed_url = urlparse(self.url)
@@ -74,15 +77,15 @@ class Organization:
                 parsed_url.scheme not in {"http", "https"}
                 or "." not in parsed_url.netloc
             ):
-                errors["url"] = "Enter a web address, like example.org."
+                errors["url"] = tr("Enter a web address, like example.org.")
 
         if self.email and not EMAIL_REGEX.match(self.email):
-            errors["email"] = "Enter an email address, like info@example.org."
+            errors["email"] = tr("Enter an email address, like info@example.org.")
 
         if self.paper_size not in PAPER_SIZES.values():
-            errors["paper_size"] = "Choose a paper size."
+            errors["paper_size"] = tr("Choose a paper size.")
 
         if self.orientation not in PAGE_ORIENTATIONS.values():
-            errors["orientation"] = "Choose an orientation."
+            errors["orientation"] = tr("Choose an orientation.")
 
         return errors

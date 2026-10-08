@@ -20,6 +20,7 @@ from pyzbar import pyzbar
 
 from omr_data_collector.constants import ANSWER_TYPES, QR_PAYLOAD_TYPES
 from omr_data_collector.engine.runner import run_omr
+from omr_data_collector.i18n import tr
 from omr_data_collector.identity.qr_code import parse_payload
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.omr_template import (
@@ -127,7 +128,7 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
                     form_version=payload["formVersion"],
                     page=payload["page"],
                 )
-    msg = (
+    msg = tr(
         "Couldn't read the form's QR code (top right of the page). Make sure the "
         "whole page is in the picture, in focus and evenly lit."
     )
@@ -152,15 +153,15 @@ def scan_sheet(
     """
     image = cv2.imread(str(image_path))
     if image is None:
-        msg = f"Couldn't open {image_path.name} as an image."
+        msg = tr("Couldn't open {file} as an image.").format(file=image_path.name)
         raise ScanError(msg)
     identity = read_sheet_identity(image)
     form = load_form_version(connection, identity.form_id, identity.form_version)
     if form is None:
-        msg = (
-            f"This sheet is from version {identity.form_version} of a form that "
-            "isn't on this computer."
-        )
+        msg = tr(
+            "This sheet is from version {version} of a form that isn't on this "
+            "computer."
+        ).format(version=identity.form_version)
         raise ScanError(msg)
     template = _stored_page_template(connection, form, identity, paper_size)
     answers = read_page(image_path, form, template, work_dir)
@@ -228,7 +229,7 @@ def interpret(
             values = ((when_marked if values else when_empty).output,)
         problem = ""
         if spec.answer_type == ANSWER_TYPES.ONE_CHOICE and len(values) > 1:
-            problem = "More than one bubble is marked, but only one is allowed."
+            problem = tr("More than one bubble is marked, but only one is allowed.")
         answers.append(
             ScannedAnswer(
                 block_index=block_index,
@@ -251,14 +252,18 @@ def _stored_page_template(
     if stored is not None:
         pages = stored["pages"]
         if not 1 <= identity.page <= len(pages):
-            msg = f"This sheet says it is page {identity.page}, which the form doesn't have."
+            msg = tr(
+                "This sheet says it is page {page}, which the form doesn't have."
+            ).format(page=identity.page)
             raise ScanError(msg)
         return PageTemplate.from_dict(pages[identity.page - 1])
     layout = layout_form(form, paper_size)
     for page in layout.pages:
         if page.number == identity.page:
             return page_template(layout, page)
-    msg = f"This sheet says it is page {identity.page}, which the form doesn't have."
+    msg = tr("This sheet says it is page {page}, which the form doesn't have.").format(
+        page=identity.page
+    )
     raise ScanError(msg)
 
 
@@ -268,12 +273,14 @@ def _answer_spec(form: Form, block_index: int, column: int | None) -> AnswerSpec
         return content.columns[column].answer
     if isinstance(content, Question):
         return content.answer
-    msg = f"Block {block_index} of the form has no bubbles."
+    msg = tr("Block {number} of the form has no bubbles.").format(
+        number=block_index + 1
+    )
     raise ScanError(msg)
 
 
 def _unreadable_message() -> str:
-    return (
+    return tr(
         "Couldn't find the page's four corner markers (the black dots). Make sure "
         "all four corners are in the picture, and the page lies flat."
     )

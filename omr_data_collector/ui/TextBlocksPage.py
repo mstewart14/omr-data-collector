@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.storage.text_block_store import (
     delete_text_block,
@@ -9,7 +10,7 @@ from omr_data_collector.storage.text_block_store import (
     save_text_block,
 )
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
-from omr_data_collector.ui.LibraryPage import LibraryPage
+from omr_data_collector.ui.LibraryPage import LibraryPage, LibraryTexts
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QFormLayout, QWidget
@@ -24,18 +25,33 @@ class TextBlocksPage(LibraryPage):
     10001-10005).
     """
 
-    NOUN = "text block"
-    LIST_LABEL = "Text &blocks"
-    NAME_LABEL = "Bloc&k name (required)"
-    NEW_HINT = "Enter a name and the text."
+    def texts(self) -> LibraryTexts:
+        return LibraryTexts(
+            list_label=tr("Text &blocks"),
+            name_label=tr("Bloc&k name (required)"),
+            new_title=tr("New text block"),
+            new_status=tr("New text block. Enter a name and the text."),
+            new_tooltip=tr("Start a new text block (Ctrl+N)"),
+            duplicate_tooltip=tr("Save a copy of the selected text block"),
+            delete_tooltip=tr("Delete the selected text block (Delete key)"),
+            save_tooltip=tr("Save the text block (Ctrl+S)"),
+            delete_title=tr("Delete text block"),
+            delete_question=tr(
+                'Delete the text block "{name}"? This can\'t be undone.'
+            ),
+            saved=tr('Text block "{name}" saved.'),
+            deleted=tr('Text block "{name}" deleted.'),
+            name_taken=tr('Another text block is already called "{name}".'),
+            save_first=tr("Save your changes to this text block first?"),
+        )
 
     def build_fields(self, form: QFormLayout) -> list[QWidget]:
         self.text_fields = FormattedTextFields(
             form,
             (self.field_widgets, self.field_labels, self.error_labels),
             key="content",
-            text_label="Te&xt (required)",
-            style_label="St&yle",
+            text_label=tr("Te&xt (required)"),
+            style_label=tr("St&yle"),
             visible_lines=EDITOR_VISIBLE_LINES,
             shortcut_parent=self,
             on_change=self.update_state,

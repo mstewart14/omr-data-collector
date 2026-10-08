@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from omr_data_collector.constants import TEXT_BLOCK_NAME_MAX_LENGTH
+from omr_data_collector.i18n import tr
 
 
 @dataclass(frozen=True)
@@ -40,15 +41,19 @@ class TextBlock:
         errors: dict[str, str] = {}
 
         if not self.name:
-            errors["name"] = "Enter a name for the text block."
+            errors["name"] = tr("Enter a name for the text block.")
         elif len(self.name) > TEXT_BLOCK_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {TEXT_BLOCK_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.",
+                None,
+                TEXT_BLOCK_NAME_MAX_LENGTH,
             )
         elif self.name.casefold() in {name.casefold() for name in other_names}:
-            errors["name"] = f'Another text block is already called "{self.name}".'
+            errors["name"] = tr(
+                'Another text block is already called "{name}".'
+            ).format(name=self.name)
 
         if not self.content.strip():
-            errors["content"] = "Enter the text for the block."
+            errors["content"] = tr("Enter the text for the block.")
 
         return errors

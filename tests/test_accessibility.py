@@ -17,7 +17,7 @@ from omr_data_collector.ui.accessibility import (
     set_field_error,
 )
 from omr_data_collector.ui.MainWindow import MainWindow
-from omr_data_collector.ui.OrganizationPage import FORM_FIELDS, OrganizationPage
+from omr_data_collector.ui.OrganizationPage import OrganizationPage, form_fields
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
 
 if TYPE_CHECKING:
@@ -133,7 +133,7 @@ def test_every_input_is_labelled_for_screen_readers(
 ) -> None:
     page = make_page(qtbot, connection)
 
-    for field_name, label_text, _ in FORM_FIELDS:
+    for field_name, label_text, _ in form_fields():
         widget = page.field_widgets[field_name]
         assert page.field_labels[field_name].buddy() is widget
         assert labelled_by(widget)[0] == label_text.replace("&", "")
@@ -153,7 +153,7 @@ def test_tab_order_follows_the_screen(
 ) -> None:
     page = make_page(qtbot, connection)
     expected = [
-        *(page.field_widgets[name] for name, _, _ in FORM_FIELDS),
+        *(page.field_widgets[name] for name, _, _ in form_fields()),
         page.revert_button,
         page.save_button,
         page.save_qr_button,

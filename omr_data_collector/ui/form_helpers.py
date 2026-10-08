@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QLabel, QMessageBox
 
+from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import style_error_label
 
 if TYPE_CHECKING:
@@ -75,7 +76,7 @@ def ask_save_discard_cancel(
     """Ask what to do with unsaved changes; Save is the default answer."""
     return QMessageBox.question(
         parent,
-        "Unsaved changes",
+        tr("Unsaved changes"),
         question,
         QMessageBox.StandardButton.Save
         | QMessageBox.StandardButton.Discard
@@ -84,20 +85,17 @@ def ask_save_discard_cancel(
     )
 
 
-def ask_new_or_keep_working(parent: QWidget, noun: str, name: str) -> bool:
+def ask_new_or_keep_working(
+    parent: QWidget, title: str, message: str, new_label: str
+) -> bool:
     """After a save, ask whether to start a new item; True to start one.
 
-    Keep working is the default (Enter, Escape), so nothing is lost by accident.
+    ``new_label`` is the button that starts one, like "&New question". Keep
+    working is the default (Enter, Escape), so nothing is lost by accident.
     """
-    box = QMessageBox(
-        QMessageBox.Icon.Question,
-        f"{noun.capitalize()} saved",
-        f'{noun.capitalize()} "{name}" saved. Start a new {noun}, or keep working on '
-        "this one?",
-        parent=parent,
-    )
-    new_button = box.addButton(f"&New {noun}", QMessageBox.ButtonRole.AcceptRole)
-    keep_button = box.addButton("&Keep working", QMessageBox.ButtonRole.RejectRole)
+    box = QMessageBox(QMessageBox.Icon.Question, title, message, parent=parent)
+    new_button = box.addButton(new_label, QMessageBox.ButtonRole.AcceptRole)
+    keep_button = box.addButton(tr("&Keep working"), QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(keep_button)
     box.setEscapeButton(keep_button)
     box.exec()
@@ -122,7 +120,9 @@ def confirm_destructive(
 
 def ask_save_first(parent: QWidget, question: str) -> bool:
     """Ask to save before going on (printing, say); True to save and go on."""
-    box = QMessageBox(QMessageBox.Icon.Question, "Save first", question, parent=parent)
+    box = QMessageBox(
+        QMessageBox.Icon.Question, tr("Save first"), question, parent=parent
+    )
     save_button = box.addButton(QMessageBox.StandardButton.Save)
     cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(save_button)
@@ -137,11 +137,11 @@ def confirm_despite_problems(
     """List problems and ask whether to go ahead anyway; Cancel is the default."""
     box = QMessageBox(
         QMessageBox.Icon.Warning,
-        "Problems to check",
+        tr("Problems to check"),
         heading + "\n\n" + "\n".join(f"- {problem}" for problem in problems),
         parent=parent,
     )
-    go_ahead = box.addButton("Go ahead anyway", QMessageBox.ButtonRole.AcceptRole)
+    go_ahead = box.addButton(tr("Go ahead anyway"), QMessageBox.ButtonRole.AcceptRole)
     cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(cancel_button)
     box.setEscapeButton(cancel_button)

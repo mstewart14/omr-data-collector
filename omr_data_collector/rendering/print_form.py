@@ -8,6 +8,7 @@ from PySide6.QtCore import QMarginsF
 from PySide6.QtGui import QPainter, QPdfWriter
 from PySide6.QtPrintSupport import QPrinter
 
+from omr_data_collector.i18n import tr
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM, page_layout_for
 from omr_data_collector.rendering.page_painter import paint_page
@@ -48,7 +49,7 @@ def render_form(
     layout = layout_form(form, paper_size)
     painter = QPainter()
     if not painter.begin(device):
-        msg = "The printer or file could not be opened for drawing."
+        msg = tr("The printer or file could not be opened for drawing.")
         raise OSError(msg)
     try:
         pixels_per_mm = device.logicalDpiX() / MM_PER_INCH
@@ -71,7 +72,9 @@ def save_pdf(
     """Save ``form`` as a PDF at ``path``; returns the number of pages."""
     writer = QPdfWriter(str(path))
     writer.setResolution(PDF_RESOLUTION_DPI)
-    writer.setTitle(f"{form.name} (version {form.version})")
+    writer.setTitle(
+        tr("{name} (version {version})").format(name=form.name, version=form.version)
+    )
     writer.setCreator("OMR Data Collector")
     pages = render_form(writer, form, organization, paper_size)
     # The file is finished when the writer is deleted.

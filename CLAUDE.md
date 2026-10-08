@@ -26,7 +26,7 @@ engine bridge.
     sibling of its input (that sibling relation is how Qt tells screen readers the
     label; wrapping an input in a container breaks it) and adds its error row; give
     every field label and main button an Alt+letter mnemonic, unique on its page and
-    never one of the menu bar's letters (`MainWindow.MENU_MNEMONICS`: F, T, Q, A, P).
+    never one of the menu bar's letters (`MainWindow.menu_mnemonics()`; in English F, T, Q, A, P).
     "Move up/down/left/right" buttons have none. `tests/test_menus_and_mnemonics.py`
     checks every page and dialog, so a clash fails the build;
   - say "(required)" in the label, never only in a placeholder;
@@ -44,6 +44,13 @@ engine bridge.
     `PaletteChange`, and size things in font units, not fixed pixels;
   - have tests for all of the above (see `tests/test_accessibility.py` and
     `tests/test_text_blocks_page.py`).
+- **All text people see is translatable** (README "Translations"): wrap it in
+  `i18n.tr()` as one whole literal sentence with named placeholders filled in by
+  `.format()`, never an f-string or joined pieces; counts are plurals passed by
+  position (`tr("%n page(s)", None, n)`); no translated text in module-level
+  constants (use functions); words printed on forms use `tr_printed()`. Then run
+  `uv run python scripts/update_translations.py` and commit the catalogs.
+  `tests/test_translations.py` fails on text left untranslated.
 - **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
   `save()` and `initial_focus`. There is no sections list: the menu bar is the
   way around (File = form editor, Text, Question, Table = libraries, Preferences

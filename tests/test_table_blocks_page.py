@@ -219,7 +219,7 @@ def test_saved_tables_load_without_unsaved_changes(
                     max_characters=6,
                 ),
             ),
-            "id (written id, 6 characters)",
+            "id (written ID, 6 characters)",
         ),
     ],
 )

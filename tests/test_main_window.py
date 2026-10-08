@@ -187,7 +187,7 @@ def test_close_saves_every_page_with_changes(
 
     window.closeEvent(event)
 
-    assert "Text blocks, Organization details" in question.call_args.args[1]
+    assert "Text blocks and Organization details" in question.call_args.args[1]
     assert event.isAccepted()
     assert load_organization(connection) is not None
     assert [block.name for block in list_text_blocks(connection)] == ["Footer"]

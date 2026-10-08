@@ -6,6 +6,7 @@ from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QFont, QKeySequence, QPalette, QTextListFormat
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QToolButton, QWidget
 
+from omr_data_collector.i18n import tr
 from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
 from omr_data_collector.ui.format_icons import format_icon
 from omr_data_collector.ui.TextBlockEditor import HEADING_LEVELS, TextBlockEditor
@@ -16,11 +17,18 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QShortcut
     from PySide6.QtWidgets import QFormLayout
 
-# Paragraph styles in the Style box: label and heading level (0 = ordinary text).
-PARAGRAPH_STYLES = (
-    ("Normal text", 0),
-    *((f"Heading {level}", level) for level in HEADING_LEVELS),
-)
+
+def paragraph_styles() -> tuple[tuple[str, int], ...]:
+    """The Style box's choices: label and heading level (0 = ordinary text)."""
+    return (
+        (tr("Normal text"), 0),
+        *(
+            (tr("Heading {level}").format(level=level), level)
+            for level in HEADING_LEVELS
+        ),
+    )
+
+
 # Shortcuts follow common word processors (Google Docs, LibreOffice).
 HEADING_SHORTCUTS = {level: f"Ctrl+Alt+{level}" for level in (0, *HEADING_LEVELS)}
 BULLETED_LIST_SHORTCUT = "Ctrl+Shift+8"
@@ -68,7 +76,7 @@ class FormattedTextFields:
         """
         field_widgets, field_labels, error_labels = registry
         self.style_combo = QComboBox()
-        for label, level in PARAGRAPH_STYLES:
+        for label, level in paragraph_styles():
             self.style_combo.addItem(label, level)
         self.editor = TextBlockEditor()
         height = (
@@ -80,13 +88,13 @@ class FormattedTextFields:
         if not grow:
             self.editor.setMaximumHeight(height)
 
-        self.bold_button = FormatButton("Bold", "bold", "Ctrl+B")
-        self.italic_button = FormatButton("Italic", "italic", "Ctrl+I")
+        self.bold_button = FormatButton(tr("Bold"), "bold", "Ctrl+B")
+        self.italic_button = FormatButton(tr("Italic"), "italic", "Ctrl+I")
         self.bulleted_button = FormatButton(
-            "Bulleted list", "bulleted_list", BULLETED_LIST_SHORTCUT
+            tr("Bulleted list"), "bulleted_list", BULLETED_LIST_SHORTCUT
         )
         self.numbered_button = FormatButton(
-            "Numbered list", "numbered_list", NUMBERED_LIST_SHORTCUT
+            tr("Numbered list"), "numbered_list", NUMBERED_LIST_SHORTCUT
         )
         self._format_buttons = (
             self.bold_button,
@@ -95,7 +103,7 @@ class FormattedTextFields:
             self.numbered_button,
         )
         formatting = QWidget()
-        formatting.setAccessibleName("Formatting")
+        formatting.setAccessibleName(tr("Formatting"))
         formatting_layout = QHBoxLayout(formatting)
         formatting_layout.setContentsMargins(0, 0, 0, 0)
         for button in self._format_buttons:
@@ -105,7 +113,7 @@ class FormattedTextFields:
         style = QLabel(style_label)
         style.setBuddy(self.style_combo)
         form.addRow(style, self.style_combo)
-        form.addRow("Formatting", formatting)
+        form.addRow(tr("Formatting"), formatting)
         field_labels[key], error_labels[key] = add_field_row(
             form, text_label, self.editor
         )
@@ -219,7 +227,7 @@ class FormatButton(QToolButton):
         )
         self.setToolTip(f"{text} ({shortcut_text})")
         self.setAccessibleName(text)
-        self.setAccessibleDescription(f"Shortcut: {shortcut_text}")
+        self.setAccessibleDescription(tr("Shortcut: {keys}").format(keys=shortcut_text))
         self._draw_icon()
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt override)

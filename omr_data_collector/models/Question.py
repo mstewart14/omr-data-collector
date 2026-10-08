@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from omr_data_collector.constants import ANSWER_TYPES, QUESTION_NAME_MAX_LENGTH
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 
 
@@ -63,16 +64,20 @@ class Question:
         """
         errors: dict[str, str] = {}
         if not self.name:
-            errors["name"] = "Enter a name for the question."
+            errors["name"] = tr("Enter a name for the question.")
         elif len(self.name) > QUESTION_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {QUESTION_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.",
+                None,
+                QUESTION_NAME_MAX_LENGTH,
             )
         elif self.name.casefold() in {name.casefold() for name in other_names}:
-            errors["name"] = f'Another question is already called "{self.name}".'
+            errors["name"] = tr('Another question is already called "{name}".').format(
+                name=self.name
+            )
 
         if not self.prompt:
-            errors["prompt"] = "Enter the question to print."
+            errors["prompt"] = tr("Enter the question to print.")
 
         errors.update(self.answer.validation_errors())
         return errors

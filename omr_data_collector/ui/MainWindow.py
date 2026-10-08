@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QLocale, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QMessageBox, QStackedWidget
 
 from omr_data_collector import APP_NAME
+from omr_data_collector.i18n import tr
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
@@ -26,9 +28,7 @@ if TYPE_CHECKING:
     from omr_data_collector.ui.LibraryPage import LibraryPage
 
 STATUS_MESSAGE_TIMEOUT_MS = 5000
-# The menu bar's Alt+letter keys. No page may use these letters for its own
-# labels and buttons: a letter used twice works for neither.
-MENU_MNEMONICS = frozenset("ftqap")
+MNEMONIC = re.compile(r"&([^&])")
 
 
 class MainWindow(QMainWindow):
@@ -55,11 +55,11 @@ class MainWindow(QMainWindow):
         self.organization_page = OrganizationPage(connection)
         # In menu order, which is also Ctrl+1 to Ctrl+5.
         self.pages: list[tuple[str, OrganizationPage | LibraryPage]] = [
-            ("Form editor", self.forms_page),
-            ("Text blocks", self.text_blocks_page),
-            ("Questions", self.questions_page),
-            ("Tables", self.tables_page),
-            ("Organization details", self.organization_page),
+            (tr("Form editor"), self.forms_page),
+            (tr("Text blocks"), self.text_blocks_page),
+            (tr("Questions"), self.questions_page),
+            (tr("Tables"), self.tables_page),
+            (tr("Organization details"), self.organization_page),
         ]
 
         self.stack = QStackedWidget()
@@ -112,37 +112,40 @@ class MainWindow(QMainWindow):
         so the section's own keys keep working.
         """
         menu_bar = self.menuBar()
-        self.file_menu = self._library_menu(
-            menu_bar, "&File", "form", self.forms_page, "Form edi&tor"
+        self.file_menu, file_actions = self._library_menu(
+            menu_bar,
+            tr("&File"),
+            self.forms_page,
+            tr("Form edi&tor"),
+            (
+                tr("&New form"),
+                tr("&Save form"),
+                tr("&Revert form"),
+                # Within one menu every item needs its own letter: File also has
+                # Undo (U) and Redo, so its Duplicate uses L.
+                tr("Dup&licate form"),
+                tr("&Delete form…"),
+            ),
         )
-        # Within one menu every item needs its own letter: File also has Undo
-        # (U) and Redo, so its Duplicate uses L.
-        duplicate = next(
-            action
-            for action in self.file_menu.actions()
-            if action.text() == "D&uplicate form"
-        )
-        duplicate.setText("Dup&licate form")
         # Open goes right after New, as in other document editors.
-        open_action = QAction("&Open form…", self.file_menu)
+        open_action = QAction(tr("&Open form…"), self.file_menu)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.open_from_list)
         )
-        new_form = next(
-            action
-            for action in self.file_menu.actions()
-            if action.text() == "&New form"
-        )
         after_new = self.file_menu.actions()[
-            self.file_menu.actions().index(new_form) + 1
+            self.file_menu.actions().index(file_actions[0]) + 1
         ]
         self.file_menu.insertAction(after_new, open_action)
         self.file_menu.addSeparator()
         for text, command, key in (
-            ("E&xport as PDF…", self.forms_page.export_pdf, None),
-            ("Print pre&view…", self.forms_page.print_preview, None),
-            ("&Print…", self.forms_page.print_form, QKeySequence.StandardKey.Print),
+            (tr("E&xport as PDF…"), self.forms_page.export_pdf, None),
+            (tr("Print pre&view…"), self.forms_page.print_preview, None),
+            (
+                tr("&Print…"),
+                self.forms_page.print_form,
+                QKeySequence.StandardKey.Print,
+            ),
         ):
             action = self.file_menu.addAction(text)
             if key is not None:
@@ -154,13 +157,13 @@ class MainWindow(QMainWindow):
             )
         self.file_menu.addSeparator()
         undo_action = self.file_menu.addAction(
-            f"&Undo form change\t{_native(QKeySequence.StandardKey.Undo)}"
+            f"{tr('&Undo form change')}\t{_native(QKeySequence.StandardKey.Undo)}"
         )
         undo_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.undo)
         )
         redo_action = self.file_menu.addAction(
-            f"R&edo form change\t{_native(QKeySequence.StandardKey.Redo)}"
+            f"{tr('R&edo form change')}\t{_native(QKeySequence.StandardKey.Redo)}"
         )
         redo_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.redo)
@@ -172,50 +175,82 @@ class MainWindow(QMainWindow):
             )
         )
         self.file_menu.addSeparator()
-        quit_action = self.file_menu.addAction("&Quit")
+        quit_action = self.file_menu.addAction(tr("&Quit"))
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
 
-        self.text_menu = self._library_menu(
+        self.text_menu, _ = self._library_menu(
             menu_bar,
-            "&Text",
-            "text block",
+            tr("&Text"),
             self.text_blocks_page,
-            "Text block &library",
+            tr("Text block &library"),
+            (
+                tr("&New text block"),
+                tr("&Save text block"),
+                tr("&Revert text block"),
+                tr("D&uplicate text block"),
+                tr("&Delete text block…"),
+            ),
         )
-        self.question_menu = self._library_menu(
-            menu_bar, "&Question", "question", self.questions_page, "Question &library"
+        self.question_menu, _ = self._library_menu(
+            menu_bar,
+            tr("&Question"),
+            self.questions_page,
+            tr("Question &library"),
+            (
+                tr("&New question"),
+                tr("&Save question"),
+                tr("&Revert question"),
+                tr("D&uplicate question"),
+                tr("&Delete question…"),
+            ),
         )
-        self.table_menu = self._library_menu(
-            menu_bar, "T&able", "table", self.tables_page, "Table &library"
+        self.table_menu, _ = self._library_menu(
+            menu_bar,
+            tr("T&able"),
+            self.tables_page,
+            tr("Table &library"),
+            (
+                tr("&New table"),
+                tr("&Save table"),
+                tr("&Revert table"),
+                tr("D&uplicate table"),
+                tr("&Delete table…"),
+            ),
         )
 
-        self.preferences_menu = menu_bar.addMenu("&Preferences")
+        self.preferences_menu = menu_bar.addMenu(tr("&Preferences"))
         self._go_to_action(
-            self.preferences_menu, "&Organization details…", self.organization_page
+            self.preferences_menu, tr("&Organization details…"), self.organization_page
         )
 
     def _library_menu(
         self,
         menu_bar: QMenuBar,
         title: str,
-        noun: str,
         page: LibraryPage,
         section_title: str,
-    ) -> QMenu:
+        labels: tuple[str, str, str, str, str],
+    ) -> tuple[QMenu, list[QAction]]:
+        """A library's menu, with its New, Save, Revert, Duplicate and Delete items.
+
+        ``labels`` are those items' text in full, so each is translated whole.
+        """
         menu = menu_bar.addMenu(title)
         self._go_to_action(menu, section_title, page)
         menu.addSeparator()
         commands = (
-            (f"&New {noun}", page.new_item, None),
-            (f"&Save {noun}", page.save_from_user, page.save_button),
-            (f"&Revert {noun}", page.revert, page.revert_button),
-            (f"D&uplicate {noun}", page.duplicate_item, page.duplicate_button),
-            (f"&Delete {noun}…", page.delete_item, page.delete_button),
+            (page.new_item, None),
+            (page.save_from_user, page.save_button),
+            (page.revert, page.revert_button),
+            (page.duplicate_item, page.duplicate_button),
+            (page.delete_item, page.delete_button),
         )
         mirrors: list[tuple[QAction, QWidget]] = []
-        for text, command, mirrored_button in commands:
+        actions: list[QAction] = []
+        for text, (command, mirrored_button) in zip(labels, commands, strict=True):
             action = menu.addAction(text)
+            actions.append(action)
             action.triggered.connect(
                 lambda _checked=False, command=command: self._run_in(page, command)
             )
@@ -228,7 +263,7 @@ class MainWindow(QMainWindow):
                 action.setEnabled(button.isEnabled())
 
         menu.aboutToShow.connect(sync)
-        return menu
+        return menu, actions
 
     def _go_to_action(self, menu: QMenu, text: str, page: QWidget) -> QAction:
         """The item that opens ``page``'s section, showing its Ctrl+number key."""
@@ -246,6 +281,19 @@ class MainWindow(QMainWindow):
         return next(
             index for index, (_, other) in enumerate(self.pages) if other is page
         )
+
+    def menu_mnemonics(self) -> set[str]:
+        """The menu bar's Alt+letter keys, in the language shown.
+
+        No page may use these letters for its own labels and buttons: a letter
+        used twice works for neither. They differ from language to language.
+        """
+        letters = set()
+        for action in self.menuBar().actions():
+            match = MNEMONIC.search(action.text().replace("&&", ""))
+            if match:
+                letters.add(match.group(1).lower())
+        return letters
 
     def show_status(self, message: str) -> None:
         """Show a message in the status bar and have screen readers speak it.
@@ -265,9 +313,12 @@ class MainWindow(QMainWindow):
         if not unsaved:
             event.accept()
             return
-        sections = ", ".join(title for _, title, _ in unsaved)
+        sections = QLocale().createSeparatedList([title for _, title, _ in unsaved])
         answer = ask_save_discard_cancel(
-            self, f"Save your unsaved changes ({sections}) before closing?"
+            self,
+            tr("Save your unsaved changes ({sections}) before closing?").format(
+                sections=sections
+            ),
         )
         if answer == QMessageBox.StandardButton.Cancel:
             event.ignore()

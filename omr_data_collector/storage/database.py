@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
+from omr_data_collector.i18n import tr
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -121,10 +123,10 @@ def open_database(path: Path) -> sqlite3.Connection:
 def migrate(connection: sqlite3.Connection) -> None:
     (current_version,) = connection.execute("PRAGMA user_version").fetchone()
     if current_version > len(MIGRATIONS):
-        msg = (
-            f"The database is from a newer version of the app (schema "
-            f"{current_version}, this app knows {len(MIGRATIONS)})."
-        )
+        msg = tr(
+            "The database is from a newer version of the app (schema {found}, "
+            "this app knows {known})."
+        ).format(found=current_version, known=len(MIGRATIONS))
         raise RuntimeError(msg)
 
     for version, statements in enumerate(

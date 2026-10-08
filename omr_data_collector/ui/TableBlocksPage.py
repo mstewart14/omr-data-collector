@@ -24,6 +24,7 @@ from omr_data_collector.constants import (
     PAPER_SIZES,
     WRITTEN_DATA_TYPES,
 )
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.storage.table_block_store import (
@@ -31,15 +32,15 @@ from omr_data_collector.storage.table_block_store import (
     list_table_blocks,
     save_table_block,
 )
-from omr_data_collector.ui.AnswerFields import DATA_TYPE_LABELS
+from omr_data_collector.ui.AnswerFields import date_time_format_labels
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
-from omr_data_collector.ui.LibraryPage import LibraryPage
+from omr_data_collector.ui.LibraryPage import LibraryPage, LibraryTexts
 from omr_data_collector.ui.TablePreview import (
-    ORIENTATION_NAMES,
     TablePreview,
     fit_summary,
+    orientation_names,
 )
 
 if TYPE_CHECKING:
@@ -63,20 +64,31 @@ def column_summary(column: Column) -> str:
     """One line describing a column, for the columns list and screen readers."""
     answer = column.answer
     if answer.answer_type == ANSWER_TYPES.WRITTEN:
-        kind = DATA_TYPE_LABELS[answer.data_type].lower()
         if answer.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
-            detail = f"written {kind}, {answer.date_time_format}"
-        else:
-            detail = f"written {kind}, {answer.characters()} characters"
-    else:
-        labels = ", ".join(choice.label for choice in answer.choices)
-        how = (
-            "pick any"
-            if answer.answer_type == ANSWER_TYPES.MANY_CHOICES
-            else "pick one"
-        )
-        detail = f"{how}: {labels}"
-    return f"{column.name} ({detail})"
+            return tr("{name} (written date/time, {format})").format(
+                name=column.name,
+                format=date_time_format_labels()[answer.date_time_format],
+            )
+        count = answer.characters()
+        sizes = {
+            WRITTEN_DATA_TYPES.FREE_TEXT: tr(
+                "{name} (written free text, %n character(s))", None, count
+            ),
+            WRITTEN_DATA_TYPES.NUMBER: tr(
+                "{name} (written number, %n character(s))", None, count
+            ),
+            WRITTEN_DATA_TYPES.ID: tr(
+                "{name} (written ID, %n character(s))", None, count
+            ),
+        }
+        return sizes[answer.data_type].format(name=column.name)
+    labels = ", ".join(choice.label for choice in answer.choices)
+    summary = (
+        tr("{name} (pick any: {choices})")
+        if answer.answer_type == ANSWER_TYPES.MANY_CHOICES
+        else tr("{name} (pick one: {choices})")
+    )
+    return summary.format(name=column.name, choices=labels)
 
 
 class TableBlocksPage(LibraryPage):
@@ -87,10 +99,23 @@ class TableBlocksPage(LibraryPage):
     or landscape page.
     """
 
-    NOUN = "table"
-    LIST_LABEL = "Table li&brary"
-    NAME_LABEL = "Na&me (required)"
-    NEW_HINT = "Enter a name, then add columns."
+    def texts(self) -> LibraryTexts:
+        return LibraryTexts(
+            list_label=tr("Table li&brary"),
+            name_label=tr("Na&me (required)"),
+            new_title=tr("New table"),
+            new_status=tr("New table. Enter a name, then add columns."),
+            new_tooltip=tr("Start a new table (Ctrl+N)"),
+            duplicate_tooltip=tr("Save a copy of the selected table"),
+            delete_tooltip=tr("Delete the selected table (Delete key)"),
+            save_tooltip=tr("Save the table (Ctrl+S)"),
+            delete_title=tr("Delete table"),
+            delete_question=tr('Delete the table "{name}"? This can\'t be undone.'),
+            saved=tr('Table "{name}" saved.'),
+            deleted=tr('Table "{name}" deleted.'),
+            name_taken=tr('Another table is already called "{name}".'),
+            save_first=tr("Save your changes to this table first?"),
+        )
 
     def build_fields(self, form: QFormLayout) -> list[QWidget]:
         self._columns: list[Column] = []
@@ -98,8 +123,8 @@ class TableBlocksPage(LibraryPage):
             form,
             (self.field_widgets, self.field_labels, self.error_labels),
             key="instructions",
-            text_label="&Instructions",
-            style_label="St&yle",
+            text_label=tr("&Instructions"),
+            style_label=tr("St&yle"),
             visible_lines=INSTRUCTIONS_VISIBLE_LINES,
             # Brief by design; the space goes to the preview instead.
             grow=False,
@@ -108,26 +133,26 @@ class TableBlocksPage(LibraryPage):
         )
         self.shortcuts += self.text_fields.shortcuts
         self.text_fields.editor.setPlaceholderText(
-            "Printed above the table, like: One row per visit. Use a dark pen."
+            tr("Printed above the table, like: One row per visit. Use a dark pen.")
         )
 
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(1, MAX_TABLE_ROWS)
-        self.rows_spin.setToolTip("How many rows are printed for people to fill in")
-        self.fill_page_check = QCheckBox("Fill to end of pa&ge")
+        self.rows_spin.setToolTip(tr("How many rows are printed for people to fill in"))
+        self.fill_page_check = QCheckBox(tr("Fill to end of pa&ge"))
         self.fill_page_check.setToolTip(
-            "Print as many rows as fit below the table on its page"
+            tr("Print as many rows as fit below the table on its page")
         )
         self.column_list = QListWidget()
         self.column_list.setMinimumHeight(
             self.column_list.fontMetrics().lineSpacing() * COLUMN_ROWS_VISIBLE
         )
         self.column_list.setAccessibleDescription(
-            "Columns in printed order, left to right"
+            tr("Columns in printed order, left to right")
         )
         for key, label_text, widget in (
-            ("rows", "Ro&ws", self.rows_spin),
-            ("columns", "C&olumns (required)", self.column_list),
+            ("rows", tr("Ro&ws"), self.rows_spin),
+            ("columns", tr("C&olumns (required)"), self.column_list),
         ):
             self.field_labels[key], self.error_labels[key] = add_field_row(
                 form, label_text, widget
@@ -136,11 +161,11 @@ class TableBlocksPage(LibraryPage):
             if key == "rows":
                 form.addRow("", self.fill_page_check)
 
-        self.add_column_button = QPushButton("Add &column…")
-        self.edit_column_button = QPushButton("&Edit column…")
-        self.remove_column_button = QPushButton("Remo&ve column")
-        self.move_left_button = QPushButton("Move left")
-        self.move_right_button = QPushButton("Move right")
+        self.add_column_button = QPushButton(tr("Add &column…"))
+        self.edit_column_button = QPushButton(tr("&Edit column…"))
+        self.remove_column_button = QPushButton(tr("Remo&ve column"))
+        self.move_left_button = QPushButton(tr("Move left"))
+        self.move_right_button = QPushButton(tr("Move right"))
         self._column_buttons = (
             self.add_column_button,
             self.edit_column_button,
@@ -149,7 +174,7 @@ class TableBlocksPage(LibraryPage):
             self.move_right_button,
         )
         column_actions = QWidget()
-        column_actions.setAccessibleName("Column actions")
+        column_actions.setAccessibleName(tr("Column actions"))
         actions_layout = QHBoxLayout(column_actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
         for button in self._column_buttons:
@@ -158,9 +183,9 @@ class TableBlocksPage(LibraryPage):
         form.addRow("", column_actions)
 
         self.preview_orientation_combo = QComboBox()
-        for value, name in ORIENTATION_NAMES.items():
-            self.preview_orientation_combo.addItem(name.capitalize(), value)
-        preview_label = QLabel("S&how page as")
+        for value, name in orientation_names().items():
+            self.preview_orientation_combo.addItem(name, value)
+        preview_label = QLabel(tr("S&how page as"))
         preview_label.setBuddy(self.preview_orientation_combo)
         form.addRow(preview_label, self.preview_orientation_combo)
         self.preview = TablePreview()

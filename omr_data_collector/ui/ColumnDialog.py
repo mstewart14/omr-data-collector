@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.constants import ANSWER_TYPES
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.TableBlock import Column
 from omr_data_collector.ui.accessibility import set_field_error, style_error_label
@@ -41,23 +42,25 @@ class ColumnDialog(QDialog):
         repeat.
         """
         super().__init__(parent)
-        self.setWindowTitle("Edit column" if column else "Add column")
+        self.setWindowTitle(tr("Edit column") if column else tr("Add column"))
         self._other_names = other_names
         self._column: Column | None = None
 
         self.form = QFormLayout()
         self.name_edit = QLineEdit()
-        self.name_edit.setToolTip("Printed as the heading, and the export column name")
+        self.name_edit.setToolTip(
+            tr("Printed as the heading, and the export column name")
+        )
         self.example_edit = QLineEdit()
         self.example_edit.setPlaceholderText(
-            "Printed under the heading, like: 2026-10-08"
+            tr("Printed under the heading, like: 2026-10-08")
         )
         self.field_widgets: dict[str, QWidget] = {}
         self.field_labels: dict[str, QLabel] = {}
         self.error_labels: dict[str, QLabel] = {}
         for key, label_text, widget in (
-            ("name", "Column &name (required)", self.name_edit),
-            ("example", "&Example", self.example_edit),
+            ("name", tr("Column &name (required)"), self.name_edit),
+            ("example", tr("&Example"), self.example_edit),
         ):
             self.field_labels[key], self.error_labels[key] = add_field_row(
                 self.form, label_text, widget

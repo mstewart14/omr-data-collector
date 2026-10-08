@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from omr_data_collector import APP_NAME
 from omr_data_collector.constants import DATABASE_FILENAME
+from omr_data_collector.i18n import install_translators
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.ui.MainWindow import MainWindow
 
@@ -26,6 +27,7 @@ def default_database_path() -> Path:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    install_translators(app)
 
     connection = open_database(default_database_path())
     try:

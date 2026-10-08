@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
+from omr_data_collector.i18n import tr, tr_printed
 from omr_data_collector.identity.qr_code import (
     build_form_payload,
     make_qr_code,
@@ -118,7 +119,7 @@ def _paint_header(
         painter.drawRect(qr)
         painter.setPen(QPen(MUTED_INK))
         draw_text(
-            painter, qr, Qt.AlignmentFlag.AlignCenter, "QR code", DETAIL_POINT_SIZE
+            painter, qr, Qt.AlignmentFlag.AlignCenter, tr("QR code"), DETAIL_POINT_SIZE
         )
 
     text_width = width - QR_SIZE_MM - HEADER_TEXT_GAP_MM
@@ -153,13 +154,20 @@ def _paint_header(
             line(", ".join(organization.address.splitlines()), DETAIL_POINT_SIZE)
     else:
         line(
-            "Organization details not entered yet", ORGANIZATION_POINT_SIZE, muted=True
+            tr("Organization details not entered yet"),
+            ORGANIZATION_POINT_SIZE,
+            muted=True,
         )
     y += 1.0
-    line(form.name or "Untitled form", FORM_NAME_POINT_SIZE, bold=True)
-    version = f"Version {form.version}" if form.version else "Not saved yet"
+    line(form.name or tr("Untitled form"), FORM_NAME_POINT_SIZE, bold=True)
+    # Printed forms are always saved; an unsaved one is only seen in the editor.
+    details = (
+        tr_printed("Version {version} · Page {page} of {pages}")
+        if form.version
+        else tr("Not saved yet · Page {page} of {pages}")
+    )
     line(
-        f"{version} · Page {page.number} of {len(layout.pages)}",
+        details.format(version=form.version, page=page.number, pages=len(layout.pages)),
         DETAIL_POINT_SIZE,
         muted=True,
     )

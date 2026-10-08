@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.constants import BLOCK_KINDS
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.Form import content_id
 from omr_data_collector.ui.PageCanvas import library_block_mime
 
@@ -24,11 +25,31 @@ if TYPE_CHECKING:
 
     from omr_data_collector.models.Form import BlockContent
 
-SECTIONS = (
-    (BLOCK_KINDS.TEXT, "Text blocks"),
-    (BLOCK_KINDS.QUESTION, "Questions"),
-    (BLOCK_KINDS.TABLE, "Tables"),
-)
+
+def _sections() -> tuple[tuple[str, str, str, str], ...]:
+    """Each library: its kind, title, list name and Add button name."""
+    return (
+        (
+            BLOCK_KINDS.TEXT,
+            tr("Text blocks"),
+            tr("Text blocks in the library"),
+            tr("Add the selected text block to the form"),
+        ),
+        (
+            BLOCK_KINDS.QUESTION,
+            tr("Questions"),
+            tr("Questions in the library"),
+            tr("Add the selected question to the form"),
+        ),
+        (
+            BLOCK_KINDS.TABLE,
+            tr("Tables"),
+            tr("Tables in the library"),
+            tr("Add the selected table to the form"),
+        ),
+    )
+
+
 ROWS_VISIBLE = 5
 
 
@@ -58,21 +79,21 @@ class BlockPalette(QWidget):
         self.add_buttons: dict[str, QPushButton] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        hint = QLabel("Drag a block onto the page, or select it and press Add to form.")
+        hint = QLabel(
+            tr("Drag a block onto the page, or select it and press Add to form.")
+        )
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        for kind, title in SECTIONS:
+        for kind, title, list_name, add_name in _sections():
             item_list = _LibraryList(kind)
-            item_list.setAccessibleName(f"{title} in the library")
+            item_list.setAccessibleName(list_name)
             item_list.setMinimumHeight(
                 item_list.fontMetrics().lineSpacing() * ROWS_VISIBLE
             )
             label = QLabel(title)
             label.setBuddy(item_list)
-            add_button = QPushButton("Add to form")
-            add_button.setAccessibleName(
-                f"Add the selected {title.lower()[:-1]} to the form"
-            )
+            add_button = QPushButton(tr("Add to form"))
+            add_button.setAccessibleName(add_name)
             add_button.clicked.connect(
                 lambda _checked=False, kind=kind: self._add(kind)
             )
@@ -98,7 +119,7 @@ class BlockPalette(QWidget):
 
     def focus_chain(self) -> list[QWidget]:
         chain: list[QWidget] = []
-        for kind, _ in SECTIONS:
+        for kind in self.lists:
             chain += [self.lists[kind], self.add_buttons[kind]]
         return chain
 

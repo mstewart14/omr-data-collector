@@ -420,7 +420,7 @@ def test_tab_order_follows_the_screen(
 
 
 def test_picker_returns_the_chosen_library_block(qtbot: QtBot) -> None:
-    dialog = BlockPickerDialog(None, "text block", [TITLE], can_write_new=True)
+    dialog = BlockPickerDialog(None, BLOCK_KINDS.TEXT, [TITLE], can_write_new=True)
     qtbot.addWidget(dialog)
 
     dialog.accept()
@@ -429,7 +429,7 @@ def test_picker_returns_the_chosen_library_block(qtbot: QtBot) -> None:
 
 
 def test_picker_can_choose_to_write_a_new_one(qtbot: QtBot) -> None:
-    dialog = BlockPickerDialog(None, "question", [VISIT], can_write_new=True)
+    dialog = BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [VISIT], can_write_new=True)
     qtbot.addWidget(dialog)
 
     assert dialog.write_new_button is not None
@@ -440,7 +440,7 @@ def test_picker_can_choose_to_write_a_new_one(qtbot: QtBot) -> None:
 
 
 def test_picker_for_tables_offers_only_the_library(qtbot: QtBot) -> None:
-    dialog = BlockPickerDialog(None, "table", [], can_write_new=False)
+    dialog = BlockPickerDialog(None, BLOCK_KINDS.TABLE, [], can_write_new=False)
     qtbot.addWidget(dialog)
 
     assert dialog.write_new_button is None

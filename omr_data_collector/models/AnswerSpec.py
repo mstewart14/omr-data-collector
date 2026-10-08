@@ -17,6 +17,7 @@ from omr_data_collector.constants import (
     WRITTEN_DATA_TYPES,
     YES_NO_CHOICE_COUNT,
 )
+from omr_data_collector.i18n import tr
 from omr_data_collector.schemas.answer_spec_schema import ANSWER_SPEC_SCHEMA
 
 LIST_ANSWER_TYPES = {ANSWER_TYPES.ONE_CHOICE, ANSWER_TYPES.MANY_CHOICES}
@@ -53,7 +54,7 @@ class AnswerSpec:
     def default(cls, answer_type: str) -> AnswerSpec:
         """A starting point for a new answer of ``answer_type``."""
         if answer_type == ANSWER_TYPES.YES_NO:
-            return cls(answer_type, choices=(Choice("Yes"), Choice("No")))
+            return cls(answer_type, choices=(Choice(tr("Yes")), Choice(tr("No"))))
         if answer_type in LIST_ANSWER_TYPES:
             return cls(answer_type, choices=(Choice(""),) * MIN_LIST_CHOICES)
         return cls(answer_type)
@@ -119,7 +120,7 @@ class AnswerSpec:
             return self._choice_errors()
         if self.answer_type == ANSWER_TYPES.WRITTEN:
             return self._written_errors()
-        return {"answer_type": "Choose an answer type."}
+        return {"answer_type": tr("Choose an answer type.")}
 
     def to_dict(self) -> dict[str, Any]:
         """The JSON form stored in the database and copied into forms.
@@ -182,11 +183,11 @@ class AnswerSpec:
     def _choice_errors(self) -> dict[str, str]:
         count = len(self.choices)
         if self.answer_type == ANSWER_TYPES.YES_NO and count != YES_NO_CHOICE_COUNT:
-            return {"choices": "A yes/no answer has exactly two choices."}
+            return {"choices": tr("A yes/no answer has exactly two choices.")}
         if self.answer_type in LIST_ANSWER_TYPES and count < MIN_LIST_CHOICES:
-            return {"choices": f"Add at least {MIN_LIST_CHOICES} choices."}
+            return {"choices": tr("Add at least %n choice(s).", None, MIN_LIST_CHOICES)}
         if count > MAX_CHOICES:
-            return {"choices": f"Use at most {MAX_CHOICES} choices."}
+            return {"choices": tr("Use at most %n choice(s).", None, MAX_CHOICES)}
 
         for number, choice in enumerate(self.choices, start=1):
             if not choice.label:
@@ -198,45 +199,49 @@ class AnswerSpec:
             if key in seen:
                 # The data couldn't tell these two marks apart.
                 return {
-                    "choices": f"Choices {seen[key]} and {number} are both saved as "
-                    f'"{choice.output}"; give each a different value.'
+                    "choices": tr(
+                        'Choices {first} and {second} are both saved as "{value}"; '
+                        "give each a different value."
+                    ).format(first=seen[key], second=number, value=choice.output)
                 }
             seen[key] = number
         return {}
 
     def _missing_words_message(self, number: int) -> str:
         if self.answer_type == ANSWER_TYPES.YES_NO:
-            meaning = "Marked" if number == 1 else "Left empty"
-            return f'"{meaning}" needs words.'
-        return f"Choice {number} needs words to print."
+            meaning = tr("Marked") if number == 1 else tr("Left empty")
+            return tr('"{meaning}" needs words.').format(meaning=meaning)
+        return tr("Choice {number} needs words to print.").format(number=number)
 
     def _written_errors(self) -> dict[str, str]:
         errors: dict[str, str] = {}
         if self.data_type not in WRITTEN_DATA_TYPES.values():
-            errors["data_type"] = "Choose a data type."
+            errors["data_type"] = tr("Choose a data type.")
             return errors
 
         if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
             if self.date_time_format not in DATE_TIME_FORMATS:
-                errors["date_time_format"] = "Choose a date/time format."
+                errors["date_time_format"] = tr("Choose a date/time format.")
             return errors
 
         if not 1 <= self.max_characters <= MAX_WRITTEN_CHARACTERS:
-            errors["max_characters"] = (
-                f"Use between 1 and {MAX_WRITTEN_CHARACTERS} characters."
+            errors["max_characters"] = tr(
+                "Use between 1 and %n character(s).", None, MAX_WRITTEN_CHARACTERS
             )
 
         if self.data_type == WRITTEN_DATA_TYPES.NUMBER:
             low, high = self.number_minimum, self.number_maximum
             if low is not None and high is not None and low > high:
-                errors["number_maximum"] = "The maximum must be at least the minimum."
+                errors["number_maximum"] = tr(
+                    "The maximum must be at least the minimum."
+                )
         elif self.data_type == WRITTEN_DATA_TYPES.ID:
             if self.check_digit not in CHECK_DIGIT_SCHEMES.values():
-                errors["check_digit"] = "Choose a check digit scheme."
+                errors["check_digit"] = tr("Choose a check digit scheme.")
             elif (
                 self.check_digit != CHECK_DIGIT_SCHEMES.NONE and self.max_characters < 2
             ):
-                errors["max_characters"] = (
+                errors["max_characters"] = tr(
                     "An ID with a check digit needs at least 2 characters."
                 )
         return errors

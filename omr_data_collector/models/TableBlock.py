@@ -13,6 +13,7 @@ from omr_data_collector.constants import (
     MAX_TABLE_ROWS,
     TABLE_NAME_MAX_LENGTH,
 )
+from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.schemas.table_columns_schema import TABLE_COLUMNS_SCHEMA
 
@@ -43,13 +44,17 @@ class Column:
         """
         errors: dict[str, str] = {}
         if not self.name:
-            errors["name"] = "Enter a name for the column."
+            errors["name"] = tr("Enter a name for the column.")
         elif len(self.name) > COLUMN_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {COLUMN_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.",
+                None,
+                COLUMN_NAME_MAX_LENGTH,
             )
         elif self.name.casefold() in {name.casefold() for name in other_names}:
-            errors["name"] = f'This table already has a column called "{self.name}".'
+            errors["name"] = tr(
+                'This table already has a column called "{name}".'
+            ).format(name=self.name)
         errors.update(self.answer.validation_errors())
         return errors
 
@@ -108,19 +113,23 @@ class TableBlock:
         """
         errors: dict[str, str] = {}
         if not self.name:
-            errors["name"] = "Enter a name for the table."
+            errors["name"] = tr("Enter a name for the table.")
         elif len(self.name) > TABLE_NAME_MAX_LENGTH:
-            errors["name"] = (
-                f"Keep the name to {TABLE_NAME_MAX_LENGTH} characters or fewer."
+            errors["name"] = tr(
+                "Keep the name to %n character(s) or fewer.",
+                None,
+                TABLE_NAME_MAX_LENGTH,
             )
         elif self.name.casefold() in {name.casefold() for name in other_names}:
-            errors["name"] = f'Another table is already called "{self.name}".'
+            errors["name"] = tr('Another table is already called "{name}".').format(
+                name=self.name
+            )
 
         if not 1 <= self.rows <= MAX_TABLE_ROWS:
-            errors["rows"] = f"Use between 1 and {MAX_TABLE_ROWS} rows."
+            errors["rows"] = tr("Use between 1 and %n row(s).", None, MAX_TABLE_ROWS)
 
         if not self.columns:
-            errors["columns"] = "Add at least one column."
+            errors["columns"] = tr("Add at least one column.")
         for number, column in enumerate(self.columns, start=1):
             # By position, not identity: two identical columns are still two.
             others = {
@@ -132,9 +141,13 @@ class TableBlock:
             if column_errors:
                 first = next(iter(column_errors.values()))
                 errors["columns"] = (
-                    f'Column {number} ("{column.name}"): {first}'
+                    tr('Column {number} ("{name}"): {problem}').format(
+                        number=number, name=column.name, problem=first
+                    )
                     if column.name
-                    else f"Column {number}: {first}"
+                    else tr("Column {number}: {problem}").format(
+                        number=number, problem=first
+                    )
                 )
                 break
         return errors
