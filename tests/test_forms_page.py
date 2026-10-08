@@ -468,7 +468,7 @@ def test_editing_a_question_copy_keeps_its_id_and_checks_it(qtbot: QtBot) -> Non
 
     dialog.accept()
     assert dialog.content() is None
-    assert dialog.error_labels["choices"].text() == "Choice 1 needs words to print."
+    assert dialog.error_labels["choices"].text() == '"Marked" needs words.'
 
     dialog.answer_fields.choices_table.setItem(0, 0, QTableWidgetItem("Yes"))
     dialog.accept()

@@ -55,6 +55,23 @@ def test_new_question_starts_as_yes_no(
     assert not row_visible(page, fields.characters_spin)
 
 
+def test_yes_no_rows_say_marked_and_left_empty(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_page(qtbot, connection)
+    table = page.answer_fields.choices_table
+
+    assert table.verticalHeader().isVisibleTo(page)
+    headings = [table.verticalHeaderItem(row).text() for row in range(2)]
+    assert headings == ["Marked", "Left empty"]
+    assert "one bubble" in table.accessibleDescription()
+
+    choose(page.answer_fields.answer_type_combo, ANSWER_TYPES.ONE_CHOICE)
+
+    assert not table.verticalHeader().isVisibleTo(page)
+    assert "Each row is one bubble" in table.accessibleDescription()
+
+
 def test_create_a_yes_no_question(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
     page.name_edit.setText("first_visit")

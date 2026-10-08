@@ -52,7 +52,6 @@ OMR_CONFIG = {
         "filter_out_multimarked_files": False,
     }
 }
-SINGLE_CHOICE_TYPES = {ANSWER_TYPES.YES_NO, ANSWER_TYPES.ONE_CHOICE}
 # Photos are often far bigger than a QR code needs; if zbar misses the code at
 # full size, it gets another try at these widths.
 QR_RETRY_WIDTHS = (2000, 1200)
@@ -76,8 +75,10 @@ class SheetIdentity:
 class ScannedAnswer:
     """The bubbles marked for one question, or one table cell.
 
-    ``values`` are the marked choices' saved values, in choice order. A problem
-    (two bubbles marked where only one is allowed) is for a person to review.
+    ``values`` are the marked choices' saved values, in choice order (a yes/no
+    answer's one bubble saves its first value when marked, its second when
+    empty). A problem (two bubbles marked where only one is allowed) is for a
+    person to review.
     """
 
     block_index: int
@@ -221,8 +222,12 @@ def interpret(
             for index in sorted(set(choices))
             if index < len(spec.choices)
         )
+        if spec.answer_type == ANSWER_TYPES.YES_NO:
+            # One bubble: marked saves the first choice, empty the second.
+            when_marked, when_empty = spec.choices
+            values = ((when_marked if values else when_empty).output,)
         problem = ""
-        if spec.answer_type in SINGLE_CHOICE_TYPES and len(values) > 1:
+        if spec.answer_type == ANSWER_TYPES.ONE_CHOICE and len(values) > 1:
             problem = "More than one bubble is marked, but only one is allowed."
         answers.append(
             ScannedAnswer(

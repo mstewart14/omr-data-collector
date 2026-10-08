@@ -228,7 +228,7 @@ def _choice_pitch_mm(question: Question) -> float:
     widest = max(
         (
             text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
-            for choice in question.answer.choices
+            for choice in question.answer.printed_choices()
         ),
         default=0.0,
     )
@@ -251,7 +251,7 @@ def _choice_bubbles(
             choice_index=index,
             row=index // per_row,
         )
-        for index, choice in enumerate(question.answer.choices)
+        for index, choice in enumerate(question.answer.printed_choices())
     )
 
 

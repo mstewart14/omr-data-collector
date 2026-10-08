@@ -14,6 +14,7 @@ from omr_data_collector.layout.table_layout import (
     BUBBLE_PITCH_MM,
     CELL_PADDING_MM,
     WRITTEN_BOX_WIDTH_MM,
+    cell_bubble_centres_mm,
     cell_written_marks_mm,
     column_layout,
     rows_to_print,
@@ -60,7 +61,7 @@ def test_date_column_is_sized_by_its_format() -> None:
 
 def test_short_choice_labels_use_the_standard_bubble_pitch() -> None:
     column = Column(
-        "v", answer=AnswerSpec(ANSWER_TYPES.YES_NO, choices=choices("Y", "N"))
+        "v", answer=AnswerSpec(ANSWER_TYPES.ONE_CHOICE, choices=choices("Y", "N"))
     )
 
     layout = column_layout(column)
@@ -207,3 +208,11 @@ def test_time_table_cells_box_the_digits_around_a_printed_colon() -> None:
     assert [printed for _, printed in marks] == ["", "", ":", "", ""]
     lefts = [left for left, _ in marks]
     assert lefts == sorted(lefts)
+
+
+def test_a_yes_no_column_has_one_bubble_per_cell() -> None:
+    column = Column(
+        "first", answer=AnswerSpec(ANSWER_TYPES.YES_NO, choices=choices("Y", "N"))
+    )
+
+    assert len(cell_bubble_centres_mm(column, column_layout(column))) == 1

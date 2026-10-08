@@ -302,3 +302,13 @@ def test_the_layout_knows_the_whole_sheet_for_the_corner_markers() -> None:
     assert top < 0
     assert right > layout.width_mm
     assert bottom > layout.height_mm
+
+
+def test_a_yes_no_answer_is_one_bubble() -> None:
+    geometry = question_geometry(
+        question("visit").content,  # type: ignore[arg-type]
+        width_mm=180,
+    )
+
+    (bubble,) = geometry.bubbles
+    assert bubble.label == "Yes"

@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QFormLayout, QLabel
 
 ANSWER_TYPE_LABELS = {
-    ANSWER_TYPES.YES_NO: "Two choices (like yes/no)",
+    ANSWER_TYPES.YES_NO: "Yes/no (one bubble, marked or empty)",
     ANSWER_TYPES.ONE_CHOICE: "One choice from a list",
     ANSWER_TYPES.MANY_CHOICES: "Any number of choices from a list",
     ANSWER_TYPES.WRITTEN: "Written answer",
@@ -52,6 +52,16 @@ CHECK_DIGIT_LABELS = {
     CHECK_DIGIT_SCHEMES.DAMM: "Damm",
     CHECK_DIGIT_SCHEMES.VERHOEFF: "Verhoeff",
 }
+LIST_TABLE_DESCRIPTION = (
+    "Each row is one bubble: the words printed beside it, and what is saved "
+    "when it is marked (blank saves the printed words)."
+)
+YES_NO_ROW_LABELS = ("Marked", "Left empty")
+YES_NO_TABLE_DESCRIPTION = (
+    "A yes/no answer is one bubble. The Marked row's words are printed beside it "
+    "and saved when it is marked; the Left empty row's are saved when it isn't "
+    "(and never printed). Blank Saved as saves the words."
+)
 LABEL_COLUMN, OUTPUT_COLUMN = 0, 1
 # Number limits are optional; the spin box's lowest value stands for "no limit".
 NO_LIMIT = -(2**31) + 1
@@ -91,10 +101,7 @@ class AnswerFields:
             '"Saved as" is the value in exported data; leave it blank to save the '
             "printed words."
         )
-        self.choices_table.setAccessibleDescription(
-            "Each row is one bubble: the words printed beside it, and what is saved "
-            "when it is marked (blank saves the printed words)."
-        )
+        self.choices_table.setAccessibleDescription(LIST_TABLE_DESCRIPTION)
         self.choices_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -334,6 +341,12 @@ class AnswerFields:
             self._current_choices() if self._showing_type in CHOICE_ANSWER_TYPES else ()
         )
         self.choices_table.setRowCount(0)
+        yes_no = self._showing_type == ANSWER_TYPES.YES_NO
+        self.choices_table.verticalHeader().setVisible(yes_no)
+        if yes_no:
+            self.choices_table.setAccessibleDescription(YES_NO_TABLE_DESCRIPTION)
+        else:
+            self.choices_table.setAccessibleDescription(LIST_TABLE_DESCRIPTION)
         for row, choice in enumerate(choices):
             self.choices_table.insertRow(row)
             self.choices_table.setItem(
@@ -342,6 +355,8 @@ class AnswerFields:
             # Shown blank when it just repeats the printed words, as it was entered.
             output = "" if choice.output == choice.label else choice.output
             self.choices_table.setItem(row, OUTPUT_COLUMN, QTableWidgetItem(output))
+        if yes_no:
+            self.choices_table.setVerticalHeaderLabels(list(YES_NO_ROW_LABELS))
 
     def _update_rows(self) -> None:
         answer_type = self.answer_type_combo.currentData()
@@ -374,8 +389,8 @@ class AnswerFields:
         yes_no = self.answer_type_combo.currentData() == ANSWER_TYPES.YES_NO
         rows = self.choices_table.rowCount()
         row = self.choices_table.currentRow()
-        # A yes/no answer always has exactly two choices: they can be reworded and
-        # reordered, not added or removed.
+        # A yes/no answer always has exactly two rows, marked and left empty: they
+        # can be reworded and swapped, not added or removed.
         self.add_choice_button.setEnabled(not yes_no and rows < MAX_CHOICES)
         self.remove_choice_button.setEnabled(not yes_no and row >= 0)
         self.move_up_button.setEnabled(row > 0)

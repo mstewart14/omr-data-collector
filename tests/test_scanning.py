@@ -235,11 +235,10 @@ def test_a_filled_in_photo_reads_back_its_answers(
 ) -> None:
     form, layout = printed_form
     sheet = Sheet(form, organization, layout)
-    sheet.fill_question(0, 1)
+    # Question 0 (yes/no) is left empty.
     sheet.fill_question(1, 0, 3)
     sheet.fill_cell(2, row=0, column=1, choice=0)
     sheet.fill_cell(2, row=0, column=2, choice=2)
-    sheet.fill_cell(2, row=2, column=1, choice=1)
     sheet.fill_cell(2, row=2, column=2, choice=0)
     photo = sheet.photograph(tmp_path / "photo.jpg")
 
@@ -255,11 +254,11 @@ def test_a_filled_in_photo_reads_back_its_answers(
     assert answers[2, 0, 2] == ("referral",)
     assert answers[2, 2, 1] == ("n",)
     assert answers[2, 2, 2] == ("food",)
-    assert answers[2, 1, 1] == ()
+    assert answers[2, 1, 2] == ()
     assert all(not answer.problem for answer in page.answers)
 
 
-def test_two_marks_on_a_one_choice_answer_are_flagged(
+def test_two_marks_where_one_is_allowed_are_flagged(
     connection: sqlite3.Connection,
     organization: Organization,
     printed_form: tuple[Form, FormLayout],
@@ -267,14 +266,19 @@ def test_two_marks_on_a_one_choice_answer_are_flagged(
 ) -> None:
     form, layout = printed_form
     sheet = Sheet(form, organization, layout)
-    sheet.fill_question(0, 0, 1)
+    sheet.fill_question(0, 0)
+    sheet.fill_cell(2, row=1, column=2, choice=0)
+    sheet.fill_cell(2, row=1, column=2, choice=1)
     photo = sheet.photograph(tmp_path / "photo.jpg")
 
     page = scan_sheet(connection, photo, LETTER)
 
-    (visit,) = [answer for answer in page.answers if answer.block_index == 0]
-    assert visit.values == ("yes", "no")
-    assert "More than one" in visit.problem
+    answers = {(a.block_index, a.table_row, a.column): a for a in page.answers}
+    assert answers[0, None, None].values == ("yes",)
+    assert not answers[0, None, None].problem
+    service = answers[2, 1, 2]
+    assert service.values == ("food", "clothing")
+    assert "More than one" in service.problem
 
 
 def test_a_missing_corner_marker_is_reported(

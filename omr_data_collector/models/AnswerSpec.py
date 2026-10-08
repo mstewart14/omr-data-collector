@@ -58,6 +58,16 @@ class AnswerSpec:
             return cls(answer_type, choices=(Choice(""),) * MIN_LIST_CHOICES)
         return cls(answer_type)
 
+    def printed_choices(self) -> tuple[Choice, ...]:
+        """The choices that get a bubble on paper.
+
+        A yes/no answer is one bubble, marked or left empty: its first choice is
+        printed and saved when marked, its second only saved when it is empty.
+        """
+        if self.answer_type == ANSWER_TYPES.YES_NO:
+            return self.choices[:1]
+        return self.choices
+
     def written_cells(self) -> tuple[str, ...] | None:
         """What each character position of a written answer gets on paper.
 
@@ -180,7 +190,7 @@ class AnswerSpec:
 
         for number, choice in enumerate(self.choices, start=1):
             if not choice.label:
-                return {"choices": f"Choice {number} needs words to print."}
+                return {"choices": self._missing_words_message(number)}
 
         seen: dict[str, int] = {}
         for number, choice in enumerate(self.choices, start=1):
@@ -193,6 +203,12 @@ class AnswerSpec:
                 }
             seen[key] = number
         return {}
+
+    def _missing_words_message(self, number: int) -> str:
+        if self.answer_type == ANSWER_TYPES.YES_NO:
+            meaning = "Marked" if number == 1 else "Left empty"
+            return f'"{meaning}" needs words.'
+        return f"Choice {number} needs words to print."
 
     def _written_errors(self) -> dict[str, str]:
         errors: dict[str, str] = {}

@@ -91,10 +91,10 @@ def _paint_heading(
     # Each choice's label above its bubble's column.
     label_line = line_height_mm(CHOICE_LABEL_POINT_SIZE)
     label_top = layout.header_height_mm - CELL_PADDING_MM - label_line
-    pitch = inner / max(len(column.answer.choices), 1)
+    pitch = inner / max(len(column.answer.printed_choices()), 1)
     for centre, choice in zip(
         cell_bubble_centres_mm(column, column_layout),
-        column.answer.choices,
+        column.answer.printed_choices(),
         strict=True,
     ):
         draw_text(

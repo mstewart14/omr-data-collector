@@ -69,7 +69,7 @@ def choice_pitch_mm(answer: AnswerSpec) -> float:
     widest_label = max(
         (
             text_width_mm(choice.label, CHOICE_LABEL_POINT_SIZE)
-            for choice in answer.choices
+            for choice in answer.printed_choices()
         ),
         default=0,
     )
@@ -82,7 +82,7 @@ def column_layout(column: Column) -> ColumnLayout:
     if answer.answer_type == ANSWER_TYPES.WRITTEN:
         content = answer.characters() * WRITTEN_BOX_WIDTH_MM
     else:
-        content = len(answer.choices) * pitch
+        content = len(answer.printed_choices()) * pitch
     # The heading never wraps, so a column is at least as wide as its name; a
     # longer example wraps under it instead.
     heading = text_width_mm(column.name, HEADER_POINT_SIZE, bold=True)
@@ -127,7 +127,7 @@ TABLE_BOX_HEIGHT_MM = 6.0
 
 def cell_bubble_centres_mm(column: Column, layout: ColumnLayout) -> list[float]:
     """Each choice bubble's centre across its cell, from the column's left edge."""
-    count = len(column.answer.choices)
+    count = len(column.answer.printed_choices())
     if column.answer.answer_type == ANSWER_TYPES.WRITTEN or not count:
         return []
     pitch = (layout.width_mm - 2 * CELL_PADDING_MM) / count
