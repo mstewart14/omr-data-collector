@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any
 from PySide6.QtCore import QEvent, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpacerItem,
     QVBoxLayout,
@@ -273,11 +276,32 @@ class LibraryPage(QWidget):
         buttons.addWidget(self.revert_button)
         buttons.addWidget(self.save_button)
 
+        # The form scrolls, so nothing is cut off in a small window or at a large
+        # system font size; Save and Revert stay in view below it.
+        form_container = QWidget()
+        form_container.setLayout(self.form)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # Not a Tab stop of its own: focus goes to the fields inside it.
+        self.form_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.form_scroll.setWidget(form_container)
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            app.focusChanged.connect(self._scroll_to_focus)
+
         self.editor_box = QGroupBox()
         box_layout = QVBoxLayout(self.editor_box)
-        box_layout.addLayout(self.form)
+        box_layout.addWidget(self.form_scroll)
         box_layout.addLayout(buttons)
         return self.editor_box
+
+    def _scroll_to_focus(self, _old: QWidget | None, new: QWidget | None) -> None:
+        # A scroll area doesn't follow keyboard focus by itself; without this,
+        # tabbing to a field below the fold would leave it out of sight.
+        form = self.form_scroll.widget()
+        if new is not None and form is not None and form.isAncestorOf(new):
+            self.form_scroll.ensureWidgetVisible(new)
 
     def _connect_signals(self) -> None:
         self.save_button.clicked.connect(self.save)

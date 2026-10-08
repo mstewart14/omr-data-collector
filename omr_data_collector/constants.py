@@ -80,3 +80,9 @@ MIN_LIST_CHOICES = 3
 # More bubbles than this no longer fit across a portrait page.
 MAX_CHOICES = 20
 MAX_WRITTEN_CHARACTERS = 60
+
+TABLE_NAME_MAX_LENGTH = 100
+# Column names become export column names, and are printed in a narrow header.
+COLUMN_NAME_MAX_LENGTH = 40
+DEFAULT_TABLE_ROWS = 10
+MAX_TABLE_ROWS = 50

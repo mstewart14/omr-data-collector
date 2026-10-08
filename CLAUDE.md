@@ -51,6 +51,10 @@ engine bridge.
   is collected (yes/no, one or many choices, written) is an `AnswerSpec`, edited by
   `ui/AnswerFields.py`, which adds its rows to the page's own form; table columns
   reuse both.
+- **Paper sizes come from `layout/`** (`table_layout.py` so far: bubble pitch,
+  written box width, row height, column widths from real font metrics). The table
+  preview uses it now; printing and the OMRChecker template must use the same
+  numbers, never their own, so what is previewed is what is printed and scanned.
 - **Forms keep their own copy of every block** (wiki 50011-50012): editing a
   library block later asks "going forward only" or "everywhere", and "everywhere"
   makes new form versions so sheets already printed still scan.

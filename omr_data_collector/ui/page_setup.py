@@ -27,9 +27,22 @@ PAGE_MARGIN_MM = 12.7
 
 def page_layout(organization: Organization) -> QPageLayout:
     """The organization's page layout preference (wiki story 20001), as Qt's type."""
+    return page_layout_for(organization.paper_size, organization.orientation)
+
+
+def page_layout_for(paper_size: str, orientation: str) -> QPageLayout:
+    """A page of ``paper_size`` (a PAPER_SIZES value) turned to ``orientation``."""
     return QPageLayout(
-        QPageSize(PAGE_SIZE_IDS[organization.paper_size]),
-        PAGE_ORIENTATION_IDS[organization.orientation],
+        QPageSize(PAGE_SIZE_IDS[paper_size]),
+        PAGE_ORIENTATION_IDS[orientation],
         QMarginsF(PAGE_MARGIN_MM, PAGE_MARGIN_MM, PAGE_MARGIN_MM, PAGE_MARGIN_MM),
         QPageLayout.Unit.Millimeter,
     )
+
+
+def printable_size_mm(paper_size: str, orientation: str) -> tuple[float, float]:
+    """Width and height inside the margins, in millimetres."""
+    rect = page_layout_for(paper_size, orientation).paintRect(
+        QPageLayout.Unit.Millimeter
+    )
+    return rect.width(), rect.height()

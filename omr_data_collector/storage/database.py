@@ -54,6 +54,21 @@ MIGRATIONS: list[list[str]] = [
         """,
         "CREATE UNIQUE INDEX question_name ON question (name COLLATE NOCASE)",
     ],
+    [
+        """
+        CREATE TABLE table_block (
+            table_block_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            instructions TEXT NOT NULL DEFAULT '',
+            row_count INTEGER NOT NULL,
+            -- columns_to_list() as JSON: the same shape forms copy.
+            columns TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """,
+        "CREATE UNIQUE INDEX table_block_name ON table_block (name COLLATE NOCASE)",
+    ],
 ]
 
 

@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+from itertools import pairwise
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from omr_data_collector.constants import ANSWER_TYPES
+from omr_data_collector.models.AnswerSpec import AnswerSpec
+from omr_data_collector.models.TableBlock import Column
+from omr_data_collector.ui.accessibility import set_field_error, style_error_label
+from omr_data_collector.ui.AnswerFields import AnswerFields
+from omr_data_collector.ui.form_helpers import add_field_row
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QLabel
+
+
+class ColumnDialog(QDialog):
+    """Add or edit one column of a table block (wiki stories 30002-30006).
+
+    A dialog rather than more rows on the table page: a column's settings would
+    leave the page too few unique Alt+letter mnemonics, and the column's errors
+    stay together until it's right.
+    """
+
+    def __init__(
+        self, parent: QWidget | None, column: Column | None, other_names: set[str]
+    ) -> None:
+        """Edit ``column``, or a new one when it's None.
+
+        ``other_names`` are the table's other column names, which this one may not
+        repeat.
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Edit column" if column else "Add column")
+        self._other_names = other_names
+        self._column: Column | None = None
+
+        self.form = QFormLayout()
+        self.name_edit = QLineEdit()
+        self.name_edit.setToolTip("Printed as the heading, and the export column name")
+        self.example_edit = QLineEdit()
+        self.example_edit.setPlaceholderText(
+            "Printed under the heading, like: 2026-10-08"
+        )
+        self.field_widgets: dict[str, QWidget] = {}
+        self.field_labels: dict[str, QLabel] = {}
+        self.error_labels: dict[str, QLabel] = {}
+        for key, label_text, widget in (
+            ("name", "Column &name (required)", self.name_edit),
+            ("example", "&Example", self.example_edit),
+        ):
+            self.field_labels[key], self.error_labels[key] = add_field_row(
+                self.form, label_text, widget
+            )
+            self.field_widgets[key] = widget
+        self.answer_fields = AnswerFields(
+            self.form,
+            self.field_widgets,
+            self.field_labels,
+            self.error_labels,
+            lambda: None,
+        )
+
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(self.form)
+        layout.addWidget(self.buttons)
+
+        focus_chain = [
+            self.name_edit,
+            self.example_edit,
+            *self.answer_fields.focus_chain(),
+            *self.buttons.buttons(),
+        ]
+        for before, after in pairwise(focus_chain):
+            QWidget.setTabOrder(before, after)
+
+        if column is not None:
+            self.name_edit.setText(column.name)
+            self.example_edit.setText(column.example)
+            self.answer_fields.set_spec(column.answer)
+        else:
+            self.answer_fields.set_spec(AnswerSpec.default(ANSWER_TYPES.YES_NO))
+        self.name_edit.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def entered_column(self) -> Column:
+        """The column as currently entered, normalized."""
+        return Column(
+            name=self.name_edit.text(),
+            example=self.example_edit.text(),
+            answer=self.answer_fields.spec(),
+        ).normalized()
+
+    def column(self) -> Column | None:
+        """The accepted column; None until OK is pressed with valid settings."""
+        return self._column
+
+    def accept(self) -> None:
+        column = self.entered_column()
+        errors = column.validation_errors(self._other_names)
+        for key, label in self.error_labels.items():
+            set_field_error(
+                self.form, self.field_widgets[key], label, errors.get(key, "")
+            )
+        if errors:
+            # Stay open, focused on the first problem, which screen readers then
+            # read with its error.
+            first = next(key for key in self.field_widgets if key in errors)
+            self.field_widgets[first].setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        self._column = column
+        super().accept()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt override)
+        if event.type() == QEvent.Type.PaletteChange:
+            for label in self.error_labels.values():
+                style_error_label(label, self.palette())
+        super().changeEvent(event)

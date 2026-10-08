@@ -44,6 +44,7 @@ class FormattedTextFields:
         text_label: str,
         style_label: str,
         visible_lines: int,
+        grow: bool = True,
         shortcut_parent: QWidget,
         on_change: Callable[[], None],
     ) -> None:
@@ -57,6 +58,8 @@ class FormattedTextFields:
             text_label: The editor's label, with its "&" mnemonic.
             style_label: The Style box's label, with a mnemonic unique on the page.
             visible_lines: The editor's minimum height, in lines of text.
+            grow: Whether the editor takes spare height; when not, it stays
+                at ``visible_lines`` and scrolls.
             shortcut_parent: Where the formatting shortcuts work (the page).
             on_change: Called whenever the text changes.
         """
@@ -65,11 +68,14 @@ class FormattedTextFields:
         for label, level in PARAGRAPH_STYLES:
             self.style_combo.addItem(label, level)
         self.editor = TextBlockEditor()
-        self.editor.setMinimumHeight(
+        height = (
             self.editor.fontMetrics().lineSpacing() * visible_lines
             + 2 * self.editor.frameWidth()
             + int(2 * self.editor.document().documentMargin())
         )
+        self.editor.setMinimumHeight(height)
+        if not grow:
+            self.editor.setMaximumHeight(height)
 
         self.bold_button = _format_button("Bold", "Ctrl+B")
         self.italic_button = _format_button("Italic", "Ctrl+I")
