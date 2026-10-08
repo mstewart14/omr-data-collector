@@ -8,7 +8,9 @@ import jsonschema
 from omr_data_collector.constants import (
     ANSWER_TYPES,
     CHECK_DIGIT_SCHEMES,
+    DATE_TIME_DIGIT_LETTERS,
     DATE_TIME_FORMATS,
+    LEGACY_DATE_TIME_FORMATS,
     MAX_CHOICES,
     MAX_WRITTEN_CHARACTERS,
     MIN_LIST_CHOICES,
@@ -56,8 +58,27 @@ class AnswerSpec:
             return cls(answer_type, choices=(Choice(""),) * MIN_LIST_CHOICES)
         return cls(answer_type)
 
+    def written_cells(self) -> tuple[str, ...] | None:
+        """What each character position of a written answer gets on paper.
+
+        ``""`` is a box for one handwritten character; any other string is
+        printed there already (the ``/`` and ``:`` of dates and times, or a
+        space between them). None means no boxes at all: free text is written
+        on a line, or in its table cell, instead.
+        """
+        if self.answer_type != ANSWER_TYPES.WRITTEN:
+            return ()
+        if self.data_type == WRITTEN_DATA_TYPES.FREE_TEXT:
+            return None
+        if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
+            return tuple(
+                "" if letter in DATE_TIME_DIGIT_LETTERS else letter
+                for letter in self.date_time_format
+            )
+        return ("",) * self.max_characters
+
     def characters(self) -> int:
-        """How many boxes a written answer gets on paper."""
+        """How many character widths a written answer takes on paper."""
         if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
             return len(self.date_time_format)
         return self.max_characters
@@ -123,6 +144,11 @@ class AnswerSpec:
         Raises:
             jsonschema.ValidationError: ``data`` isn't a stored answer.
         """
+        if data.get("dateTimeFormat") in LEGACY_DATE_TIME_FORMATS:
+            data = {
+                **data,
+                "dateTimeFormat": LEGACY_DATE_TIME_FORMATS[data["dateTimeFormat"]],
+            }
         jsonschema.validate(instance=data, schema=ANSWER_SPEC_SCHEMA)
         defaults = cls(data["answerType"])
         spec = cls(

@@ -195,7 +195,7 @@ def test_date_format_sets_and_locks_the_character_count(
         AnswerSpec(
             ANSWER_TYPES.WRITTEN,
             data_type=WRITTEN_DATA_TYPES.DATE_TIME,
-            date_time_format="YYYY-MM-DD HH:MM",
+            date_time_format="YYYY/MM/DD HH:MM",
         ),
         AnswerSpec(
             ANSWER_TYPES.WRITTEN,

@@ -63,7 +63,16 @@ WRITTEN_DATA_TYPES = DotMap(
 
 # Date/time answers are written in one of these fixed layouts, one character per
 # printed box, so the layout also sets how many boxes are printed.
-DATE_TIME_FORMATS = ("YYYY-MM-DD", "HH:MM", "YYYY-MM-DD HH:MM")
+DATE_TIME_FORMATS = ("YYYY/MM/DD", "HH:MM", "YYYY/MM/DD HH:MM")
+# Formats saved before dates used slashes, read as their slash versions: one
+# character each, so a printed form's layout is unchanged.
+LEGACY_DATE_TIME_FORMATS = {
+    "YYYY-MM-DD": "YYYY/MM/DD",
+    "YYYY-MM-DD HH:MM": "YYYY/MM/DD HH:MM",
+}
+# The letters in a date/time format that stand for a written digit; anything
+# else (/ : and the space) is printed on the form already.
+DATE_TIME_DIGIT_LETTERS = frozenset("YMDH")
 
 CHECK_DIGIT_SCHEMES = DotMap(
     {

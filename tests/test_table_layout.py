@@ -14,6 +14,7 @@ from omr_data_collector.layout.table_layout import (
     BUBBLE_PITCH_MM,
     CELL_PADDING_MM,
     WRITTEN_BOX_WIDTH_MM,
+    cell_written_marks_mm,
     column_layout,
     rows_to_print,
     table_layout,
@@ -48,7 +49,7 @@ def test_date_column_is_sized_by_its_format() -> None:
         answer=AnswerSpec(
             ANSWER_TYPES.WRITTEN,
             data_type=WRITTEN_DATA_TYPES.DATE_TIME,
-            date_time_format="YYYY-MM-DD",
+            date_time_format="YYYY/MM/DD",
         ),
     )
 
@@ -180,3 +181,29 @@ def test_summary_explains_that_filled_rows_depend_on_placement() -> None:
         "rows on Letter landscape when the table starts at the top of a page" in summary
     )
     assert "fewer if it's placed lower on a form." in summary
+
+
+def test_free_text_table_cells_are_left_open_to_write_in() -> None:
+    column = Column("notes", answer=AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=12))
+
+    assert cell_written_marks_mm(column, column_layout(column)) == []
+    assert column_layout(column).width_mm == pytest.approx(
+        12 * WRITTEN_BOX_WIDTH_MM + 2 * CELL_PADDING_MM
+    )
+
+
+def test_time_table_cells_box_the_digits_around_a_printed_colon() -> None:
+    column = Column(
+        "time",
+        answer=AnswerSpec(
+            ANSWER_TYPES.WRITTEN,
+            data_type=WRITTEN_DATA_TYPES.DATE_TIME,
+            date_time_format="HH:MM",
+        ),
+    )
+
+    marks = cell_written_marks_mm(column, column_layout(column))
+
+    assert [printed for _, printed in marks] == ["", "", ":", "", ""]
+    lefts = [left for left, _ in marks]
+    assert lefts == sorted(lefts)

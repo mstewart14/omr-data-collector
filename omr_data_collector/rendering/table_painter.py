@@ -14,8 +14,8 @@ from omr_data_collector.layout.table_layout import (
     HEADER_POINT_SIZE,
     TABLE_BOX_HEIGHT_MM,
     WRITTEN_BOX_WIDTH_MM,
-    cell_box_lefts_mm,
     cell_bubble_centres_mm,
+    cell_written_marks_mm,
     line_height_mm,
 )
 from omr_data_collector.layout.text import draw_text
@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
 INK = QColor("black")
 LINE_WIDTH_MM = 0.3
+# Matches the page painter's separators, a little smaller to fit a table row.
+PRINTED_SEPARATOR_POINT_SIZE = 12
 
 
 def paint_table(painter: QPainter, table: TableBlock, layout: TableLayout) -> None:
@@ -111,15 +113,25 @@ def _paint_cell(
     x: float,
     middle: float,
 ) -> None:
-    for left in cell_box_lefts_mm(column, column_layout):
-        painter.drawRect(
-            QRectF(
-                x + left,
-                middle - TABLE_BOX_HEIGHT_MM / 2,
-                WRITTEN_BOX_WIDTH_MM,
-                TABLE_BOX_HEIGHT_MM,
-            )
+    for left, printed in cell_written_marks_mm(column, column_layout):
+        rect = QRectF(
+            x + left,
+            middle - TABLE_BOX_HEIGHT_MM / 2,
+            WRITTEN_BOX_WIDTH_MM,
+            TABLE_BOX_HEIGHT_MM,
         )
+        if printed:
+            if printed.strip():
+                draw_text(
+                    painter,
+                    rect,
+                    Qt.AlignmentFlag.AlignCenter,
+                    printed,
+                    PRINTED_SEPARATOR_POINT_SIZE,
+                    bold=True,
+                )
+        else:
+            painter.drawRect(rect)
     radius = BUBBLE_DIAMETER_MM / 2
     for centre in cell_bubble_centres_mm(column, column_layout):
         painter.drawEllipse(QPointF(x + centre, middle), radius, radius)

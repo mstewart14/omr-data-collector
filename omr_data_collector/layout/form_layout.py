@@ -51,6 +51,9 @@ WRITTEN_BOX_HEIGHT_MM = 7.0
 BUBBLE_LABEL_GAP_MM = 1.5
 CHOICE_SPACING_MM = 5.0
 INSTRUCTIONS_GAP_MM = 2.0
+# Free text is written on a line this far down its row: room above for the
+# letters, as on lined paper.
+WRITING_LINE_DROP_MM = 7.0
 
 
 @dataclass(frozen=True)
@@ -65,12 +68,26 @@ class Bubble:
 
 @dataclass(frozen=True)
 class WrittenBox:
-    """One box for one handwritten character, relative to the block's top-left."""
+    """One character position of a boxed answer, relative to the block's top-left.
+
+    ``printed`` is empty for a box to write in, or the character printed there
+    already: the ``/`` or ``:`` of a date or time (a space prints nothing).
+    """
 
     x_mm: float
     y_mm: float
     width_mm: float = WRITTEN_BOX_WIDTH_MM
     height_mm: float = WRITTEN_BOX_HEIGHT_MM
+    printed: str = ""
+
+
+@dataclass(frozen=True)
+class WritingLine:
+    """A line to write free text on, relative to the block's top-left."""
+
+    x_mm: float
+    y_mm: float
+    width_mm: float
 
 
 @dataclass(frozen=True)
@@ -81,6 +98,7 @@ class QuestionGeometry:
     answer_top_mm: float
     bubbles: tuple[Bubble, ...]
     boxes: tuple[WrittenBox, ...]
+    lines: tuple[WritingLine, ...]
     height_mm: float
 
 
@@ -163,15 +181,22 @@ def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
         y = example_top + example
     answer_top = y + PART_GAP_MM
     if question.answer.answer_type == ANSWER_TYPES.WRITTEN:
-        boxes = _written_boxes(question.answer.characters(), width_mm, answer_top)
+        cells = question.answer.written_cells()
+        if cells is None:
+            lines = _writing_lines(question.answer.characters(), width_mm, answer_top)
+            bottom = lines[-1].y_mm + (ANSWER_ROW_HEIGHT_MM - WRITING_LINE_DROP_MM)
+            return QuestionGeometry(
+                prompt, example_top, example, answer_top, (), (), lines, bottom
+            )
+        boxes = _written_boxes(cells, width_mm, answer_top)
         bottom = max(box.y_mm + box.height_mm for box in boxes)
         return QuestionGeometry(
-            prompt, example_top, example, answer_top, (), boxes, bottom
+            prompt, example_top, example, answer_top, (), boxes, (), bottom
         )
     bubbles = _choice_bubbles(question, width_mm, answer_top)
     bottom = max(bubble.centre_y_mm for bubble in bubbles) + ANSWER_ROW_HEIGHT_MM / 2
     return QuestionGeometry(
-        prompt, example_top, example, answer_top, bubbles, (), bottom
+        prompt, example_top, example, answer_top, bubbles, (), (), bottom
     )
 
 
@@ -201,17 +226,41 @@ def _choice_bubbles(
     return tuple(bubbles)
 
 
-def _written_boxes(count: int, width_mm: float, top: float) -> tuple[WrittenBox, ...]:
-    """One box per character, wrapping onto new rows when the page is too narrow."""
+def _written_boxes(
+    cells: tuple[str, ...], width_mm: float, top: float
+) -> tuple[WrittenBox, ...]:
+    """One position per character, wrapping onto new rows when the page is narrow."""
     per_row = max(int(width_mm // WRITTEN_BOX_WIDTH_MM), 1)
     margin = (ANSWER_ROW_HEIGHT_MM - WRITTEN_BOX_HEIGHT_MM) / 2
     return tuple(
         WrittenBox(
             x_mm=(index % per_row) * WRITTEN_BOX_WIDTH_MM,
             y_mm=top + (index // per_row) * ANSWER_ROW_HEIGHT_MM + margin,
+            printed=printed,
         )
-        for index in range(count)
+        for index, printed in enumerate(cells)
     )
+
+
+def _writing_lines(
+    characters: int, width_mm: float, top: float
+) -> tuple[WritingLine, ...]:
+    """Lines as long as ``characters`` boxes would be, wrapped to the page width."""
+    remaining = max(characters, 1) * WRITTEN_BOX_WIDTH_MM
+    lines = []
+    row = 0
+    while remaining > 0:
+        length = min(remaining, width_mm)
+        lines.append(
+            WritingLine(
+                x_mm=0,
+                y_mm=top + row * ANSWER_ROW_HEIGHT_MM + WRITING_LINE_DROP_MM,
+                width_mm=length,
+            )
+        )
+        remaining -= length
+        row += 1
+    return tuple(lines)
 
 
 class _PageBuilder:

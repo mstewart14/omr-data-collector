@@ -55,6 +55,8 @@ ORGANIZATION_POINT_SIZE = 12
 FORM_NAME_POINT_SIZE = 11
 DETAIL_POINT_SIZE = 8
 HEADER_TEXT_GAP_MM = 4.0
+# Large and bold, so the separators read clearly between the boxes.
+PRINTED_SEPARATOR_POINT_SIZE = 14
 
 
 def paint_page(
@@ -217,4 +219,25 @@ def _paint_question(
             ANSWER_LABEL_POINT_SIZE,
         )
     for box in geometry.boxes:
-        painter.drawRect(QRectF(box.x_mm, box.y_mm, box.width_mm, box.height_mm))
+        rect = QRectF(box.x_mm, box.y_mm, box.width_mm, box.height_mm)
+        if box.printed:
+            draw_printed_character(painter, rect, box.printed)
+        else:
+            painter.drawRect(rect)
+    for line in geometry.lines:
+        painter.drawLine(
+            QPointF(line.x_mm, line.y_mm), QPointF(line.x_mm + line.width_mm, line.y_mm)
+        )
+
+
+def draw_printed_character(painter: QPainter, rect: QRectF, character: str) -> None:
+    """A separator printed in a box's place: the / of a date or : of a time."""
+    if character.strip():
+        draw_text(
+            painter,
+            rect,
+            Qt.AlignmentFlag.AlignCenter,
+            character,
+            PRINTED_SEPARATOR_POINT_SIZE,
+            bold=True,
+        )

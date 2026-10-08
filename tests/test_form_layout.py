@@ -7,6 +7,7 @@ from omr_data_collector.constants import (
     PAGE_ORIENTATIONS,
     PAPER_SIZES,
     TABLE_BREAKS,
+    WRITTEN_DATA_TYPES,
 )
 from omr_data_collector.layout.form_layout import (
     BLOCK_GAP_MM,
@@ -194,7 +195,25 @@ def test_question_choices_wrap_onto_new_rows() -> None:
     assert [bubble.choice_index for bubble in geometry.bubbles] == list(range(8))
 
 
-def test_written_answers_get_one_box_per_character_wrapping_if_needed() -> None:
+def test_numbers_get_one_box_per_digit_wrapping_if_needed() -> None:
+    written = Question(
+        name="client_number",
+        prompt="Client number",
+        answer=AnswerSpec(
+            ANSWER_TYPES.WRITTEN, data_type=WRITTEN_DATA_TYPES.NUMBER, max_characters=30
+        ),
+    )
+
+    geometry = question_geometry(written, width_mm=100)
+
+    assert len(geometry.boxes) == 30
+    assert all(box.printed == "" for box in geometry.boxes)
+    per_row = int(100 // WRITTEN_BOX_WIDTH_MM)
+    assert len({box.y_mm for box in geometry.boxes}) == -(-30 // per_row)
+    assert geometry.lines == ()
+
+
+def test_free_text_gets_writing_lines_not_boxes() -> None:
     written = Question(
         name="notes",
         prompt="Notes",
@@ -203,9 +222,39 @@ def test_written_answers_get_one_box_per_character_wrapping_if_needed() -> None:
 
     geometry = question_geometry(written, width_mm=100)
 
-    assert len(geometry.boxes) == 30
-    per_row = int(100 // WRITTEN_BOX_WIDTH_MM)
-    assert len({box.y_mm for box in geometry.boxes}) == -(-30 // per_row)
+    assert geometry.boxes == ()
+    # 30 characters' worth of line: one full line, then the rest.
+    assert [line.width_mm for line in geometry.lines] == [
+        100,
+        30 * WRITTEN_BOX_WIDTH_MM - 100,
+    ]
+    assert geometry.height_mm > geometry.lines[-1].y_mm
+
+
+@pytest.mark.parametrize(
+    ("date_time_format", "pattern"),
+    [
+        ("HH:MM", "[][]:[][]"),
+        ("YYYY/MM/DD", "[][][][]/[][]/[][]"),
+        ("YYYY/MM/DD HH:MM", "[][][][]/[][]/[][] [][]:[][]"),
+    ],
+)
+def test_dates_and_times_print_their_separators_between_boxes(
+    date_time_format: str, pattern: str
+) -> None:
+    written = Question(
+        name="when",
+        prompt="When?",
+        answer=AnswerSpec(
+            ANSWER_TYPES.WRITTEN,
+            data_type=WRITTEN_DATA_TYPES.DATE_TIME,
+            date_time_format=date_time_format,
+        ),
+    )
+
+    geometry = question_geometry(written, width_mm=180)
+
+    assert "".join(box.printed or "[]" for box in geometry.boxes) == pattern
 
 
 def test_warns_about_a_table_too_wide_for_the_page() -> None:

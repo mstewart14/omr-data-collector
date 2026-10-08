@@ -134,11 +134,20 @@ def cell_bubble_centres_mm(column: Column, layout: ColumnLayout) -> list[float]:
     return [CELL_PADDING_MM + (index + 0.5) * pitch for index in range(count)]
 
 
-def cell_box_lefts_mm(column: Column, layout: ColumnLayout) -> list[float]:
-    """Each written box's left edge, centred in its cell, from the column's left."""
-    if column.answer.answer_type != ANSWER_TYPES.WRITTEN:
+def cell_written_marks_mm(
+    column: Column, layout: ColumnLayout
+) -> list[tuple[float, str]]:
+    """The boxes and printed separators in a written cell, centred in it.
+
+    Each is its left edge from the column's left, and what goes there: ``""``
+    for a box, or the character printed (see ``AnswerSpec.written_cells``). A
+    free-text cell has none: the cell is the space to write in.
+    """
+    cells = column.answer.written_cells()
+    if not cells:
         return []
-    boxes = column.answer.characters()
     inner = layout.width_mm - 2 * CELL_PADDING_MM
-    left = CELL_PADDING_MM + (inner - boxes * WRITTEN_BOX_WIDTH_MM) / 2
-    return [left + box * WRITTEN_BOX_WIDTH_MM for box in range(boxes)]
+    left = CELL_PADDING_MM + (inner - len(cells) * WRITTEN_BOX_WIDTH_MM) / 2
+    return [
+        (left + index * WRITTEN_BOX_WIDTH_MM, cell) for index, cell in enumerate(cells)
+    ]

@@ -101,7 +101,7 @@ def test_date_time_format_sets_the_box_count() -> None:
     spec = AnswerSpec(
         WRITTEN,
         data_type=WRITTEN_DATA_TYPES.DATE_TIME,
-        date_time_format="YYYY-MM-DD HH:MM",
+        date_time_format="YYYY/MM/DD HH:MM",
         max_characters=3,
     )
 
@@ -177,3 +177,47 @@ def test_json_keeps_only_the_settings_that_apply() -> None:
 def test_from_dict_rejects_malformed_answers(data: dict) -> None:
     with pytest.raises(jsonschema.ValidationError):
         AnswerSpec.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("spec", "cells"),
+    [
+        (AnswerSpec(WRITTEN, max_characters=12), None),
+        (
+            AnswerSpec(WRITTEN, data_type=WRITTEN_DATA_TYPES.NUMBER, max_characters=3),
+            ("", "", ""),
+        ),
+        (
+            AnswerSpec(WRITTEN, data_type=WRITTEN_DATA_TYPES.ID, max_characters=2),
+            ("", ""),
+        ),
+        (
+            AnswerSpec(
+                WRITTEN,
+                data_type=WRITTEN_DATA_TYPES.DATE_TIME,
+                date_time_format="HH:MM",
+            ),
+            ("", "", ":", "", ""),
+        ),
+        (AnswerSpec(YES_NO, choices=(Choice("Y"), Choice("N"))), ()),
+    ],
+)
+def test_written_cells_say_what_each_character_position_gets(
+    spec: AnswerSpec, cells: tuple[str, ...] | None
+) -> None:
+    assert spec.written_cells() == cells
+
+
+@pytest.mark.parametrize(
+    ("stored", "read_as"),
+    [("YYYY-MM-DD", "YYYY/MM/DD"), ("YYYY-MM-DD HH:MM", "YYYY/MM/DD HH:MM")],
+)
+def test_dash_date_formats_saved_earlier_read_as_slashes(
+    stored: str, read_as: str
+) -> None:
+    spec = AnswerSpec.from_dict(
+        {"answerType": "WRITTEN", "dataType": "DATE_TIME", "dateTimeFormat": stored}
+    )
+
+    assert spec.date_time_format == read_as
+    assert spec.characters() == len(stored)  # same layout as when printed
