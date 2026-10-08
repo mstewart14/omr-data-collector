@@ -26,6 +26,19 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    [
+        """
+        CREATE TABLE text_block (
+            text_block_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """,
+        # Names are unique ignoring case, matching TextBlock.validation_errors.
+        "CREATE UNIQUE INDEX text_block_name ON text_block (name COLLATE NOCASE)",
+    ],
 ]
 
 

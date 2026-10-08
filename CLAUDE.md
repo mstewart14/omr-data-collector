@@ -22,20 +22,31 @@ engine bridge.
 - **Accessibility is a requirement, not polish.** Target WCAG 2.2 AA as it applies
   to desktop software; people using this app may rely on screen readers, the keyboard
   alone, or large fonts and high-contrast themes. Every new screen must:
-  - give each input a `QLabel` buddy that is its sibling in the same layout (that
-    sibling relation is how Qt tells screen readers the label), with a unique
-    Alt+letter mnemonic;
+  - add fields with `form_helpers.add_field_row`, which makes the `QLabel` buddy a
+    sibling of its input (that sibling relation is how Qt tells screen readers the
+    label; wrapping an input in a container breaks it) and adds its error row; give
+    every label and button a unique Alt+letter mnemonic;
   - say "(required)" in the label, never only in a placeholder;
   - show errors as text in a hidden-until-needed form row
     (`accessibility.set_field_error`), set them as the field's accessible
     description, and move focus to the first invalid field;
-  - send status messages through `MainWindow.show_status`, which also announces
-    them to screen readers;
+  - send status messages through the page's `status_message` signal, which
+    `MainWindow.show_status` shows and announces to screen readers;
+  - ask before anything that can't be undone with `form_helpers.confirm_destructive`
+    (Cancel is the default) and about unsaved changes with
+    `form_helpers.ask_save_discard_cancel`;
   - give images an accessible name and description;
   - set a tab order that follows the screen;
   - take colors from `accessibility` helpers checked to 4.5:1, re-chosen on
     `PaletteChange`, and size things in font units, not fixed pixels;
-  - have tests for all of the above (see `tests/test_accessibility.py`).
+  - have tests for all of the above (see `tests/test_accessibility.py` and
+    `tests/test_text_blocks_page.py`).
+- **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
+  `save()` and `initial_focus`; the window handles section switching (Ctrl+1, 2, …)
+  and the unsaved-changes prompt on close.
+- **Tests never show a real dialog**: an autouse fixture in `tests/conftest.py` makes
+  unpatched message boxes fail, because offscreen they would wait forever. Patch the
+  helper the code calls (e.g. `ask_save_discard_cancel`) in the test.
 - **Style:** PEP 8 plus OMRChecker v2's conventions and tooling (ruff, pyright, uv,
   pre-commit, Conventional Commits). `ruff.toml` and `pyrightconfig.json` are copied
   from upstream; don't loosen them per file without a reason in a comment.

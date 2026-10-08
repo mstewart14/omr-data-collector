@@ -3,11 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMessageBox
 
 from omr_data_collector import APP_NAME
 from omr_data_collector.storage.organization_store import load_organization
+from omr_data_collector.storage.text_block_store import list_text_blocks
 from omr_data_collector.ui.MainWindow import MainWindow
 
 if TYPE_CHECKING:
@@ -30,8 +32,8 @@ def test_main_window_opens_on_the_organization_page(
     window.show()
 
     assert window.isVisible()
-    assert window.windowTitle() == APP_NAME
-    assert window.centralWidget() is window.organization_page
+    assert window.windowTitle() == f"Organization - {APP_NAME}"
+    assert window.stack.currentWidget() is window.organization_page
 
 
 def test_page_status_messages_show_in_the_status_bar(
@@ -97,3 +99,86 @@ def test_stays_open_when_saving_on_close_fails(
     window.closeEvent(event)
 
     assert not event.isAccepted()
+
+
+def test_sections_list_switches_pages_and_titles_the_window(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+
+    window.sections.setCurrentRow(1)
+
+    assert window.stack.currentWidget() is window.text_blocks_page
+    assert window.windowTitle() == f"Text blocks - {APP_NAME}"
+    assert window.sections.accessibleName() == "Sections"
+
+
+def test_ctrl_number_opens_a_section_and_focuses_its_first_control(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+    with qtbot.waitActive(window):
+        window.show()
+        window.activateWindow()
+
+    qtbot.keyClick(window, Qt.Key.Key_2, Qt.KeyboardModifier.ControlModifier)
+    assert window.stack.currentWidget() is window.text_blocks_page
+    assert window.focusWidget() is window.text_blocks_page.block_list
+
+    qtbot.keyClick(window, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+    assert window.focusWidget() is window.organization_page.name_edit
+
+
+def test_unsaved_changes_survive_switching_sections(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    window = make_window(qtbot, connection)
+    window.organization_page.name_edit.setText("Food Bank")
+    # pytest-qt closes the window afterwards; answer its unsaved-changes question.
+    mocker.patch(
+        "omr_data_collector.ui.MainWindow.ask_save_discard_cancel",
+        return_value=QMessageBox.StandardButton.Discard,
+    )
+
+    window.open_section(1)
+    window.open_section(0)
+
+    assert window.organization_page.name_edit.text() == "Food Bank"
+
+
+def test_close_saves_every_page_with_changes(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    window = make_window(qtbot, connection)
+    window.organization_page.name_edit.setText("Food Bank")
+    window.text_blocks_page.name_edit.setText("Footer")
+    window.text_blocks_page.editor.setPlainText("Thanks")
+    question = mocker.patch(
+        "omr_data_collector.ui.MainWindow.ask_save_discard_cancel",
+        return_value=QMessageBox.StandardButton.Save,
+    )
+    event = QCloseEvent()
+
+    window.closeEvent(event)
+
+    assert "Organization, Text blocks" in question.call_args.args[1]
+    assert event.isAccepted()
+    assert load_organization(connection) is not None
+    assert [block.name for block in list_text_blocks(connection)] == ["Footer"]
+
+
+def test_close_stays_on_the_page_whose_save_failed(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    window = make_window(qtbot, connection)
+    window.text_blocks_page.name_edit.setText("Footer")  # no text, so can't save
+    mocker.patch(
+        "omr_data_collector.ui.MainWindow.ask_save_discard_cancel",
+        return_value=QMessageBox.StandardButton.Save,
+    )
+    event = QCloseEvent()
+
+    window.closeEvent(event)
+
+    assert not event.isAccepted()
+    assert window.stack.currentWidget() is window.text_blocks_page

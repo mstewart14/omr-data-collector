@@ -32,3 +32,6 @@ QR_PAYLOAD_VERSION = 1
 # Kept short because the name is encoded in every QR code; a longer payload means a
 # denser code that is harder to read from a phone photo.
 ORGANIZATION_NAME_MAX_LENGTH = 100
+
+# Text blocks are picked by name in the form builder, so names stay list-sized.
+TEXT_BLOCK_NAME_MAX_LENGTH = 100

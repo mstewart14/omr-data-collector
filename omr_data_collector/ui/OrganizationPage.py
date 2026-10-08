@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QKeySequence, QPixmap
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QComboBox,
@@ -41,6 +41,7 @@ from omr_data_collector.ui.accessibility import (
     set_field_error,
     style_error_label,
 )
+from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
 from omr_data_collector.ui.page_setup import page_layout
 from omr_data_collector.ui.qr_printing import paint_organization_qr_page
 
@@ -99,6 +100,7 @@ class OrganizationPage(QWidget):
         layout.addWidget(self._build_details_box(), stretch=3)
         layout.addWidget(self._build_qr_box(), stretch=2)
         self._connect_signals()
+        self.initial_focus: QWidget = self.name_edit
 
         self.revert()
 
@@ -222,18 +224,7 @@ class OrganizationPage(QWidget):
         self.form = QFormLayout()
         for field_name, label_text, attribute in FORM_FIELDS:
             widget = getattr(self, attribute)
-            # The label and its input must be siblings in the same layout: that is
-            # how Qt tells screen readers which label names the input, and the
-            # label's buddy is what its Alt+letter mnemonic focuses.
-            label = QLabel(label_text)
-            label.setBuddy(widget)
-            self.form.addRow(label, widget)
-            # The error gets its own row under the field, hidden (spacing and all)
-            # until there is something to say.
-            error_label = QLabel()
-            style_error_label(error_label, self.palette())
-            self.form.addRow("", error_label)
-            self.form.setRowVisible(error_label, False)  # noqa: FBT003 (Qt API is positional)
+            label, error_label = add_field_row(self.form, label_text, widget)
             self.field_widgets[field_name] = widget
             self.field_labels[field_name] = label
             self.error_labels[field_name] = error_label
@@ -283,9 +274,9 @@ class OrganizationPage(QWidget):
         return qr_box
 
     def _connect_signals(self) -> None:
-        self.save_shortcut = QShortcut(QKeySequence.StandardKey.Save, self)
-        self.save_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self.save_shortcut.activated.connect(self.save)
+        self.save_shortcut = add_shortcut(
+            self, QKeySequence.StandardKey.Save, self.save
+        )
 
         # Tab follows the screen: the form top to bottom, its buttons left to right,
         # then the QR code's buttons.

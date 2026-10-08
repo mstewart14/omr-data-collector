@@ -10,6 +10,8 @@ jobs:
   test-and-coverage:
     name: "Test and Coverage (${{ matrix.os }}, Python ${{ matrix.python-version }})"
     runs-on: ${{ matrix.os }}
+    # A test stuck on a dialog would otherwise hold the runner for six hours.
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
