@@ -194,16 +194,16 @@ def test_dropping_a_form_block_asks_to_move_it(qtbot: QtBot) -> None:
     canvas = shown_canvas(qtbot, intake())
     title_area = next(area for area in canvas._areas if area.index == 0)  # noqa: SLF001
     mime = QMimeData()
-    mime.setData(FORM_BLOCK_MIME, QByteArray(b"2"))
+    mime.setData(FORM_BLOCK_MIME, QByteArray(b"[2]"))
 
-    with qtbot.waitSignal(canvas.block_moved) as moved:
+    with qtbot.waitSignal(canvas.blocks_moved) as moved:
         drop(
             canvas,
             mime,
             QPointF(title_area.rect.center().x(), title_area.rect.top() + 1),
         )
 
-    assert moved.args == [2, 0]
+    assert moved.args == [[2], 0]
 
 
 def test_dropping_a_library_block_asks_to_add_it_there(qtbot: QtBot) -> None:
@@ -228,10 +228,12 @@ def test_library_drag_data_names_the_kind_and_block() -> None:
     assert data == {"kind": BLOCK_KINDS.QUESTION, "id": VISIT.question_id}
 
 
-def test_canvas_only_takes_keyboard_focus_through_the_outline(qtbot: QtBot) -> None:
+def test_canvas_takes_focus_on_click_but_is_not_a_tab_stop(qtbot: QtBot) -> None:
     canvas = shown_canvas(qtbot, intake())
 
-    assert canvas.focusPolicy() == Qt.FocusPolicy.NoFocus
+    # Clicked, it takes focus so Delete works there; Tab goes to the Outline.
+    assert canvas.focusPolicy() == Qt.FocusPolicy.ClickFocus
+    assert not canvas.focusPolicy() & Qt.FocusPolicy.TabFocus
     assert canvas.accessibleName() == "Form pages"
 
 
@@ -284,7 +286,7 @@ def test_clicking_a_block_on_the_page_selects_it_in_the_outline(
     )
 
     assert page.block_list.currentRow() == 1
-    assert page.canvas.selected_index == 1
+    assert page.canvas.selected_indices == {1}
 
 
 def test_dropping_on_the_page_adds_a_copy_there(
@@ -321,7 +323,7 @@ def test_dragging_a_block_moves_it(
 ) -> None:
     page = make_page(qtbot, stocked)
 
-    page.canvas.block_moved.emit(from_index, insert_index)
+    page.canvas.blocks_moved.emit([from_index], insert_index)
 
     assert names(page) == expected
 

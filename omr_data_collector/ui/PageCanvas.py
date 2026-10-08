@@ -14,11 +14,14 @@ from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM, page_layout_for
 from omr_data_collector.rendering.page_painter import paint_page
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from PySide6.QtGui import (
         QDragEnterEvent,
         QDragLeaveEvent,
         QDragMoveEvent,
         QDropEvent,
+        QKeyEvent,
         QMouseEvent,
         QPaintEvent,
         QResizeEvent,
@@ -56,29 +59,35 @@ class PageCanvas(QWidget):
     page's Outline list and buttons, for keyboard and screen-reader users.
     """
 
-    block_clicked = Signal(int)
+    # A block clicked (-1 for empty paper), and whether Ctrl (toggle it in the
+    # selection) or Shift (extend the selection to it) was held.
+    selection_requested = Signal(int, bool, bool)
     block_activated = Signal(int)
     # A library block's kind and ID, and where it was dropped (an insert index).
     library_block_dropped = Signal(str, str, int)
-    # A block's index, and the insert index it was dropped at.
-    block_moved = Signal(int, int)
+    # The indices of the blocks dragged, and the insert index they were dropped at.
+    blocks_moved = Signal(list, int)
+    # Delete or Backspace pressed while the pages have focus.
+    delete_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.setAcceptDrops(True)
         self.setAccessibleName("Form pages")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        # Not a Tab stop: the Outline list does the same things from the keyboard.
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Takes focus when clicked, so Delete works on what was clicked, but isn't
+        # a Tab stop: the Outline list does the same things from the keyboard.
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._form: Form | None = None
         self._organization: Organization | None = None
         self._paper_size = PAPER_SIZES.LETTER
         self._layout: FormLayout | None = None
         self._areas: list[_BlockArea] = []
-        self.selected_index = -1
+        self.selected_indices: set[int] = set()
         self.drop_index: int | None = None
         self._press_position: QPoint | None = None
         self._press_index = -1
+        self._narrow_on_release = False
 
     @property
     def form_layout(self) -> FormLayout | None:
@@ -94,8 +103,8 @@ class PageCanvas(QWidget):
         self.setAccessibleDescription(self.summary())
         self._relayout()
 
-    def select(self, index: int) -> None:
-        self.selected_index = index
+    def select(self, indices: Iterable[int]) -> None:
+        self.selected_indices = set(indices)
         self.update()
 
     def summary(self) -> str:
@@ -220,10 +229,10 @@ class PageCanvas(QWidget):
     def _paint_markers(self, painter: QPainter) -> None:
         highlight = self.palette().color(QPalette.ColorRole.Highlight)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        if self.selected_index >= 0:
+        if self.selected_indices:
             painter.setPen(QPen(highlight, SELECTION_PEN_PX))
             for area in self._areas:
-                if area.index == self.selected_index:
+                if area.index in self.selected_indices:
                     painter.drawRect(area.rect.adjusted(-3, -3, 3, 3))
         if self.drop_index is not None:
             y = self._drop_line_y(self.drop_index)
@@ -239,8 +248,17 @@ class PageCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._press_position = event.position().toPoint()
             self._press_index = self.block_at(event.position())
-            if self._press_index >= 0:
-                self.block_clicked.emit(self._press_index)
+            modifiers = event.modifiers()
+            toggle = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+            extend = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+            # A plain press on an already selected block keeps the selection, so
+            # the whole group can be dragged; it narrows on release instead.
+            already_selected = self._press_index in self.selected_indices
+            if toggle or extend or not already_selected:
+                self.selection_requested.emit(self._press_index, toggle, extend)
+                self._narrow_on_release = False
+            else:
+                self._narrow_on_release = True
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802 (Qt override)
@@ -254,16 +272,32 @@ class PageCanvas(QWidget):
         distance = (event.position().toPoint() - self._press_position).manhattanLength()
         if distance < QApplication.startDragDistance():
             return
+        dragged = (
+            sorted(self.selected_indices)
+            if self._press_index in self.selected_indices
+            else [self._press_index]
+        )
         mime = QMimeData()
-        mime.setData(FORM_BLOCK_MIME, QByteArray(str(self._press_index).encode()))
+        mime.setData(FORM_BLOCK_MIME, QByteArray(json.dumps(dragged).encode()))
         drag = QDrag(self)
         drag.setMimeData(mime)
         self._press_position = None
+        self._narrow_on_release = False
         drag.exec(Qt.DropAction.MoveAction)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 (Qt override)
+        if self._narrow_on_release and self._press_index >= 0:
+            # A click (not a drag) on a selected block selects just that block.
+            self.selection_requested.emit(self._press_index, False, False)  # noqa: FBT003
+        self._narrow_on_release = False
         self._press_position = None
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 (Qt override)
+        if event.key() in {Qt.Key.Key_Delete, Qt.Key.Key_Backspace}:
+            self.delete_requested.emit()
+            return
+        super().keyPressEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802 (Qt override)
         if _accepts(event.mimeData()):
@@ -287,8 +321,8 @@ class PageCanvas(QWidget):
         mime = event.mimeData()
         index = self.insert_index_at(event.position())
         if mime.hasFormat(FORM_BLOCK_MIME):
-            moving = int(bytes(mime.data(FORM_BLOCK_MIME).data()).decode())
-            self.block_moved.emit(moving, index)
+            moving = json.loads(bytes(mime.data(FORM_BLOCK_MIME).data()).decode())
+            self.blocks_moved.emit(moving, index)
         elif mime.hasFormat(LIBRARY_BLOCK_MIME):
             data = json.loads(bytes(mime.data(LIBRARY_BLOCK_MIME).data()).decode())
             self.library_block_dropped.emit(data["kind"], data["id"], index)

@@ -65,6 +65,9 @@ engine bridge.
   and the details panel with the Outline list. Every drag has a keyboard or menu
   equivalent (WCAG 2.2 "dragging movements"), and the canvas describes its pages
   in words; keep both true when adding features. Forms open from File > Open form.
+  Every change to the form being edited must end with `_commit_change("what
+  happened")`, which is what makes it undoable (Ctrl+Z) and names it in the
+  "Undid: …" announcement; selection alone is not a change.
 - **Forms keep their own copy of every block** (wiki 50011-50012): editing a
   library block later asks "going forward only" or "everywhere", and "everywhere"
   makes new form versions so sheets already printed still scan.

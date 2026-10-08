@@ -128,6 +128,28 @@ class MainWindow(QMainWindow):
             lambda: self._run_in(self.forms_page, self.forms_page.open_from_list)
         )
         self.file_menu.insertAction(self.file_menu.actions()[1], open_action)
+        # Undo and Redo for the form being edited. The keys belong to the form
+        # editor (so a text field's own Ctrl+Z still undoes typing there); the
+        # menu shows them after a tab, which Qt displays without binding them.
+        self.file_menu.addSeparator()
+        undo_action = self.file_menu.addAction(
+            f"U&ndo form change\t{_native(QKeySequence.StandardKey.Undo)}"
+        )
+        undo_action.triggered.connect(
+            lambda: self._run_in(self.forms_page, self.forms_page.undo)
+        )
+        redo_action = self.file_menu.addAction(
+            f"Re&do form change\t{_native(QKeySequence.StandardKey.Redo)}"
+        )
+        redo_action.triggered.connect(
+            lambda: self._run_in(self.forms_page, self.forms_page.redo)
+        )
+        self.file_menu.aboutToShow.connect(
+            lambda: (
+                undo_action.setEnabled(self.forms_page.can_undo()),
+                redo_action.setEnabled(self.forms_page.can_redo()),
+            )
+        )
         self.file_menu.addSeparator()
         organization = self.file_menu.addAction("&Organization details…")
         organization.triggered.connect(
@@ -224,3 +246,8 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         event.accept()
+
+
+def _native(key: QKeySequence.StandardKey) -> str:
+    """A standard shortcut as this platform writes it ("Ctrl+Z", "⌘Z")."""
+    return QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)

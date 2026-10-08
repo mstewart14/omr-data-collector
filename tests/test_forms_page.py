@@ -206,14 +206,14 @@ def test_remove_and_reorder_blocks(
     page = make_page(qtbot, connection)
 
     page.block_list.setCurrentRow(2)
-    page.move_selected_block(-1)
+    page.move_selected_blocks(-1)
     assert [block.content.name for block in blocks(page)] == [
         "Title",
         "Visit log",
         "first_visit",
     ]
     page.block_list.setCurrentRow(0)
-    page.remove_selected_block()
+    page.remove_selected_blocks()
     assert [block.content.name for block in blocks(page)] == [
         "Visit log",
         "first_visit",
@@ -274,7 +274,7 @@ def test_changing_a_printed_form_makes_a_new_version(
     assert page.version_note.text().startswith("Version 1 has been printed")
 
     page.block_list.setCurrentRow(0)
-    page.remove_selected_block()
+    page.remove_selected_blocks()
     page.save()
 
     (latest,) = list_forms(connection)

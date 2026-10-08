@@ -50,6 +50,25 @@ def add_shortcut(
     return shortcut
 
 
+def add_standard_shortcuts(
+    parent: QWidget,
+    key: QKeySequence.StandardKey,
+    callback: Callable[[], object],
+    *extra: str,
+) -> list[QShortcut]:
+    """Shortcuts for every key the platform binds to ``key``, plus ``extra`` keys.
+
+    ``QShortcut(QKeySequence(StandardKey.Redo))`` only listens for the first
+    binding (Ctrl+Shift+Z on Linux), so a second one like Ctrl+Y would be ignored.
+    """
+    sequences = list(QKeySequence.keyBindings(key))
+    for text in extra:
+        sequence = QKeySequence(text)
+        if sequence not in sequences:
+            sequences.append(sequence)
+    return [add_shortcut(parent, sequence, callback) for sequence in sequences]
+
+
 def ask_save_discard_cancel(
     parent: QWidget, question: str
 ) -> QMessageBox.StandardButton:

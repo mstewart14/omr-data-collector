@@ -5,6 +5,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QAbstractButton, QLabel, QMessageBox, QWidget
 
 from omr_data_collector.constants import BLOCK_KINDS
@@ -42,6 +43,10 @@ def mnemonics_of(texts: list[str]) -> list[str]:
         for text in texts
         if (match := MNEMONIC.search(text.replace("&&", "")))
     ]
+
+
+def native(key: QKeySequence.StandardKey) -> str:
+    return QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)
 
 
 def make_window(qtbot: QtBot, connection: sqlite3.Connection) -> MainWindow:
@@ -124,6 +129,8 @@ def test_file_menu_holds_the_form_commands(
         "&Revert form",
         "D&uplicate form",
         "&Delete form…",
+        f"U&ndo form change\t{native(QKeySequence.StandardKey.Undo)}",
+        f"Re&do form change\t{native(QKeySequence.StandardKey.Redo)}",
         "&Organization details…",
         "&Quit",
     ]
