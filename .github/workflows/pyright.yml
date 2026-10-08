@@ -1,0 +1,38 @@
+name: Pyright
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "*.toml"
+      - "pyrightconfig.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "*.toml"
+      - "pyrightconfig.json"
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # OMRChecker uses jakebailey/pyright-action without installing anything; this
+      # project installs its environment first so pyright sees PySide6 and the
+      # vendored engine's dependencies.
+      - name: Setup Python ${{ matrix.python-version }} with uv
+        uses: ./.github/actions/setup-python-with-uv
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Type check
+        run: uv run pyright --pythonversion ${{ matrix.python-version }}
