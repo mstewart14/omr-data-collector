@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pyside6==6.11.2",
+    "segno==1.6.6",
     # OMRChecker v2's runtime dependencies (vendor/omrchecker/pyproject.toml), at the
     # versions it pins. Two deliberate differences:
     # - OpenCV is the single headless contrib build instead of both opencv-python and

@@ -18,6 +18,8 @@ Product epics and user stories live on the team wiki:
 
 Needs [uv](https://docs.astral.sh/uv/) and, for QR/barcode reading, the system zbar
 library (`apt install libzbar0`, `brew install zbar`; bundled with the Windows wheel).
+On Apple Silicon Macs, also `export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"`
+so Python can find Homebrew's zbar.
 
 ```bash
 uv sync
