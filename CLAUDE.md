@@ -58,6 +58,10 @@ engine bridge.
 - **Forms keep their own copy of every block** (wiki 50011-50012): editing a
   library block later asks "going forward only" or "everywhere", and "everywhere"
   makes new form versions so sheets already printed still scan.
+- **Form versions:** `storage/form_store.save_form` updates the latest version
+  until `mark_printed` freezes it, then saves create a new version. A printed
+  version's definition must never change: scanning a sheet looks up the exact
+  version its QR code names with `load_form_version`.
 - **Tests never show a real dialog**: an autouse fixture in `tests/conftest.py` makes
   unpatched message boxes fail, because offscreen they would wait forever. Patch the
   helper the code calls (e.g. `ask_save_discard_cancel`) in the test.

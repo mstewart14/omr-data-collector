@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from omr_data_collector import APP_NAME
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
+from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.OrganizationPage import OrganizationPage
 from omr_data_collector.ui.QuestionsPage import QuestionsPage
 from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
@@ -48,11 +49,13 @@ class MainWindow(QMainWindow):
         self.text_blocks_page = TextBlocksPage(connection)
         self.questions_page = QuestionsPage(connection)
         self.tables_page = TableBlocksPage(connection)
+        self.forms_page = FormsPage(connection)
         self.pages: list[tuple[str, OrganizationPage | LibraryPage]] = [
             ("Organization", self.organization_page),
             ("Text blocks", self.text_blocks_page),
             ("Questions", self.questions_page),
             ("Tables", self.tables_page),
+            ("Forms", self.forms_page),
         ]
 
         self.sections = QListWidget()

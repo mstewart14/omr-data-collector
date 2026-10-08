@@ -73,6 +73,32 @@ MIGRATIONS: list[list[str]] = [
         # 1 when the table fills to the end of its page instead of row_count rows.
         "ALTER TABLE table_block ADD COLUMN fill_page INTEGER NOT NULL DEFAULT 0",
     ],
+    [
+        """
+        CREATE TABLE form (
+            form_id TEXT PRIMARY KEY,
+            -- The latest version's name, kept here to list forms and keep names
+            -- unique.
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """,
+        "CREATE UNIQUE INDEX form_name ON form (name COLLATE NOCASE)",
+        """
+        CREATE TABLE form_version (
+            form_id TEXT NOT NULL REFERENCES form (form_id) ON DELETE CASCADE,
+            version INTEGER NOT NULL,
+            -- Form.definition() as JSON: everything needed to print or scan it.
+            definition TEXT NOT NULL,
+            -- Set when the version is first printed or saved as a PDF; from then
+            -- on it never changes, so sheets printed from it can still be scanned.
+            printed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (form_id, version)
+        )
+        """,
+    ],
 ]
 
 

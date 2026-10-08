@@ -71,6 +71,28 @@ class TableBlock:
     columns: tuple[Column, ...] = ()
     table_block_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
+    def to_dict(self) -> dict[str, Any]:
+        """The JSON form a form keeps as its own copy of the table."""
+        return {
+            "id": self.table_block_id,
+            "name": self.name,
+            "instructions": self.instructions,
+            "rows": self.rows,
+            "fillPage": self.fill_page,
+            "columns": columns_to_list(self.columns),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TableBlock:
+        return cls(
+            name=data["name"],
+            instructions=data["instructions"],
+            rows=data["rows"],
+            fill_page=data["fillPage"],
+            columns=columns_from_list(data["columns"]),
+            table_block_id=data["id"],
+        )
+
     def normalized(self) -> TableBlock:
         return replace(
             self,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 from omr_data_collector.constants import TEXT_BLOCK_NAME_MAX_LENGTH
 
@@ -21,6 +22,14 @@ class TextBlock:
 
     def normalized(self) -> TextBlock:
         return replace(self, name=self.name.strip())
+
+    def to_dict(self) -> dict[str, Any]:
+        """The JSON form a form keeps as its own copy of the block."""
+        return {"id": self.text_block_id, "name": self.name, "content": self.content}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TextBlock:
+        return cls(name=data["name"], content=data["content"], text_block_id=data["id"])
 
     def validation_errors(self, other_names: set[str]) -> dict[str, str]:
         """Map each invalid field to a message for the person editing it.

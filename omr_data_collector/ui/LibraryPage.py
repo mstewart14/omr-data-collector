@@ -118,6 +118,14 @@ class LibraryPage(QWidget):
     def item_id(self, item: Any) -> str:  # noqa: ANN401
         raise NotImplementedError
 
+    def delete_question(self, item: Any) -> str:  # noqa: ANN401
+        """What to ask before deleting ``item``."""
+        return f'Delete the {self.NOUN} "{item.name}"? This can\'t be undone.'
+
+    def saved_message(self, item: Any) -> str:  # noqa: ANN401
+        """The status message after ``item`` is saved."""
+        return f'{self.NOUN.capitalize()} "{item.name}" saved.'
+
     # --- Public actions -------------------------------------------------------
 
     def has_unsaved_changes(self) -> bool:
@@ -151,8 +159,17 @@ class LibraryPage(QWidget):
 
         self._reload_list()
         self._select(self.item_id(item))
-        self._edit(item)
-        self.status_message.emit(f'{self.NOUN.capitalize()} "{item.name}" saved.')
+        # As stored, which may differ from what was entered (a form's new version).
+        stored = next(
+            (
+                other
+                for other in self._items
+                if self.item_id(other) == self.item_id(item)
+            ),
+            item,
+        )
+        self._edit(stored)
+        self.status_message.emit(self.saved_message(stored))
 
     def revert(self) -> None:
         self._edit(self._current)
@@ -185,10 +202,7 @@ class LibraryPage(QWidget):
             return
         doomed = self._current
         if not confirm_destructive(
-            self,
-            f"Delete {self.NOUN}",
-            f'Delete the {self.NOUN} "{doomed.name}"? This can\'t be undone.',
-            "Delete",
+            self, f"Delete {self.NOUN}", self.delete_question(doomed), "Delete"
         ):
             return
         row = self.item_list.currentRow()

@@ -86,3 +86,24 @@ TABLE_NAME_MAX_LENGTH = 100
 COLUMN_NAME_MAX_LENGTH = 40
 DEFAULT_TABLE_ROWS = 10
 MAX_TABLE_ROWS = 50
+
+FORM_NAME_MAX_LENGTH = 100
+
+# The kinds of block a form stacks down its pages. Values are stored.
+BLOCK_KINDS = DotMap(
+    {
+        "TEXT": "TEXT",
+        "QUESTION": "QUESTION",
+        "TABLE": "TABLE",
+    },
+    _dynamic=False,
+)
+
+# What a table does when it doesn't fit in the space left on its page.
+TABLE_BREAKS = DotMap(
+    {
+        "SPLIT": "SPLIT",
+        "NEW_PAGE": "NEW_PAGE",
+    },
+    _dynamic=False,
+)

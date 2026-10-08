@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 from omr_data_collector.constants import ANSWER_TYPES, QUESTION_NAME_MAX_LENGTH
 from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -24,6 +25,26 @@ class Question:
         default_factory=lambda: AnswerSpec.default(ANSWER_TYPES.YES_NO)
     )
     question_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def to_dict(self) -> dict[str, Any]:
+        """The JSON form a form keeps as its own copy of the question."""
+        return {
+            "id": self.question_id,
+            "name": self.name,
+            "prompt": self.prompt,
+            "example": self.example,
+            "answer": self.answer.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Question:
+        return cls(
+            name=data["name"],
+            prompt=data["prompt"],
+            example=data["example"],
+            answer=AnswerSpec.from_dict(data["answer"]),
+            question_id=data["id"],
+        )
 
     def normalized(self) -> Question:
         return replace(
