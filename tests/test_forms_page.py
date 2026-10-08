@@ -364,9 +364,7 @@ def test_delete_in_the_blocks_list_removes_a_block_not_the_form(
     assert len(blocks(page)) == 2
 
 
-def test_fields_are_labelled_and_mnemonics_unique(
-    qtbot: QtBot, connection: sqlite3.Connection
-) -> None:
+def test_fields_are_labelled(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
     for key, label in page.field_labels.items():
         interface = QAccessible.queryAccessibleInterface(page.field_widgets[key])
@@ -375,32 +373,6 @@ def test_fields_are_labelled_and_mnemonics_unique(
             for related, _ in interface.relations(QAccessible.RelationFlag.Label)
         ]
         assert labels[0] == label.text().replace("&", ""), key
-
-    texts = [
-        "Form li&brary",
-        "If the table doesn't &fit",
-        page.new_page_check.text(),
-        *(label.text() for label in page.field_labels.values()),
-        *(
-            button.text()
-            for button in (
-                page.new_button,
-                page.duplicate_button,
-                page.delete_button,
-                page.save_button,
-                page.revert_button,
-                page.add_text_button,
-                page.add_question_button,
-                page.add_table_button,
-                page.edit_block_button,
-                page.remove_block_button,
-                page.move_up_button,
-                page.move_down_button,
-            )
-        ),
-    ]
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
 
 
 def test_tab_order_follows_the_screen(

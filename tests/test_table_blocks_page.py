@@ -324,9 +324,7 @@ def test_enter_on_a_column_opens_it(
     edit.assert_called_once()
 
 
-def test_fields_are_labelled_and_mnemonics_unique(
-    qtbot: QtBot, connection: sqlite3.Connection
-) -> None:
+def test_fields_are_labelled(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
     for key, label in page.field_labels.items():
         interface = QAccessible.queryAccessibleInterface(page.field_widgets[key])
@@ -335,31 +333,6 @@ def test_fields_are_labelled_and_mnemonics_unique(
             for related, _ in interface.relations(QAccessible.RelationFlag.Label)
         ]
         assert labels[0] == label.text().replace("&", ""), key
-
-    texts = [
-        "Table li&brary",
-        "St&yle",
-        "&Preview on",
-        "&Fill to end of page",
-        *(label.text() for label in page.field_labels.values()),
-        *(
-            button.text()
-            for button in (
-                page.new_button,
-                page.duplicate_button,
-                page.delete_button,
-                page.save_button,
-                page.revert_button,
-                page.add_column_button,
-                page.edit_column_button,
-                page.remove_column_button,
-                page.move_left_button,
-                page.move_right_button,
-            )
-        ),
-    ]
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
 
 
 def test_tab_order_follows_the_screen(
@@ -471,27 +444,6 @@ def test_dialog_edits_an_existing_column(qtbot: QtBot) -> None:
 
     assert dialog.windowTitle() == "Edit column"
     assert dialog.entered_column() == SERVICES.normalized()
-
-
-def test_dialog_fields_are_labelled_with_unique_mnemonics(qtbot: QtBot) -> None:
-    dialog = make_dialog(qtbot)
-    fields = dialog.answer_fields
-    texts = [
-        *(label.text() for label in dialog.field_labels.values()),
-        *(
-            button.text()
-            for button in (
-                fields.add_choice_button,
-                fields.remove_choice_button,
-                fields.move_up_button,
-                fields.move_down_button,
-            )
-        ),
-    ]
-
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
 
 
 # --- Fill to end of page ----------------------------------------------------------

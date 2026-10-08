@@ -131,7 +131,12 @@ class LibraryPage(QWidget):
     def has_unsaved_changes(self) -> bool:
         return self._entered() != self._baseline
 
-    def save(self) -> None:
+    def save(self) -> bool:
+        """Save what is entered; False, with the errors shown, if it can't be.
+
+        Used wherever saving is a step in something else (switching items,
+        closing the window); the Save button and Ctrl+S use ``save_from_user``.
+        """
         item = self._entered()
         other_names = {
             other.name
@@ -155,7 +160,7 @@ class LibraryPage(QWidget):
             self.status_message.emit(
                 f"{count} field{'s' if count > 1 else ''} to fix before saving."
             )
-            return
+            return False
 
         self._reload_list()
         self._select(self.item_id(item))
@@ -170,6 +175,15 @@ class LibraryPage(QWidget):
         )
         self._edit(stored)
         self.status_message.emit(self.saved_message(stored))
+        return True
+
+    def save_from_user(self) -> None:
+        """Save because the person asked to (Save, Ctrl+S, Enter, the menu)."""
+        if self.save():
+            self.after_user_save(self._current)
+
+    def after_user_save(self, item: Any) -> None:  # noqa: ANN401
+        """What to do next after the person saves ``item``; nothing by default."""
 
     def revert(self) -> None:
         self._edit(self._current)
@@ -318,17 +332,17 @@ class LibraryPage(QWidget):
             self.form_scroll.ensureWidgetVisible(new)
 
     def _connect_signals(self) -> None:
-        self.save_button.clicked.connect(self.save)
+        self.save_button.clicked.connect(self.save_from_user)
         self.revert_button.clicked.connect(self.revert)
         self.new_button.clicked.connect(self.new_item)
         self.duplicate_button.clicked.connect(self.duplicate_item)
         self.delete_button.clicked.connect(self.delete_item)
         self.item_list.currentItemChanged.connect(self._on_selection_changed)
         self.name_edit.textChanged.connect(self.update_state)
-        self.name_edit.returnPressed.connect(self.save)
+        self.name_edit.returnPressed.connect(self.save_from_user)
 
         self.shortcuts += [
-            add_shortcut(self, QKeySequence.StandardKey.Save, self.save),
+            add_shortcut(self, QKeySequence.StandardKey.Save, self.save_from_user),
             add_shortcut(self, QKeySequence.StandardKey.New, self.new_item),
         ]
         delete_shortcut = add_shortcut(
@@ -413,6 +427,5 @@ class LibraryPage(QWidget):
             self, f"Save your changes to this {self.NOUN} first?"
         )
         if answer == QMessageBox.StandardButton.Save:
-            self.save()
-            return not self.has_unsaved_changes()
+            return self.save()
         return answer == QMessageBox.StandardButton.Discard

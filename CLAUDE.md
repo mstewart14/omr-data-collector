@@ -25,7 +25,10 @@ engine bridge.
   - add fields with `form_helpers.add_field_row`, which makes the `QLabel` buddy a
     sibling of its input (that sibling relation is how Qt tells screen readers the
     label; wrapping an input in a container breaks it) and adds its error row; give
-    every label and button a unique Alt+letter mnemonic;
+    every field label and main button an Alt+letter mnemonic, unique on its page and
+    never one of the menu bar's letters (`MainWindow.MENU_MNEMONICS`: F, T, Q, A).
+    "Move up/down/left/right" buttons have none. `tests/test_menus_and_mnemonics.py`
+    checks every page and dialog, so a clash fails the build;
   - say "(required)" in the label, never only in a placeholder;
   - show errors as text in a hidden-until-needed form row
     (`accessibility.set_field_error`), set them as the field's accessible

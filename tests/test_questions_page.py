@@ -311,34 +311,6 @@ def test_every_validation_error_has_somewhere_to_show(
     assert possible_errors <= set(page.error_labels)
 
 
-def test_mnemonics_are_unique(qtbot: QtBot, connection: sqlite3.Connection) -> None:
-    page = make_page(qtbot, connection)
-    fields = page.answer_fields
-    texts = [
-        "Question li&brary",
-        "Sty&le",
-        *(label.text() for label in page.field_labels.values()),
-        *(
-            button.text()
-            for button in (
-                page.new_button,
-                page.duplicate_button,
-                page.delete_button,
-                page.save_button,
-                page.revert_button,
-                fields.add_choice_button,
-                fields.remove_choice_button,
-                fields.move_up_button,
-                fields.move_down_button,
-            )
-        ),
-    ]
-
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
-
-
 def test_tab_leaves_the_choices_table_instead_of_moving_between_cells(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:

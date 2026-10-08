@@ -343,9 +343,7 @@ def test_delete_key_deletes_from_the_list_but_not_the_editor(
     confirm.assert_called_once()
 
 
-def test_fields_are_labelled_and_mnemonics_unique(
-    qtbot: QtBot, connection: sqlite3.Connection
-) -> None:
+def test_fields_are_labelled(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
 
     for field_name, label in page.field_labels.items():
@@ -355,24 +353,6 @@ def test_fields_are_labelled_and_mnemonics_unique(
             for related, _ in interface.relations(QAccessible.RelationFlag.Label)
         ]
         assert labels[0] == label.text().replace("&", "")
-
-    texts = [
-        "Text &blocks",
-        *(label.text() for label in page.field_labels.values()),
-        "St&yle",
-        *(
-            button.text()
-            for button in (
-                page.new_button,
-                page.duplicate_button,
-                page.delete_button,
-                page.save_button,
-                page.revert_button,
-            )
-        ),
-    ]
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
 
 
 def test_formatting_buttons_are_named_and_reachable_by_tab(

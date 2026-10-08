@@ -111,8 +111,8 @@ class AnswerFields:
 
         self.add_choice_button = QPushButton("Add &choice")
         self.remove_choice_button = QPushButton("Remo&ve choice")
-        self.move_up_button = QPushButton("Move u&p")
-        self.move_down_button = QPushButton("Move do&wn")
+        self.move_up_button = QPushButton("Move up")
+        self.move_down_button = QPushButton("Move down")
         self.choice_buttons = QWidget()
         self.choice_buttons.setAccessibleName("Choice actions")
         buttons_layout = QHBoxLayout(self.choice_buttons)
@@ -141,7 +141,7 @@ class AnswerFields:
         )
 
         for key, label_text, widget in (
-            ("answer_type", "&Answer type", self.answer_type_combo),
+            ("answer_type", "&Kind of answer", self.answer_type_combo),
             ("choices", "C&hoices", self.choices_table),
         ):
             field_labels[key], error_labels[key] = add_field_row(
@@ -151,10 +151,10 @@ class AnswerFields:
         form.addRow("", self.choice_buttons)
         for key, label_text, widget in (
             ("data_type", "Data t&ype", self.data_type_combo),
-            ("max_characters", "Charac&ters", self.characters_spin),
+            ("max_characters", "Si&ze (characters)", self.characters_spin),
             ("number_minimum", "M&inimum", self.minimum_spin),
             ("number_maximum", "Ma&ximum", self.maximum_spin),
-            ("date_time_format", "Date &format", self.date_format_combo),
+            ("date_time_format", "Date &written as", self.date_format_combo),
             ("check_digit", "Check di&git", self.check_digit_combo),
         ):
             field_labels[key], error_labels[key] = add_field_row(

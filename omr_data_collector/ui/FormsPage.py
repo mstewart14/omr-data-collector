@@ -129,13 +129,13 @@ class FormsPage(LibraryPage):
             if key == "orientation":
                 form.addRow("", self.version_note)
 
-        self.add_text_button = QPushButton("Add &text…")
-        self.add_question_button = QPushButton("Add &question…")
-        self.add_table_button = QPushButton("Add t&able…")
-        self.edit_block_button = QPushButton("&Edit block…")
+        self.add_text_button = QPushButton("Add te&xt…")
+        self.add_question_button = QPushButton("Add quest&ion…")
+        self.add_table_button = QPushButton("Add tabl&e…")
+        self.edit_block_button = QPushButton("Edit blo&ck…")
         self.remove_block_button = QPushButton("Remo&ve block")
-        self.move_up_button = QPushButton("Move u&p")
-        self.move_down_button = QPushButton("Move do&wn")
+        self.move_up_button = QPushButton("Move up")
+        self.move_down_button = QPushButton("Move down")
         self._block_buttons = (
             self.add_text_button,
             self.add_question_button,
@@ -163,7 +163,7 @@ class FormsPage(LibraryPage):
         self.table_break_combo = QComboBox()
         for value, label in TABLE_BREAK_LABELS.items():
             self.table_break_combo.addItem(label, value)
-        table_break_label = QLabel("If the table doesn't &fit")
+        table_break_label = QLabel("If t&he table doesn't fit")
         table_break_label.setBuddy(self.table_break_combo)
         form.addRow(table_break_label, self.table_break_combo)
 

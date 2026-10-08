@@ -14,7 +14,10 @@ from omr_data_collector.storage.question_store import (
     save_question,
 )
 from omr_data_collector.ui.AnswerFields import AnswerFields
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import (
+    add_field_row,
+    ask_new_or_keep_working,
+)
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
 from omr_data_collector.ui.LibraryPage import LibraryPage
 
@@ -42,7 +45,7 @@ class QuestionsPage(LibraryPage):
             form,
             (self.field_widgets, self.field_labels, self.error_labels),
             key="prompt",
-            text_label="&Question (required)",
+            text_label="Questi&on (required)",
             # Not "St&yle": Alt+Y is the answer's Data type on this page.
             style_label="Sty&le",
             visible_lines=PROMPT_VISIBLE_LINES,
@@ -92,6 +95,11 @@ class QuestionsPage(LibraryPage):
             answer=self.answer_fields.spec(),
             question_id=item_id,
         ).normalized()
+
+    def after_user_save(self, item: Question) -> None:
+        # Questions are often written one after another, so offer the next one.
+        if ask_new_or_keep_working(self, self.NOUN, item.name):
+            self.new_item()
 
     def list_items(self) -> list[Question]:
         return list_questions(self._connection)

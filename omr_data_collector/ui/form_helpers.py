@@ -65,6 +65,26 @@ def ask_save_discard_cancel(
     )
 
 
+def ask_new_or_keep_working(parent: QWidget, noun: str, name: str) -> bool:
+    """After a save, ask whether to start a new item; True to start one.
+
+    Keep working is the default (Enter, Escape), so nothing is lost by accident.
+    """
+    box = QMessageBox(
+        QMessageBox.Icon.Question,
+        f"{noun.capitalize()} saved",
+        f'{noun.capitalize()} "{name}" saved. Start a new {noun}, or keep working on '
+        "this one?",
+        parent=parent,
+    )
+    new_button = box.addButton(f"&New {noun}", QMessageBox.ButtonRole.AcceptRole)
+    keep_button = box.addButton("&Keep working", QMessageBox.ButtonRole.RejectRole)
+    box.setDefaultButton(keep_button)
+    box.setEscapeButton(keep_button)
+    box.exec()
+    return box.clickedButton() is new_button
+
+
 def confirm_destructive(
     parent: QWidget, title: str, question: str, action: str
 ) -> bool:

@@ -147,23 +147,6 @@ def test_required_is_stated_in_the_label_not_only_a_placeholder(
     assert page.name_edit.placeholderText() == ""
 
 
-def test_mnemonics_are_unique(qtbot: QtBot, connection: sqlite3.Connection) -> None:
-    page = make_page(qtbot, connection)
-    texts = [label for _, label, _ in FORM_FIELDS] + [
-        button.text()
-        for button in (
-            page.save_button,
-            page.revert_button,
-            page.save_qr_button,
-            page.print_qr_button,
-        )
-    ]
-
-    mnemonics = [text[text.index("&") + 1].lower() for text in texts]
-
-    assert len(mnemonics) == len(set(mnemonics)), mnemonics
-
-
 def test_tab_order_follows_the_screen(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:

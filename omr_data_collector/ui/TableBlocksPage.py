@@ -114,7 +114,7 @@ class TableBlocksPage(LibraryPage):
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(1, MAX_TABLE_ROWS)
         self.rows_spin.setToolTip("How many rows are printed for people to fill in")
-        self.fill_page_check = QCheckBox("&Fill to end of page")
+        self.fill_page_check = QCheckBox("Fill to end of pa&ge")
         self.fill_page_check.setToolTip(
             "Print as many rows as fit below the table on its page"
         )
@@ -136,11 +136,11 @@ class TableBlocksPage(LibraryPage):
             if key == "rows":
                 form.addRow("", self.fill_page_check)
 
-        self.add_column_button = QPushButton("&Add column…")
+        self.add_column_button = QPushButton("Add &column…")
         self.edit_column_button = QPushButton("&Edit column…")
         self.remove_column_button = QPushButton("Remo&ve column")
-        self.move_left_button = QPushButton("Move &left")
-        self.move_right_button = QPushButton("Move ri&ght")
+        self.move_left_button = QPushButton("Move left")
+        self.move_right_button = QPushButton("Move right")
         self._column_buttons = (
             self.add_column_button,
             self.edit_column_button,

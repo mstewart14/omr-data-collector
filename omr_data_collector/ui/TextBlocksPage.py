@@ -34,7 +34,7 @@ class TextBlocksPage(LibraryPage):
             form,
             (self.field_widgets, self.field_labels, self.error_labels),
             key="content",
-            text_label="&Text (required)",
+            text_label="Te&xt (required)",
             style_label="St&yle",
             visible_lines=EDITOR_VISIBLE_LINES,
             shortcut_parent=self,
