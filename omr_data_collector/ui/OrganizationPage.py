@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import re
 import uuid
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QComboBox,
@@ -36,6 +37,10 @@ from omr_data_collector.storage.organization_store import (
     load_organization,
     save_organization,
 )
+from omr_data_collector.ui.accessibility import (
+    set_field_error,
+    style_error_label,
+)
 from omr_data_collector.ui.page_setup import page_layout
 from omr_data_collector.ui.qr_printing import paint_organization_qr_page
 
@@ -57,8 +62,19 @@ QR_FILE_FILTERS = {
     "PDF document (*.pdf)": ".pdf",
 }
 QR_PREVIEW_SCALE = 6
-# Red that stays readable on both light and dark window backgrounds.
-ERROR_STYLE = "color: #d93025;"
+ADDRESS_VISIBLE_LINES = 3
+
+# Form rows in order: field name (as in Organization.validation_errors), label with
+# its Alt+letter mnemonic after "&", and the attribute holding the input widget.
+FORM_FIELDS = (
+    ("name", "Organization &name (required)", "name_edit"),
+    ("phone", "P&hone", "phone_edit"),
+    ("address", "A&ddress", "address_edit"),
+    ("url", "&Website", "url_edit"),
+    ("email", "&Email", "email_edit"),
+    ("paper_size", "Paper si&ze", "paper_size_combo"),
+    ("orientation", "&Orientation", "orientation_combo"),
+)
 
 
 class OrganizationPage(QWidget):
@@ -107,7 +123,14 @@ class OrganizationPage(QWidget):
         errors = organization.validation_errors()
         self._show_errors(errors)
         if errors:
-            self.status_message.emit("Fix the highlighted fields, then save again.")
+            # Focus lands on the first problem; screen readers then read the field's
+            # name and, from its accessible description, the error.
+            first_invalid = next(name for name, _, _ in FORM_FIELDS if name in errors)
+            self.field_widgets[first_invalid].setFocus(Qt.FocusReason.OtherFocusReason)
+            count = len(errors)
+            self.status_message.emit(
+                f"{count} field{'s' if count > 1 else ''} to fix before saving."
+            )
             return
 
         save_organization(self._connection, organization)
@@ -150,12 +173,30 @@ class OrganizationPage(QWidget):
         paint_organization_qr_page(printer, self._saved)
         self.status_message.emit("QR code sent to the printer.")
 
-    def _build_details_box(self) -> QGroupBox:
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt override)
+        # A theme switch (light, dark, high contrast) changes the background, so the
+        # error color is chosen again to keep its contrast.
+        if event.type() == QEvent.Type.PaletteChange:
+            for label in self.error_labels.values():
+                style_error_label(label, self.palette())
+        super().changeEvent(event)
+
+    def _build_inputs(self) -> None:
         self.name_edit = QLineEdit()
         self.phone_edit = QLineEdit()
         self.address_edit = QPlainTextEdit()
         self.address_edit.setTabChangesFocus(True)
-        self.address_edit.setFixedHeight(80)
+        # Sized in lines of the current font, so it grows with the system font size.
+        line_height = self.address_edit.fontMetrics().lineSpacing()
+        frame = 2 * self.address_edit.frameWidth()
+        margins = self.address_edit.contentsMargins()
+        self.address_edit.setFixedHeight(
+            line_height * ADDRESS_VISIBLE_LINES
+            + frame
+            + margins.top()
+            + margins.bottom()
+            + int(2 * self.address_edit.document().documentMargin())
+        )
         self.url_edit = QLineEdit()
         self.email_edit = QLineEdit()
         self.paper_size_combo = QComboBox()
@@ -165,40 +206,43 @@ class OrganizationPage(QWidget):
         for value, label in ORIENTATION_LABELS.items():
             self.orientation_combo.addItem(label, value)
 
-        self.name_edit.setPlaceholderText("Required")
-        self.phone_edit.setPlaceholderText("Optional")
-        self.address_edit.setPlaceholderText("Optional: mailing or street address")
-        self.url_edit.setPlaceholderText("Optional, like example.org")
-        self.email_edit.setPlaceholderText("Optional")
+    def _build_details_box(self) -> QGroupBox:
+        self._build_inputs()
 
+        # Placeholders only give examples: they disappear once someone types, so
+        # anything that must be known (like "required") is in the label instead.
+        self.phone_edit.setPlaceholderText("Like 613-555-0123")
+        self.address_edit.setPlaceholderText("Mailing or street address")
+        self.url_edit.setPlaceholderText("Like example.org")
+        self.email_edit.setPlaceholderText("Like info@example.org")
+
+        self.field_widgets: dict[str, QWidget] = {}
+        self.field_labels: dict[str, QLabel] = {}
         self.error_labels: dict[str, QLabel] = {}
-        form = QFormLayout()
-        for field_name, label, widget in (
-            ("name", "Organization name", self.name_edit),
-            ("phone", "Phone", self.phone_edit),
-            ("address", "Address", self.address_edit),
-            ("url", "Website", self.url_edit),
-            ("email", "Email", self.email_edit),
-            ("paper_size", "Paper size", self.paper_size_combo),
-            ("orientation", "Orientation", self.orientation_combo),
-        ):
+        self.form = QFormLayout()
+        for field_name, label_text, attribute in FORM_FIELDS:
+            widget = getattr(self, attribute)
+            # The label and its input must be siblings in the same layout: that is
+            # how Qt tells screen readers which label names the input, and the
+            # label's buddy is what its Alt+letter mnemonic focuses.
+            label = QLabel(label_text)
+            label.setBuddy(widget)
+            self.form.addRow(label, widget)
+            # The error gets its own row under the field, hidden (spacing and all)
+            # until there is something to say.
             error_label = QLabel()
-            error_label.setStyleSheet(ERROR_STYLE)
-            error_label.setVisible(False)
+            style_error_label(error_label, self.palette())
+            self.form.addRow("", error_label)
+            self.form.setRowVisible(error_label, False)  # noqa: FBT003 (Qt API is positional)
+            self.field_widgets[field_name] = widget
+            self.field_labels[field_name] = label
             self.error_labels[field_name] = error_label
-            # The error sits in the same form row as its field: a hidden widget in
-            # a row of its own still leaves that row's spacing behind.
-            field_with_error = QWidget()
-            field_layout = QVBoxLayout(field_with_error)
-            field_layout.setContentsMargins(0, 0, 0, 0)
-            field_layout.setSpacing(2)
-            field_layout.addWidget(widget)
-            field_layout.addWidget(error_label)
-            form.addRow(label, field_with_error)
 
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton("&Save")
         self.save_button.setDefault(True)
-        self.revert_button = QPushButton("Revert")
+        self.save_button.setToolTip("Save the organization's details (Ctrl+S)")
+        self.revert_button = QPushButton("&Revert")
+        self.revert_button.setToolTip("Discard unsaved changes")
         buttons = QHBoxLayout()
         buttons.addStretch()
         buttons.addWidget(self.revert_button)
@@ -206,7 +250,7 @@ class OrganizationPage(QWidget):
 
         details = QGroupBox("Organization details")
         details_layout = QVBoxLayout(details)
-        details_layout.addLayout(form)
+        details_layout.addLayout(self.form)
         details_layout.addStretch()
         details_layout.addLayout(buttons)
         return details
@@ -215,20 +259,23 @@ class OrganizationPage(QWidget):
         self.qr_preview = QLabel()
         self.qr_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qr_preview.setMinimumSize(240, 240)
+        self.qr_preview.setAccessibleName("QR code")
         self.qr_hint = QLabel()
         self.qr_hint.setWordWrap(True)
         self.qr_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.save_qr_button = QPushButton("Save QR code…")
-        self.print_qr_button = QPushButton("Print QR code…")
+        self.save_qr_button = QPushButton("Save &QR code…")
+        self.print_qr_button = QPushButton("&Print QR code…")
         qr_buttons = QHBoxLayout()
         qr_buttons.addWidget(self.save_qr_button)
         qr_buttons.addWidget(self.print_qr_button)
 
         qr_box = QGroupBox("QR code")
         qr_layout = QVBoxLayout(qr_box)
-        qr_layout.addWidget(
-            QLabel("Every form you create carries this code, identifying it as yours.")
+        qr_intro = QLabel(
+            "Every form you create carries this code, identifying it as yours."
         )
+        qr_intro.setWordWrap(True)
+        qr_layout.addWidget(qr_intro)
         qr_layout.addWidget(self.qr_preview)
         qr_layout.addWidget(self.qr_hint)
         qr_layout.addLayout(qr_buttons)
@@ -236,6 +283,22 @@ class OrganizationPage(QWidget):
         return qr_box
 
     def _connect_signals(self) -> None:
+        self.save_shortcut = QShortcut(QKeySequence.StandardKey.Save, self)
+        self.save_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.save_shortcut.activated.connect(self.save)
+
+        # Tab follows the screen: the form top to bottom, its buttons left to right,
+        # then the QR code's buttons.
+        focus_chain = [
+            *(self.field_widgets[name] for name, _, _ in FORM_FIELDS),
+            self.revert_button,
+            self.save_button,
+            self.save_qr_button,
+            self.print_qr_button,
+        ]
+        for before, after in pairwise(focus_chain):
+            QWidget.setTabOrder(before, after)
+
         self.save_button.clicked.connect(self.save)
         self.revert_button.clicked.connect(self.revert)
         self.save_qr_button.clicked.connect(self.save_qr_code)
@@ -274,9 +337,12 @@ class OrganizationPage(QWidget):
 
     def _show_errors(self, errors: dict[str, str]) -> None:
         for field_name, label in self.error_labels.items():
-            message = errors.get(field_name, "")
-            label.setText(message)
-            label.setVisible(bool(message))
+            set_field_error(
+                self.form,
+                self.field_widgets[field_name],
+                label,
+                errors.get(field_name, ""),
+            )
 
     def _update_state(self) -> None:
         unsaved = self.has_unsaved_changes()
@@ -298,7 +364,12 @@ class OrganizationPage(QWidget):
     def _refresh_qr_preview(self) -> None:
         if self._saved is None:
             self.qr_preview.clear()
+            self.qr_preview.setAccessibleDescription("Not created yet.")
             return
+        self.qr_preview.setAccessibleDescription(
+            f"Identifies {self._saved.name}. Use Save QR code or Print QR code to "
+            "get a copy."
+        )
         png = qr_code_png(
             make_qr_code(build_organization_payload(self._saved)),
             scale=QR_PREVIEW_SCALE,

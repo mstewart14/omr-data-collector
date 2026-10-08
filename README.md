@@ -53,6 +53,25 @@ uv run ruff check --fix && uv run ruff format
 uv run pyright
 ```
 
+## Accessibility
+
+The app aims for [WCAG 2.2](https://www.w3.org/TR/WCAG22/) level AA as it applies to
+desktop software, since the people entering data may use screen readers, only a
+keyboard, or large fonts and high-contrast themes:
+
+- every field is labelled for screen readers and has an Alt+letter shortcut; Ctrl+S
+  saves
+- errors are written out (not shown by color alone), read out when their field gets
+  focus, and focus moves to the first one when saving fails
+- status messages such as "Organization saved." are announced to screen readers
+- error colors keep at least 4.5:1 contrast on light, dark and high-contrast themes
+- layouts follow the system font size
+
+`omr_data_collector/ui/accessibility.py` holds the shared helpers and
+`tests/test_accessibility.py` checks each point. On Linux, screen readers such as Orca
+reach the app through AT-SPI; Qt's `qt.accessibility.atspi` log lines are its
+bridge talking to that service, not errors.
+
 ## The vendored OMR engine
 
 `vendor/omrchecker/` is OMRChecker v2 (its `dev` branch), added as a squashed git
