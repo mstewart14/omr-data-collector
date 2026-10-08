@@ -95,6 +95,8 @@ def install_translators(app: QApplication, locale: QLocale | None = None) -> Non
         translators: list[QTranslator] = [PseudoTranslator()]
     else:
         locale = locale or chosen_locale()
+        # Lists, numbers and dates follow the language shown, too.
+        QLocale.setDefault(locale)
         qt_translator = QTranslator()
         qt_translator.load(
             locale,
