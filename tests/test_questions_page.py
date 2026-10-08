@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAccessible
+from PySide6.QtGui import QAccessible, QTextCursor
 from PySide6.QtWidgets import QAbstractSpinBox, QTableWidgetItem
 
 from omr_data_collector.constants import (
@@ -58,7 +58,7 @@ def test_new_question_starts_as_yes_no(
 def test_create_a_yes_no_question(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
     page.name_edit.setText("first_visit")
-    page.prompt_edit.setPlainText("Is this your first visit?")
+    page.text_fields.editor.setPlainText("Is this your first visit?")
     page.example_edit.setText("Mark one")
     set_choice(page, 0, "Yes", "1")
     set_choice(page, 1, "No", "0")
@@ -67,7 +67,7 @@ def test_create_a_yes_no_question(qtbot: QtBot, connection: sqlite3.Connection) 
         page.save()
 
     (saved,) = list_questions(connection)
-    assert saved.prompt == "Is this your first visit?"
+    assert saved.prompt.strip() == "Is this your first visit?"
     assert saved.answer.choices == (Choice("Yes", "1"), Choice("No", "0"))
     assert status.args == ['Question "first_visit" saved.']
     assert not page.has_unsaved_changes()
@@ -79,7 +79,7 @@ def test_create_a_list_question_with_added_reordered_choices(
     page = make_page(qtbot, connection)
     fields = page.answer_fields
     page.name_edit.setText("services")
-    page.prompt_edit.setPlainText("Which services did you use?")
+    page.text_fields.editor.setPlainText("Which services did you use?")
     choose(fields.answer_type_combo, ANSWER_TYPES.MANY_CHOICES)
     assert fields.choices_table.rowCount() == 3
     for row, label in enumerate(("Clothing", "Food hamper", "Referral")):
@@ -229,7 +229,7 @@ def test_choice_errors_focus_the_choices_table(
         page.show()
         page.activateWindow()
     page.name_edit.setText("services")
-    page.prompt_edit.setPlainText("Which?")
+    page.text_fields.editor.setPlainText("Which?")
     choose(page.answer_fields.answer_type_combo, ANSWER_TYPES.ONE_CHOICE)
     set_choice(page, 0, "A")
 
@@ -246,7 +246,7 @@ def test_number_range_error_is_shown_under_maximum(
     page = make_page(qtbot, connection)
     fields = page.answer_fields
     page.name_edit.setText("age")
-    page.prompt_edit.setPlainText("Age?")
+    page.text_fields.editor.setPlainText("Age?")
     choose(fields.answer_type_combo, ANSWER_TYPES.WRITTEN)
     choose(fields.data_type_combo, WRITTEN_DATA_TYPES.NUMBER)
     fields.minimum_spin.setValue(10)
@@ -315,7 +315,8 @@ def test_mnemonics_are_unique(qtbot: QtBot, connection: sqlite3.Connection) -> N
     page = make_page(qtbot, connection)
     fields = page.answer_fields
     texts = [
-        "Question &library",
+        "Question li&brary",
+        "Sty&le",
         *(label.text() for label in page.field_labels.values()),
         *(
             button.text()
@@ -344,7 +345,7 @@ def test_tab_leaves_the_choices_table_instead_of_moving_between_cells(
     page = make_page(qtbot, connection)
 
     assert not page.answer_fields.choices_table.tabKeyNavigation()
-    assert page.prompt_edit.tabChangesFocus()
+    assert page.text_fields.editor.tabChangesFocus()
 
 
 def test_tab_order_follows_the_screen(
@@ -358,7 +359,12 @@ def test_tab_order_follows_the_screen(
         page.duplicate_button,
         page.delete_button,
         page.name_edit,
-        page.prompt_edit,
+        page.text_fields.style_combo,
+        page.text_fields.bold_button,
+        page.text_fields.italic_button,
+        page.text_fields.bulleted_button,
+        page.text_fields.numbered_button,
+        page.text_fields.editor,
         page.example_edit,
         fields.answer_type_combo,
         fields.choices_table,
@@ -396,3 +402,22 @@ def test_no_limit_is_spoken_as_words_not_a_number(
 
     assert page.answer_fields.minimum_spin.text() == "No minimum"
     assert page.answer_fields.maximum_spin.text() == "No maximum"
+
+
+def test_question_text_can_be_formatted(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_page(qtbot, connection)
+    page.name_edit.setText("consent")
+    page.text_fields.editor.setPlainText("Do you consent?")
+    cursor = page.text_fields.editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    page.text_fields.editor.setTextCursor(cursor)
+    page.text_fields.bold_button.click()
+
+    page.save()
+
+    (saved,) = list_questions(connection)
+    assert saved.prompt.strip() == "**Do you consent?**"
+    page.item_list.setCurrentRow(0)
+    assert not page.has_unsaved_changes()

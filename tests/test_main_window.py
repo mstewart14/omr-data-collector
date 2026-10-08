@@ -152,7 +152,7 @@ def test_close_saves_every_page_with_changes(
     window = make_window(qtbot, connection)
     window.organization_page.name_edit.setText("Food Bank")
     window.text_blocks_page.name_edit.setText("Footer")
-    window.text_blocks_page.editor.setPlainText("Thanks")
+    window.text_blocks_page.text_fields.editor.setPlainText("Thanks")
     question = mocker.patch(
         "omr_data_collector.ui.MainWindow.ask_save_discard_cancel",
         return_value=QMessageBox.StandardButton.Save,

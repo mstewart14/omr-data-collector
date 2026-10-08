@@ -77,11 +77,11 @@ def test_create_and_save_a_formatted_block(
 ) -> None:
     page = make_page(qtbot, connection)
     page.name_edit.setText(" Instructions ")
-    page.editor.setPlainText("Fill in one bubble per row")
-    cursor = page.editor.textCursor()
+    page.text_fields.editor.setPlainText("Fill in one bubble per row")
+    cursor = page.text_fields.editor.textCursor()
     cursor.select(QTextCursor.SelectionType.Document)
-    page.editor.setTextCursor(cursor)
-    page.bold_button.click()
+    page.text_fields.editor.setTextCursor(cursor)
+    page.text_fields.bold_button.click()
 
     with qtbot.waitSignal(page.status_message) as status:
         page.save()
@@ -112,7 +112,7 @@ def test_save_reports_missing_and_duplicate_names(
     assert page.focusWidget() is page.name_edit
 
     page.name_edit.setText("footer")
-    page.editor.setPlainText("More thanks")
+    page.text_fields.editor.setPlainText("More thanks")
     page.save()
     assert page.error_labels["name"].text() == (
         'Another text block is already called "footer".'
@@ -124,12 +124,12 @@ def test_edit_and_revert(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     save_text_block(connection, TextBlock(name="Footer", content="Thanks"))
     page = make_page(qtbot, connection)
 
-    page.editor.setPlainText("Thank you for coming")
+    page.text_fields.editor.setPlainText("Thank you for coming")
     assert page.has_unsaved_changes()
     page.revert()
-    assert page.editor.toPlainText() == "Thanks"
+    assert page.text_fields.editor.toPlainText() == "Thanks"
 
-    page.editor.setPlainText("Thank you for coming")
+    page.text_fields.editor.setPlainText("Thank you for coming")
     page.save()
     assert list_text_blocks(connection)[0].content.strip() == "Thank you for coming"
 
@@ -203,7 +203,7 @@ def test_switching_blocks_asks_about_unsaved_changes(  # noqa: PLR0913
     save_text_block(connection, TextBlock(name="A", content="Original"))
     save_text_block(connection, TextBlock(name="B", content="Other"))
     page = make_page(qtbot, connection)
-    page.editor.setPlainText("Edited")
+    page.text_fields.editor.setPlainText("Edited")
     answer_unsaved(mocker, answer)
 
     page.item_list.setCurrentRow(1)
@@ -221,13 +221,13 @@ def test_new_with_unsaved_changes_can_be_cancelled(
 ) -> None:
     save_text_block(connection, TextBlock(name="A", content="Original"))
     page = make_page(qtbot, connection)
-    page.editor.setPlainText("Edited")
+    page.text_fields.editor.setPlainText("Edited")
     answer_unsaved(mocker, QMessageBox.StandardButton.Cancel)
 
     page.new_item()
 
     assert page.name_edit.text() == "A"
-    assert page.editor.toPlainText() == "Edited"
+    assert page.text_fields.editor.toPlainText() == "Edited"
 
 
 def test_formatting_buttons_follow_the_cursor(
@@ -239,28 +239,36 @@ def test_formatting_buttons_follow_the_cursor(
     )
     page = make_page(qtbot, connection)
 
-    page.editor.setTextCursor(QTextCursor(page.editor.document().findBlockByNumber(0)))
-    assert page.style_combo.currentText() == "Heading 2"
-    assert not page.bold_button.isChecked()  # heading text is bold by its style
+    page.text_fields.editor.setTextCursor(
+        QTextCursor(page.text_fields.editor.document().findBlockByNumber(0))
+    )
+    assert page.text_fields.style_combo.currentText() == "Heading 2"
+    assert (
+        not page.text_fields.bold_button.isChecked()
+    )  # heading text is bold by its style
 
-    cursor = QTextCursor(page.editor.document().findBlockByNumber(1))
+    cursor = QTextCursor(page.text_fields.editor.document().findBlockByNumber(1))
     cursor.movePosition(QTextCursor.MoveOperation.Right)
-    page.editor.setTextCursor(cursor)
-    assert page.style_combo.currentText() == "Normal text"
-    assert page.bold_button.isChecked()
+    page.text_fields.editor.setTextCursor(cursor)
+    assert page.text_fields.style_combo.currentText() == "Normal text"
+    assert page.text_fields.bold_button.isChecked()
 
-    page.editor.setTextCursor(QTextCursor(page.editor.document().findBlockByNumber(2)))
-    assert page.bulleted_button.isChecked()
-    assert not page.numbered_button.isChecked()
+    page.text_fields.editor.setTextCursor(
+        QTextCursor(page.text_fields.editor.document().findBlockByNumber(2))
+    )
+    assert page.text_fields.bulleted_button.isChecked()
+    assert not page.text_fields.numbered_button.isChecked()
 
 
 def test_style_box_sets_headings(qtbot: QtBot, connection: sqlite3.Connection) -> None:
     page = make_page(qtbot, connection)
-    page.editor.setPlainText("Title")
+    page.text_fields.editor.setPlainText("Title")
 
-    page.style_combo.activated.emit(page.style_combo.findText("Heading 1"))
+    page.text_fields.style_combo.activated.emit(
+        page.text_fields.style_combo.findText("Heading 1")
+    )
 
-    assert page.editor.markdown().startswith("# Title")
+    assert page.text_fields.editor.markdown().startswith("# Title")
 
 
 # --- Keyboard and screen readers --------------------------------------------------
@@ -291,15 +299,15 @@ def test_formatting_shortcuts(
     expected: str,
 ) -> None:
     page = shown_page(qtbot, connection)
-    page.editor.setFocus()
-    page.editor.setPlainText("Title")
-    cursor = page.editor.textCursor()
+    page.text_fields.editor.setFocus()
+    page.text_fields.editor.setPlainText("Title")
+    cursor = page.text_fields.editor.textCursor()
     cursor.select(QTextCursor.SelectionType.Document)
-    page.editor.setTextCursor(cursor)
+    page.text_fields.editor.setTextCursor(cursor)
 
-    qtbot.keyClick(page.editor, key, modifiers)
+    qtbot.keyClick(page.text_fields.editor, key, modifiers)
 
-    assert page.editor.markdown().strip() == expected
+    assert page.text_fields.editor.markdown().strip() == expected
 
 
 def test_ctrl_n_starts_a_new_block_and_ctrl_s_saves_it(
@@ -314,7 +322,7 @@ def test_ctrl_n_starts_a_new_block_and_ctrl_s_saves_it(
     assert page.focusWidget() is page.name_edit
 
     page.name_edit.setText("B")
-    page.editor.setPlainText("y")
+    page.text_fields.editor.setPlainText("y")
     qtbot.keyClick(page.name_edit, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
     assert sorted(block.name for block in list_text_blocks(connection)) == ["A", "B"]
 
@@ -326,8 +334,8 @@ def test_delete_key_deletes_from_the_list_but_not_the_editor(
     page = shown_page(qtbot, connection)
     confirm = mocker.patch(f"{PAGE_MODULE}.confirm_destructive", return_value=False)
 
-    page.editor.setFocus()
-    qtbot.keyClick(page.editor, Qt.Key.Key_Delete)
+    page.text_fields.editor.setFocus()
+    qtbot.keyClick(page.text_fields.editor, Qt.Key.Key_Delete)
     confirm.assert_not_called()
 
     page.item_list.setFocus()
@@ -373,10 +381,10 @@ def test_formatting_buttons_are_named_and_reachable_by_tab(
     page = make_page(qtbot, connection)
 
     for button, name in (
-        (page.bold_button, "Bold"),
-        (page.italic_button, "Italic"),
-        (page.bulleted_button, "Bulleted list"),
-        (page.numbered_button, "Numbered list"),
+        (page.text_fields.bold_button, "Bold"),
+        (page.text_fields.italic_button, "Italic"),
+        (page.text_fields.bulleted_button, "Bulleted list"),
+        (page.text_fields.numbered_button, "Numbered list"),
     ):
         interface = QAccessible.queryAccessibleInterface(button)
         assert interface.text(QAccessible.Text.Name) == name
@@ -394,12 +402,12 @@ def test_tab_order_follows_the_screen(
         page.duplicate_button,
         page.delete_button,
         page.name_edit,
-        page.style_combo,
-        page.bold_button,
-        page.italic_button,
-        page.bulleted_button,
-        page.numbered_button,
-        page.editor,
+        page.text_fields.style_combo,
+        page.text_fields.bold_button,
+        page.text_fields.italic_button,
+        page.text_fields.bulleted_button,
+        page.text_fields.numbered_button,
+        page.text_fields.editor,
         page.revert_button,
         page.save_button,
     ]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSignalBlocker
-from PySide6.QtWidgets import QLineEdit, QPlainTextEdit
+from PySide6.QtWidgets import QLineEdit
 
 from omr_data_collector.constants import ANSWER_TYPES
 from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -15,12 +15,13 @@ from omr_data_collector.storage.question_store import (
 )
 from omr_data_collector.ui.AnswerFields import AnswerFields
 from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
 from omr_data_collector.ui.LibraryPage import LibraryPage
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QFormLayout, QWidget
 
-PROMPT_VISIBLE_LINES = 3
+PROMPT_VISIBLE_LINES = 4
 
 
 class QuestionsPage(LibraryPage):
@@ -31,37 +32,35 @@ class QuestionsPage(LibraryPage):
     """
 
     NOUN = "question"
-    LIST_LABEL = "Question &library"
+    LIST_LABEL = "Question li&brary"
     NAME_LABEL = "Na&me (required)"
     NEW_HINT = "Enter a name, the question and how it is answered."
 
     def build_fields(self, form: QFormLayout) -> list[QWidget]:
         self.name_edit.setToolTip("Also the column name when data is exported")
-        self.prompt_edit = QPlainTextEdit()
-        # Tab moves on rather than typing a tab, so keyboard users can leave.
-        self.prompt_edit.setTabChangesFocus(True)
-        self.prompt_edit.setFixedHeight(
-            self.prompt_edit.fontMetrics().lineSpacing() * PROMPT_VISIBLE_LINES
-            + 2 * self.prompt_edit.frameWidth()
-            + int(2 * self.prompt_edit.document().documentMargin())
+        self.text_fields = FormattedTextFields(
+            form,
+            (self.field_widgets, self.field_labels, self.error_labels),
+            key="prompt",
+            text_label="&Question (required)",
+            # Not "St&yle": Alt+Y is the answer's Data type on this page.
+            style_label="Sty&le",
+            visible_lines=PROMPT_VISIBLE_LINES,
+            shortcut_parent=self,
+            on_change=self.update_state,
         )
-        self.prompt_edit.setPlaceholderText(
+        self.shortcuts += self.text_fields.shortcuts
+        self.text_fields.editor.setPlaceholderText(
             "As printed, like: Is this your first visit?"
         )
         self.example_edit = QLineEdit()
         self.example_edit.setPlaceholderText(
             "Printed with the question, like: Mark one"
         )
-
-        for key, label_text, widget in (
-            ("prompt", "&Question (required)", self.prompt_edit),
-            ("example", "&Example or instructions", self.example_edit),
-        ):
-            self.field_labels[key], self.error_labels[key] = add_field_row(
-                form, label_text, widget
-            )
-            self.field_widgets[key] = widget
-        self.prompt_edit.textChanged.connect(self.update_state)
+        self.field_labels["example"], self.error_labels["example"] = add_field_row(
+            form, "&Example or instructions", self.example_edit
+        )
+        self.field_widgets["example"] = self.example_edit
         self.example_edit.textChanged.connect(self.update_state)
 
         self.answer_fields = AnswerFields(
@@ -71,11 +70,15 @@ class QuestionsPage(LibraryPage):
             self.error_labels,
             self.update_state,
         )
-        return [self.prompt_edit, self.example_edit, *self.answer_fields.focus_chain()]
+        return [
+            *self.text_fields.focus_chain(),
+            self.example_edit,
+            *self.answer_fields.focus_chain(),
+        ]
 
     def load_fields(self, item: Question | None) -> None:
-        with QSignalBlocker(self.prompt_edit), QSignalBlocker(self.example_edit):
-            self.prompt_edit.setPlainText(item.prompt if item is not None else "")
+        self.text_fields.set_markdown(item.prompt if item is not None else "")
+        with QSignalBlocker(self.example_edit):
             self.example_edit.setText(item.example if item is not None else "")
         self.answer_fields.set_spec(
             item.answer if item is not None else AnswerSpec.default(ANSWER_TYPES.YES_NO)
@@ -84,7 +87,7 @@ class QuestionsPage(LibraryPage):
     def read_item(self, name: str, item_id: str) -> Question:
         return Question(
             name=name,
-            prompt=self.prompt_edit.toPlainText(),
+            prompt=self.text_fields.markdown(),
             example=self.example_edit.text(),
             answer=self.answer_fields.spec(),
             question_id=item_id,

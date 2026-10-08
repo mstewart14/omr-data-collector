@@ -12,8 +12,9 @@ class Question:
     """A reusable question and how its answer is collected (wiki 40001-40010).
 
     ``name`` identifies the question in the library and becomes its column name
-    when data is exported; ``prompt`` is what's printed for the person answering;
-    ``example`` is optional help printed with it.
+    when data is exported; ``prompt`` is what's printed for the person answering,
+    as Markdown like a text block's content; ``example`` is optional plain-text
+    help printed with it.
     """
 
     name: str
