@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QLabel, QMessageBox
 from omr_data_collector.ui.accessibility import style_error_label
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from PySide6.QtWidgets import QFormLayout, QWidget
 
@@ -118,3 +118,38 @@ def confirm_destructive(
     box.setEscapeButton(cancel_button)
     box.exec()
     return box.clickedButton() is action_button
+
+
+def ask_save_first(parent: QWidget, question: str) -> bool:
+    """Ask to save before going on (printing, say); True to save and go on."""
+    box = QMessageBox(QMessageBox.Icon.Question, "Save first", question, parent=parent)
+    save_button = box.addButton(QMessageBox.StandardButton.Save)
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(save_button)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    return box.clickedButton() is save_button
+
+
+def confirm_despite_problems(
+    parent: QWidget, heading: str, problems: Sequence[str]
+) -> bool:
+    """List problems and ask whether to go ahead anyway; Cancel is the default."""
+    box = QMessageBox(
+        QMessageBox.Icon.Warning,
+        "Problems to check",
+        heading + "\n\n" + "\n".join(f"- {problem}" for problem in problems),
+        parent=parent,
+    )
+    go_ahead = box.addButton("Go ahead anyway", QMessageBox.ButtonRole.AcceptRole)
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(cancel_button)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    return box.clickedButton() is go_ahead
+
+
+def tell(parent: QWidget, title: str, message: str) -> None:
+    """Show a message that needs nothing but OK."""
+    box = QMessageBox(QMessageBox.Icon.Information, title, message, parent=parent)
+    box.exec()

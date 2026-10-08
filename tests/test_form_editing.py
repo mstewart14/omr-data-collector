@@ -379,7 +379,7 @@ def test_file_menu_undo_and_redo(qtbot: QtBot, connection: sqlite3.Connection) -
             for action in window.file_menu.actions()
             if action.text().startswith(prefix)
         )
-        for prefix in ("U&ndo", "Re&do")
+        for prefix in ("&Undo", "R&edo")
     )
 
     window.file_menu.aboutToShow.emit()

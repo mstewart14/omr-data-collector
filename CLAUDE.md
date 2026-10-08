@@ -73,6 +73,11 @@ engine bridge.
 - **Forms keep their own copy of every block** (wiki 50011-50012): editing a
   library block later asks "going forward only" or "everywhere", and "everywhere"
   makes new form versions so sheets already printed still scan.
+- **Printing** (`rendering/print_form.py`) draws with the same page painter as the
+  editor. File > Export as PDF, Print preview and Print go through
+  `FormsPage._ready_to_print` (organization entered, form saved, layout problems
+  confirmed) and finish with `mark_printed`; a preview alone doesn't freeze the
+  version, printing from it does.
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact

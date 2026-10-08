@@ -130,17 +130,36 @@ def test_file_menu_holds_the_form_commands(
     window = make_window(qtbot, connection)
 
     assert menu_texts(window.file_menu) == [
-        f"Form &editor\t{section_key(1)}",
+        f"Form edi&tor\t{section_key(1)}",
         "&New form",
         "&Open form…",
         "&Save form",
         "&Revert form",
-        "D&uplicate form",
+        "Dup&licate form",
         "&Delete form…",
-        f"U&ndo form change\t{native(QKeySequence.StandardKey.Undo)}",
-        f"Re&do form change\t{native(QKeySequence.StandardKey.Redo)}",
+        "E&xport as PDF…",
+        "Print pre&view…",
+        "&Print…",
+        f"&Undo form change\t{native(QKeySequence.StandardKey.Undo)}",
+        f"R&edo form change\t{native(QKeySequence.StandardKey.Redo)}",
         "&Quit",
     ]
+
+
+def test_every_menus_items_have_their_own_letters(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+
+    for menu in (
+        window.file_menu,
+        window.text_menu,
+        window.question_menu,
+        window.table_menu,
+        window.preferences_menu,
+    ):
+        letters = mnemonics_of(menu_texts(menu))
+        assert len(letters) == len(set(letters)), (menu.title(), sorted(letters))
 
 
 def test_each_library_menu_opens_its_library_first(

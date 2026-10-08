@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QItemSelectionModel, QSignalBlocker, Qt
+from PySide6.QtCore import QItemSelectionModel, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QKeySequence, QPalette
+from PySide6.QtPrintSupport import QPrintDialog, QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
+    QFileDialog,
     QFormLayout,
     QGridLayout,
     QGroupBox,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -29,24 +34,32 @@ from omr_data_collector.constants import (
     PAPER_SIZES,
     TABLE_BREAKS,
 )
+from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import KIND_NAMES, Form, FormBlock, content_id
 from omr_data_collector.models.ordering import move_by, move_to
+from omr_data_collector.rendering.print_form import render_form, save_pdf
 from omr_data_collector.storage.form_store import (
     delete_form,
     is_printed,
     list_forms,
+    mark_printed,
     save_form,
 )
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.storage.question_store import list_questions
 from omr_data_collector.storage.table_block_store import list_table_blocks
 from omr_data_collector.storage.text_block_store import list_text_blocks
+from omr_data_collector.ui.accessibility import style_error_label
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.BlockPalette import BlockPalette
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
     add_standard_shortcuts,
+    ask_save_first,
+    confirm_despite_problems,
+    tell,
 )
 from omr_data_collector.ui.LibraryPage import LibraryPage
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
@@ -55,11 +68,12 @@ from omr_data_collector.ui.TablePreview import ORIENTATION_NAMES
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from PySide6.QtGui import QShowEvent
 
     from omr_data_collector.models.Form import BlockContent
+    from omr_data_collector.models.Organization import Organization
 
 TABLE_BREAK_LABELS = {
     TABLE_BREAKS.SPLIT: "Split it across pages",
@@ -112,6 +126,32 @@ def choose_form(parent: QWidget, forms: list[Form], printed: set[str]) -> str | 
     return dialog.chosen_form_id()
 
 
+def choose_pdf_path(parent: QWidget, default_name: str) -> Path | None:
+    """Ask where to save the PDF; None if cancelled."""
+    file_name, _ = QFileDialog.getSaveFileName(
+        parent, "Export as PDF", default_name, "PDF document (*.pdf)"
+    )
+    if not file_name:
+        return None
+    path = Path(file_name)
+    return path if path.suffix.lower() == ".pdf" else path.with_suffix(".pdf")
+
+
+def run_print_dialog(parent: QWidget, printer: QPrinter) -> bool:
+    """Show the system print dialog; True if the person chose to print."""
+    return QPrintDialog(printer, parent).exec() == QDialog.DialogCode.Accepted
+
+
+def run_print_preview(
+    parent: QWidget, printer: QPrinter, render: Callable[[QPrinter], object]
+) -> bool:
+    """Show the pages as they will print; True if printed from the preview."""
+    dialog = QPrintPreviewDialog(printer, parent)
+    dialog.setWindowTitle("Print preview")
+    dialog.paintRequested.connect(render)
+    return dialog.exec() == QDialog.DialogCode.Accepted
+
+
 def block_summary(number: int, block: FormBlock) -> str:
     """One line describing a block, for the blocks list and screen readers."""
     origin = "from the library" if block.source_id else "written on this form"
@@ -143,6 +183,9 @@ class FormsPage(LibraryPage):
     page has a header with the organization's identity and, in the top-right
     corner, the form's QR code.
     """
+
+    # Printing needs the organization's details; the window opens them.
+    organization_needed = Signal()
 
     NOUN = "form"
     LIST_LABEL = "Form li&brary"
@@ -206,6 +249,9 @@ class FormsPage(LibraryPage):
             self.orientation_combo.addItem(name.capitalize(), value)
         self.version_note = QLabel()
         self.version_note.setWordWrap(True)
+        # Layout problems to fix before printing, e.g. a table too wide.
+        self.problems_note = QLabel()
+        self.problems_note.setWordWrap(True)
         self.block_list = QListWidget()
         self.block_list.setMinimumHeight(
             self.block_list.fontMetrics().lineSpacing() * BLOCK_ROWS_VISIBLE
@@ -227,6 +273,7 @@ class FormsPage(LibraryPage):
             self.field_widgets[key] = widget
             if key == "orientation":
                 form.addRow("", self.version_note)
+                form.addRow("", self.problems_note)
 
         self.add_text_button = QPushButton("Add te&xt…")
         self.add_question_button = QPushButton("Add quest&ion…")
@@ -386,6 +433,12 @@ class FormsPage(LibraryPage):
             paper_size,
         )
         self.canvas.select(self.selected_rows())
+        warnings = self.canvas.form_layout.warnings if self.canvas.form_layout else ()
+        self.problems_note.setText(
+            "Check before printing: " + " ".join(warnings) if warnings else ""
+        )
+        style_error_label(self.problems_note, self.palette())
+        self.form.setRowVisible(self.problems_note, bool(warnings))
 
     def add_library_block(self, kind: str, item_id: str, index: int | None) -> None:
         """Copy a library block onto the form at ``index`` (None: under the selection)."""
@@ -538,6 +591,98 @@ class FormsPage(LibraryPage):
         self.update_state()
         self._commit_change(_moved_description(moved))
         self.status_message.emit(_moved_status(moved, len(self._blocks)))
+
+    # --- Printing (wiki 50007-50009) -----------------------------------------------
+
+    def export_pdf(self) -> None:
+        """File > Export as PDF: save the form's pages as a PDF file."""
+        ready = self._ready_to_print("save it as a PDF")
+        if ready is None:
+            return
+        form, organization = ready
+        path = choose_pdf_path(self, f"{_file_name(form.name)} v{form.version}.pdf")
+        if path is None:
+            return
+        try:
+            pages = save_pdf(path, form, organization, organization.paper_size)
+        except OSError as error:
+            QMessageBox.warning(self, "Couldn't save the PDF", str(error))
+            return
+        self._after_printing(
+            form, f"Saved {pages} page{'s' if pages != 1 else ''} to {path}"
+        )
+
+    def print_form(self) -> None:
+        """File > Print: send the form's pages to a printer."""
+        ready = self._ready_to_print("print it")
+        if ready is None:
+            return
+        form, organization = ready
+        printer = _printer(form, organization)
+        if not run_print_dialog(self, printer):
+            return
+        render_form(printer, form, organization, organization.paper_size)
+        self._after_printing(form, "Sent the form to the printer")
+
+    def print_preview(self) -> None:
+        """File > Print preview: see the pages as they will print, and print them."""
+        ready = self._ready_to_print("preview it")
+        if ready is None:
+            return
+        form, organization = ready
+        printer = _printer(form, organization)
+        printed = run_print_preview(
+            self,
+            printer,
+            lambda device: render_form(
+                device, form, organization, organization.paper_size
+            ),
+        )
+        if printed:
+            self._after_printing(form, "Sent the form to the printer")
+
+    def _ready_to_print(self, action: str) -> tuple[Form, Organization] | None:
+        """The saved form and the organization, once both are ready to print.
+
+        Prints carry the organization in their header and a QR code naming a
+        stored version, so the form must be saved and the organization entered.
+        Layout problems (a table too wide, say) are shown before going ahead.
+        """
+        organization = load_organization(self._connection)
+        if organization is None:
+            tell(
+                self,
+                "Organization details needed",
+                "Enter your organization's details first, in Preferences > "
+                "Organization details: every page's header and QR code show them.",
+            )
+            self.organization_needed.emit()
+            return None
+        if self._current is None or self.has_unsaved_changes():
+            if not ask_save_first(
+                self, f"The form has unsaved changes. Save it to {action}?"
+            ):
+                return None
+            if not self.save():
+                return None
+        form = self._current
+        if form is None:
+            return None
+        warnings = layout_form(form, organization.paper_size).warnings
+        if warnings and not confirm_despite_problems(
+            self, f"Check before you {action}:", warnings
+        ):
+            return None
+        return form, organization
+
+    def _after_printing(self, form: Form, done: str) -> None:
+        # Printed sheets are scanned against this version, so it's kept as it is.
+        mark_printed(self._connection, form.form_id, form.version)
+        self._update_version_note(form)
+        self.status_message.emit(
+            f"{done}. Version {form.version} is now kept as printed; changes from "
+            f"here make version {form.version + 1}."
+        )
 
     # --- Undo ---------------------------------------------------------------------
 
@@ -751,3 +896,15 @@ def _moved_status(moved: list[int], count: int) -> str:
     if len(moved) == 1:
         return f"Moved to position {moved[0] + 1} of {count}."
     return f"Moved {len(moved)} blocks to positions {moved[0] + 1} to {moved[-1] + 1} of {count}."
+
+
+def _printer(form: Form, organization: Organization) -> QPrinter:
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    printer.setPageLayout(page_layout_for(organization.paper_size, form.orientation))
+    printer.setDocName(f"{form.name} (version {form.version})")
+    return printer
+
+
+def _file_name(name: str) -> str:
+    """A form name made safe to use as a file name."""
+    return re.sub(r'[\\/:*?"<>|]+', "-", name).strip(" .-") or "form"

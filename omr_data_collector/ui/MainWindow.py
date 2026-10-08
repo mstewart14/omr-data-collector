@@ -74,6 +74,11 @@ class MainWindow(QMainWindow):
             self.section_shortcuts.append(shortcut)
         self.setCentralWidget(self.stack)
         self._build_menus()
+        self.forms_page.organization_needed.connect(
+            lambda: self.open_section(
+                self._index_of(self.organization_page), focus_page=True
+            )
+        )
 
         # The form editor is the main work; before the organization is entered,
         # that comes first, since every form's header shows it.
@@ -108,8 +113,16 @@ class MainWindow(QMainWindow):
         """
         menu_bar = self.menuBar()
         self.file_menu = self._library_menu(
-            menu_bar, "&File", "form", self.forms_page, "Form &editor"
+            menu_bar, "&File", "form", self.forms_page, "Form edi&tor"
         )
+        # Within one menu every item needs its own letter: File also has Undo
+        # (U) and Redo, so its Duplicate uses L.
+        duplicate = next(
+            action
+            for action in self.file_menu.actions()
+            if action.text() == "D&uplicate form"
+        )
+        duplicate.setText("Dup&licate form")
         # Open goes right after New, as in other document editors.
         open_action = QAction("&Open form…", self.file_menu)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
@@ -126,14 +139,28 @@ class MainWindow(QMainWindow):
         ]
         self.file_menu.insertAction(after_new, open_action)
         self.file_menu.addSeparator()
+        for text, command, key in (
+            ("E&xport as PDF…", self.forms_page.export_pdf, None),
+            ("Print pre&view…", self.forms_page.print_preview, None),
+            ("&Print…", self.forms_page.print_form, QKeySequence.StandardKey.Print),
+        ):
+            action = self.file_menu.addAction(text)
+            if key is not None:
+                action.setShortcut(key)
+            action.triggered.connect(
+                lambda _checked=False, command=command: self._run_in(
+                    self.forms_page, command
+                )
+            )
+        self.file_menu.addSeparator()
         undo_action = self.file_menu.addAction(
-            f"U&ndo form change\t{_native(QKeySequence.StandardKey.Undo)}"
+            f"&Undo form change\t{_native(QKeySequence.StandardKey.Undo)}"
         )
         undo_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.undo)
         )
         redo_action = self.file_menu.addAction(
-            f"Re&do form change\t{_native(QKeySequence.StandardKey.Redo)}"
+            f"R&edo form change\t{_native(QKeySequence.StandardKey.Redo)}"
         )
         redo_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.redo)
