@@ -123,7 +123,7 @@ def test_ctrl_number_opens_a_section_and_focuses_its_first_control(
 
     qtbot.keyClick(window, Qt.Key.Key_2, Qt.KeyboardModifier.ControlModifier)
     assert window.stack.currentWidget() is window.text_blocks_page
-    assert window.focusWidget() is window.text_blocks_page.block_list
+    assert window.focusWidget() is window.text_blocks_page.item_list
 
     qtbot.keyClick(window, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
     assert window.focusWidget() is window.organization_page.name_edit

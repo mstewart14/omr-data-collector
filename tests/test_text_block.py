@@ -5,7 +5,8 @@ import sqlite3
 import pytest
 
 from omr_data_collector.constants import TEXT_BLOCK_NAME_MAX_LENGTH
-from omr_data_collector.models.TextBlock import TextBlock, copy_name
+from omr_data_collector.models.naming import copy_name
+from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.storage.text_block_store import (
     delete_text_block,
     list_text_blocks,

@@ -20,7 +20,8 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
 
-PAGE_MODULE = "omr_data_collector.ui.TextBlocksPage"
+# The dialogs are asked by the shared library page.
+PAGE_MODULE = "omr_data_collector.ui.LibraryPage"
 
 
 def make_page(qtbot: QtBot, connection: sqlite3.Connection) -> TextBlocksPage:
@@ -38,7 +39,7 @@ def shown_page(qtbot: QtBot, connection: sqlite3.Connection) -> TextBlocksPage:
 
 
 def list_names(page: TextBlocksPage) -> list[str]:
-    return [page.block_list.item(row).text() for row in range(page.block_list.count())]
+    return [page.item_list.item(row).text() for row in range(page.item_list.count())]
 
 
 def answer_unsaved(mocker: MockerFixture, answer: QMessageBox.StandardButton):
@@ -50,7 +51,7 @@ def test_starts_on_a_new_block_when_there_are_none(
 ) -> None:
     page = make_page(qtbot, connection)
 
-    assert page.block_list.count() == 0
+    assert page.item_list.count() == 0
     assert page.editor_box.title() == "New text block"
     assert not page.duplicate_button.isEnabled()
     assert not page.delete_button.isEnabled()
@@ -94,7 +95,7 @@ def test_create_and_save_a_formatted_block(
     ]
     assert status.args == ['Text block "Instructions" saved.']
     assert list_names(page) == ["Instructions"]
-    assert page.block_list.currentItem().text() == "Instructions"
+    assert page.item_list.currentItem().text() == "Instructions"
     assert page.delete_button.isEnabled()
 
 
@@ -103,7 +104,7 @@ def test_save_reports_missing_and_duplicate_names(
 ) -> None:
     save_text_block(connection, TextBlock(name="Footer", content="Thanks"))
     page = shown_page(qtbot, connection)
-    page.new_block()
+    page.new_item()
 
     page.save()
     assert page.error_labels["name"].text() == "Enter a name for the text block."
@@ -141,12 +142,12 @@ def test_duplicate_saves_a_renamed_copy_and_selects_it(
     page = make_page(qtbot, connection)
 
     with qtbot.waitSignal(page.status_message) as status:
-        page.duplicate_block()
+        page.duplicate_item()
 
     names = sorted(block.name for block in list_text_blocks(connection))
     assert names == ["Footer", "Footer (copy)"]
     assert page.name_edit.text() == "Footer (copy)"
-    assert page.block_list.currentItem().text() == "Footer (copy)"
+    assert page.item_list.currentItem().text() == "Footer (copy)"
     assert status.args == ['Duplicated "Footer" as "Footer (copy)".']
 
 
@@ -156,14 +157,14 @@ def test_delete_asks_first_and_moves_to_the_next_block(
     for name in ("A", "B", "C"):
         save_text_block(connection, TextBlock(name=name, content="x"))
     page = make_page(qtbot, connection)
-    page.block_list.setCurrentRow(1)
+    page.item_list.setCurrentRow(1)
     confirm = mocker.patch(f"{PAGE_MODULE}.confirm_destructive", return_value=False)
 
-    page.delete_block()
+    page.delete_item()
     assert list_names(page) == ["A", "B", "C"]
 
     confirm.return_value = True
-    page.delete_block()
+    page.delete_item()
 
     assert list_names(page) == ["A", "C"]
     assert page.name_edit.text() == "C"
@@ -177,9 +178,9 @@ def test_deleting_the_last_block_leaves_a_new_one(
     page = make_page(qtbot, connection)
     mocker.patch(f"{PAGE_MODULE}.confirm_destructive", return_value=True)
 
-    page.delete_block()
+    page.delete_item()
 
-    assert page.block_list.count() == 0
+    assert page.item_list.count() == 0
     assert page.editor_box.title() == "New text block"
 
 
@@ -205,10 +206,10 @@ def test_switching_blocks_asks_about_unsaved_changes(  # noqa: PLR0913
     page.editor.setPlainText("Edited")
     answer_unsaved(mocker, answer)
 
-    page.block_list.setCurrentRow(1)
+    page.item_list.setCurrentRow(1)
 
     assert (page.name_edit.text() == "B") == switched
-    assert page.block_list.currentItem().text() == ("B" if switched else "A")
+    assert page.item_list.currentItem().text() == ("B" if switched else "A")
     stored = {
         block.name: block.content.strip() for block in list_text_blocks(connection)
     }
@@ -223,7 +224,7 @@ def test_new_with_unsaved_changes_can_be_cancelled(
     page.editor.setPlainText("Edited")
     answer_unsaved(mocker, QMessageBox.StandardButton.Cancel)
 
-    page.new_block()
+    page.new_item()
 
     assert page.name_edit.text() == "A"
     assert page.editor.toPlainText() == "Edited"
@@ -306,9 +307,9 @@ def test_ctrl_n_starts_a_new_block_and_ctrl_s_saves_it(
 ) -> None:
     save_text_block(connection, TextBlock(name="A", content="x"))
     page = shown_page(qtbot, connection)
-    page.block_list.setFocus()
+    page.item_list.setFocus()
 
-    qtbot.keyClick(page.block_list, Qt.Key.Key_N, Qt.KeyboardModifier.ControlModifier)
+    qtbot.keyClick(page.item_list, Qt.Key.Key_N, Qt.KeyboardModifier.ControlModifier)
     assert page.editor_box.title() == "New text block"
     assert page.focusWidget() is page.name_edit
 
@@ -329,8 +330,8 @@ def test_delete_key_deletes_from_the_list_but_not_the_editor(
     qtbot.keyClick(page.editor, Qt.Key.Key_Delete)
     confirm.assert_not_called()
 
-    page.block_list.setFocus()
-    qtbot.keyClick(page.block_list, Qt.Key.Key_Delete)
+    page.item_list.setFocus()
+    qtbot.keyClick(page.item_list, Qt.Key.Key_Delete)
     confirm.assert_called_once()
 
 
@@ -388,7 +389,7 @@ def test_tab_order_follows_the_screen(
 ) -> None:
     page = make_page(qtbot, connection)
     expected = [
-        page.block_list,
+        page.item_list,
         page.new_button,
         page.duplicate_button,
         page.delete_button,
