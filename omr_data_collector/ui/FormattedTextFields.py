@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSignalBlocker, Qt
-from PySide6.QtGui import QFont, QKeySequence, QTextListFormat
+from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
+from PySide6.QtGui import QFont, QKeySequence, QPalette, QTextListFormat
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QToolButton, QWidget
 
 from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
+from omr_data_collector.ui.format_icons import format_icon
 from omr_data_collector.ui.TextBlockEditor import HEADING_LEVELS, TextBlockEditor
 
 if TYPE_CHECKING:
@@ -24,6 +25,8 @@ PARAGRAPH_STYLES = (
 HEADING_SHORTCUTS = {level: f"Ctrl+Alt+{level}" for level in (0, *HEADING_LEVELS)}
 BULLETED_LIST_SHORTCUT = "Ctrl+Shift+8"
 NUMBERED_LIST_SHORTCUT = "Ctrl+Shift+7"
+MIN_ICON_PX = 16
+ICON_EXTRA_PX = 2
 
 
 class FormattedTextFields:
@@ -77,10 +80,14 @@ class FormattedTextFields:
         if not grow:
             self.editor.setMaximumHeight(height)
 
-        self.bold_button = _format_button("Bold", "Ctrl+B")
-        self.italic_button = _format_button("Italic", "Ctrl+I")
-        self.bulleted_button = _format_button("Bulleted list", BULLETED_LIST_SHORTCUT)
-        self.numbered_button = _format_button("Numbered list", NUMBERED_LIST_SHORTCUT)
+        self.bold_button = FormatButton("Bold", "bold", "Ctrl+B")
+        self.italic_button = FormatButton("Italic", "italic", "Ctrl+I")
+        self.bulleted_button = FormatButton(
+            "Bulleted list", "bulleted_list", BULLETED_LIST_SHORTCUT
+        )
+        self.numbered_button = FormatButton(
+            "Numbered list", "numbered_list", NUMBERED_LIST_SHORTCUT
+        )
         self._format_buttons = (
             self.bold_button,
             self.italic_button,
@@ -190,16 +197,39 @@ class FormattedTextFields:
         del blockers
 
 
-def _format_button(text: str, shortcut: str) -> QToolButton:
-    button = QToolButton()
-    button.setText(text)
-    button.setCheckable(True)
-    # Reachable with Tab like any other control; QToolButton defaults to
-    # mouse-only focus.
-    button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-    shortcut_text = QKeySequence(shortcut).toString(
-        QKeySequence.SequenceFormat.NativeText
-    )
-    button.setToolTip(f"{text} ({shortcut_text})")
-    button.setAccessibleDescription(f"Shortcut: {shortcut_text}")
-    return button
+class FormatButton(QToolButton):
+    """A checkable formatting button showing an icon, named in words.
+
+    The words stay the button's text, so screen readers announce "Bold" (and its
+    checked state); only the picture is shown. The icon is drawn in the theme's
+    text color, sized to the font, and redrawn when either changes.
+    """
+
+    def __init__(self, text: str, icon_name: str, shortcut: str) -> None:
+        super().__init__()
+        self.icon_name = icon_name
+        self.setText(text)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.setCheckable(True)
+        # Reachable with Tab like any other control; QToolButton defaults to
+        # mouse-only focus.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        shortcut_text = QKeySequence(shortcut).toString(
+            QKeySequence.SequenceFormat.NativeText
+        )
+        self.setToolTip(f"{text} ({shortcut_text})")
+        self.setAccessibleName(text)
+        self.setAccessibleDescription(f"Shortcut: {shortcut_text}")
+        self._draw_icon()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt override)
+        if event.type() in {QEvent.Type.PaletteChange, QEvent.Type.FontChange}:
+            self._draw_icon()
+        super().changeEvent(event)
+
+    def _draw_icon(self) -> None:
+        # As tall as a line of text, so it grows with large system fonts.
+        size = max(self.fontMetrics().height() + ICON_EXTRA_PX, MIN_ICON_PX)
+        color = self.palette().color(QPalette.ColorRole.ButtonText)
+        self.setIconSize(QSize(size, size))
+        self.setIcon(format_icon(self.icon_name, color, size, self.devicePixelRatioF()))

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAccessible, QColor, QPalette
+from PySide6.QtGui import QAccessible, QColor, QFont, QPalette
 from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit, QWidget
 
 from omr_data_collector.models.Organization import Organization
@@ -18,6 +18,7 @@ from omr_data_collector.ui.accessibility import (
 )
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OrganizationPage import FORM_FIELDS, OrganizationPage
+from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
 
 if TYPE_CHECKING:
     import sqlite3
@@ -264,3 +265,55 @@ def test_status_messages_are_announced(
 
     announce_mock.assert_called_once_with(window, "Organization saved.")
     assert window.statusBar().currentMessage() == "Organization saved."
+
+
+# --- Formatting buttons -------------------------------------------------------------
+
+
+def icon_colors(button) -> set[str]:
+    """The opaque colors in a button's icon."""
+    image = button.icon().pixmap(button.iconSize()).toImage()
+    return {
+        image.pixelColor(x, y).name()
+        for x in range(image.width())
+        for y in range(image.height())
+        if image.pixelColor(x, y).alpha() == 255
+    }
+
+
+def test_formatting_buttons_show_icons_but_keep_their_names(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = TextBlocksPage(connection)
+    qtbot.addWidget(page)
+    fields = page.text_fields
+
+    for button, name, tooltip in (
+        (fields.bold_button, "Bold", "Bold (Ctrl+B)"),
+        (fields.italic_button, "Italic", "Italic (Ctrl+I)"),
+        (fields.bulleted_button, "Bulleted list", "Bulleted list (Ctrl+Shift+8)"),
+        (fields.numbered_button, "Numbered list", "Numbered list (Ctrl+Shift+7)"),
+    ):
+        assert button.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonIconOnly
+        assert not button.icon().isNull()
+        assert button.toolTip() == tooltip
+        assert accessible_name(button) == name
+
+
+def test_formatting_icons_follow_the_theme_and_font_size(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = TextBlocksPage(connection)
+    qtbot.addWidget(page)
+    bold = page.text_fields.bold_button
+    dark = QPalette()
+    dark.setColor(QPalette.ColorRole.ButtonText, QColor("#e8eaed"))
+    small = bold.iconSize().height()
+
+    bold.setPalette(dark)
+    large = QFont(bold.font())
+    large.setPointSizeF(large.pointSizeF() * 2)
+    bold.setFont(large)
+
+    assert "#e8eaed" in icon_colors(bold)
+    assert bold.iconSize().height() > small
