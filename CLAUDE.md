@@ -54,10 +54,17 @@ engine bridge.
   is collected (yes/no, one or many choices, written) is an `AnswerSpec`, edited by
   `ui/AnswerFields.py`, which adds its rows to the page's own form; table columns
   reuse both.
-- **Paper sizes come from `layout/`** (`table_layout.py` so far: bubble pitch,
-  written box width, row height, column widths from real font metrics). The table
-  preview uses it now; printing and the OMRChecker template must use the same
-  numbers, never their own, so what is previewed is what is printed and scanned.
+- **Paper positions come from `layout/`:** `form_layout.layout_form` places every
+  block, bubble, writing box and table row on its page, in millimetres;
+  `table_layout.py` sizes table columns and cells; `text.py` measures and draws text
+  against a fixed 72-dpi reference. `rendering/` draws from those layouts (the
+  editor now, printing next) and the OMRChecker template must read the same
+  layouts, never compute its own, so what is seen is what is printed and scanned.
+- **The form editor** (`ui/FormsPage.py`) is a page view: `BlockPalette` to drag
+  from, `PageCanvas` drawing the real pages (click, drag to reorder, drop to add),
+  and the details panel with the Outline list. Every drag has a keyboard or menu
+  equivalent (WCAG 2.2 "dragging movements"), and the canvas describes its pages
+  in words; keep both true when adding features. Forms open from File > Open form.
 - **Forms keep their own copy of every block** (wiki 50011-50012): editing a
   library block later asks "going forward only" or "everywhere", and "everywhere"
   makes new form versions so sheets already printed still scan.

@@ -379,11 +379,10 @@ def test_tab_order_follows_the_screen(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
     page = make_page(qtbot, connection)
+    # Left to right: the palette, then the form's details; the library list and
+    # its buttons are hidden here (forms open from File > Open form).
     expected = [
-        page.item_list,
-        page.new_button,
-        page.duplicate_button,
-        page.delete_button,
+        *page.block_palette.focus_chain(),
         page.name_edit,
         page.orientation_combo,
         page.block_list,
@@ -395,7 +394,7 @@ def test_tab_order_follows_the_screen(
         page.move_up_button,
         page.move_down_button,
         page.new_page_check,
-        page.table_break_combo,
+        # (If the table doesn't fit is hidden until a table is selected.)
         page.revert_button,
         page.save_button,
     ]
@@ -405,7 +404,13 @@ def test_tab_order_follows_the_screen(
     while len(chain) < len(expected):
         widget = widget.nextInFocusChain()
         inside_spin_box = isinstance(widget.parentWidget(), QAbstractSpinBox)
-        if widget.focusPolicy() & Qt.FocusPolicy.TabFocus and not inside_spin_box:
+        # Tab skips hidden widgets, such as the hidden library list.
+        hidden = not widget.isVisibleTo(page)
+        if (
+            widget.focusPolicy() & Qt.FocusPolicy.TabFocus
+            and not inside_spin_box
+            and not hidden
+        ):
             chain.append(widget)
 
     assert chain == expected

@@ -55,6 +55,8 @@ class LibraryPage(QWidget):
     LIST_LABEL = "&Items"
     NAME_LABEL = "Na&me (required)"
     NEW_HINT = "Enter a name."
+    # Off for pages whose items are opened another way (forms, from File > Open).
+    SHOW_LIBRARY = True
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
@@ -68,8 +70,14 @@ class LibraryPage(QWidget):
         self.shortcuts: list[QShortcut] = []
 
         layout = QHBoxLayout(self)
-        layout.addWidget(self._build_library_box(), stretch=1)
-        layout.addWidget(self._build_editor_box(), stretch=3)
+        library_box = self._build_library_box()
+        if self.SHOW_LIBRARY:
+            layout.addWidget(library_box, stretch=1)
+        else:
+            # Still there for its list and buttons' state, just not shown.
+            library_box.setParent(self)
+            library_box.hide()
+        layout.addWidget(self.wrap_editor(self._build_editor_box()), stretch=3)
         self._connect_signals()
         self.initial_focus: QWidget = self.item_list
 
@@ -104,6 +112,10 @@ class LibraryPage(QWidget):
 
     def list_items(self) -> list[Any]:
         raise NotImplementedError
+
+    def wrap_editor(self, editor_box: QWidget) -> QWidget:
+        """Put more around the editor (the form pages); the editor alone by default."""
+        return editor_box
 
     def store_item(self, item: Any) -> None:  # noqa: ANN401
         raise NotImplementedError
@@ -176,6 +188,23 @@ class LibraryPage(QWidget):
         self._edit(stored)
         self.status_message.emit(self.saved_message(stored))
         return True
+
+    def open_item(self, item_id: str) -> bool:
+        """Open a saved item, asking about unsaved changes first; False if not."""
+        if item_id == self._editing_id and self._current is not None:
+            return True
+        item = next(
+            (other for other in self._items if self.item_id(other) == item_id), None
+        )
+        if item is None or not self._resolve_unsaved_changes():
+            return False
+        self._select(item_id)
+        self._edit(item)
+        return True
+
+    def items(self) -> list[Any]:
+        """The saved items, as last listed."""
+        return list(self._items)
 
     def save_from_user(self) -> None:
         """Save because the person asked to (Save, Ctrl+S, Enter, the menu)."""

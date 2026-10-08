@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Callable
 
-    from PySide6.QtGui import QAction, QCloseEvent
+    from PySide6.QtGui import QCloseEvent
 
     from omr_data_collector.ui.LibraryPage import LibraryPage
 
@@ -49,7 +49,8 @@ class MainWindow(QMainWindow):
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
-        self.resize(1200, 800)
+        # Room for the form editor's pages beside its palette and details.
+        self.resize(1400, 900)
 
         self.organization_page = OrganizationPage(connection)
         self.text_blocks_page = TextBlocksPage(connection)
@@ -120,6 +121,13 @@ class MainWindow(QMainWindow):
         """
         menu_bar = self.menuBar()
         self.file_menu = self._library_menu(menu_bar, "&File", "form", self.forms_page)
+        # Open goes right after New, as in other document editors.
+        open_action = QAction("&Open form…", self.file_menu)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(
+            lambda: self._run_in(self.forms_page, self.forms_page.open_from_list)
+        )
+        self.file_menu.insertAction(self.file_menu.actions()[1], open_action)
         self.file_menu.addSeparator()
         organization = self.file_menu.addAction("&Organization details…")
         organization.triggered.connect(

@@ -40,6 +40,25 @@ def build_organization_payload(organization: Organization) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
 
 
+def build_form_payload(
+    organization_id: str, form_id: str, form_version: int, page: int
+) -> str:
+    """The QR code for one page of one printed version of a form.
+
+    The page number lets a scanned sheet be matched to its page of the template
+    even when the pages of a multi-page form come back shuffled.
+    """
+    payload = {
+        "type": QR_PAYLOAD_TYPES.FORM,
+        "version": QR_PAYLOAD_VERSION,
+        "organizationId": organization_id,
+        "formId": form_id,
+        "formVersion": form_version,
+        "page": page,
+    }
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+
+
 def parse_payload(text: str) -> dict[str, Any]:
     """Decode the text read from one of our QR codes.
 

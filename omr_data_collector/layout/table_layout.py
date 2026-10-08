@@ -9,9 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from PySide6.QtGui import QFont, QFontMetricsF
-
 from omr_data_collector.constants import ANSWER_TYPES
+from omr_data_collector.layout.text import (  # noqa: F401 (MM_PER_POINT re-exported)
+    MM_PER_POINT,
+    line_height_mm,
+    text_width_mm,
+)
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 
 if TYPE_CHECKING:
@@ -29,10 +32,6 @@ CELL_PADDING_MM = 1.5
 HEADER_POINT_SIZE = 8
 CHOICE_LABEL_POINT_SIZE = 7
 LABEL_GAP_MM = 1.0
-MM_PER_POINT = 25.4 / 72
-# Text is measured at a fixed pixel size, so the result doesn't depend on the
-# screen's resolution, then scaled to the point size printed.
-MEASURING_PIXEL_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -61,26 +60,6 @@ class TableLayout:
         """How many rows fit below the header on one page."""
         room = printable_height_mm - self.header_height_mm
         return max(int(room // self.row_height_mm), 0)
-
-
-def text_width_mm(text: str, point_size: float, *, bold: bool = False) -> float:
-    """The printed width of one line of ``text`` at ``point_size``."""
-    font = QFont()
-    font.setPixelSize(MEASURING_PIXEL_SIZE)
-    font.setBold(bold)
-    advance = QFontMetricsF(font).horizontalAdvance(text)
-    return advance / MEASURING_PIXEL_SIZE * point_size * MM_PER_POINT
-
-
-def line_height_mm(point_size: float) -> float:
-    font = QFont()
-    font.setPixelSize(MEASURING_PIXEL_SIZE)
-    return (
-        QFontMetricsF(font).lineSpacing()
-        / MEASURING_PIXEL_SIZE
-        * point_size
-        * MM_PER_POINT
-    )
 
 
 def choice_pitch_mm(answer: AnswerSpec) -> float:
@@ -140,3 +119,26 @@ def table_layout(table: TableBlock) -> TableLayout:
         row_height_mm=ROW_HEIGHT_MM,
         rows=table.rows,
     )
+
+
+# Written boxes in a table row; shorter than a question's so rows stay compact.
+TABLE_BOX_HEIGHT_MM = 6.0
+
+
+def cell_bubble_centres_mm(column: Column, layout: ColumnLayout) -> list[float]:
+    """Each choice bubble's centre across its cell, from the column's left edge."""
+    count = len(column.answer.choices)
+    if column.answer.answer_type == ANSWER_TYPES.WRITTEN or not count:
+        return []
+    pitch = (layout.width_mm - 2 * CELL_PADDING_MM) / count
+    return [CELL_PADDING_MM + (index + 0.5) * pitch for index in range(count)]
+
+
+def cell_box_lefts_mm(column: Column, layout: ColumnLayout) -> list[float]:
+    """Each written box's left edge, centred in its cell, from the column's left."""
+    if column.answer.answer_type != ANSWER_TYPES.WRITTEN:
+        return []
+    boxes = column.answer.characters()
+    inner = layout.width_mm - 2 * CELL_PADDING_MM
+    left = CELL_PADDING_MM + (inner - boxes * WRITTEN_BOX_WIDTH_MM) / 2
+    return [left + box * WRITTEN_BOX_WIDTH_MM for box in range(boxes)]

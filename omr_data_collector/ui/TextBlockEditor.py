@@ -14,16 +14,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QTextEdit
 
+from omr_data_collector.layout.text import MARKDOWN_FEATURES
+
 if TYPE_CHECKING:
     from PySide6.QtCore import QMimeData
     from PySide6.QtGui import QTextBlock
 
-# GitHub-flavoured Markdown without raw HTML: anything HTML-like is kept as literal
-# text, so a stored block can only ever hold the formatting the toolbar offers.
-MARKDOWN_FEATURES = (
-    QTextDocument.MarkdownFeature.MarkdownDialectGitHub
-    | QTextDocument.MarkdownFeature.MarkdownNoHTML
-)
 
 HEADING_LEVELS = (1, 2, 3)
 # Qt's Markdown importer sizes headings this way (level 1 largest), so headings set

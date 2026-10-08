@@ -119,6 +119,7 @@ def test_file_menu_holds_the_form_commands(
 
     assert menu_texts(window.file_menu) == [
         "&New form",
+        "&Open form…",
         "&Save form",
         "&Revert form",
         "D&uplicate form",

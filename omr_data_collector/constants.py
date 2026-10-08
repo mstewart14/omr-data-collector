@@ -24,6 +24,7 @@ PAGE_ORIENTATIONS = DotMap(
 QR_PAYLOAD_TYPES = DotMap(
     {
         "ORGANIZATION": "organization",
+        "FORM": "form",
     },
     _dynamic=False,
 )

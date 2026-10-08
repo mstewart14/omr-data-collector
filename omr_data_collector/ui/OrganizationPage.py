@@ -32,6 +32,7 @@ from omr_data_collector.identity.qr_code import (
     qr_code_png,
     save_qr_code,
 )
+from omr_data_collector.layout.page_setup import page_layout
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.organization_store import (
     load_organization,
@@ -42,7 +43,6 @@ from omr_data_collector.ui.accessibility import (
     style_error_label,
 )
 from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
-from omr_data_collector.ui.page_setup import page_layout
 from omr_data_collector.ui.qr_printing import paint_organization_qr_page
 
 if TYPE_CHECKING:
