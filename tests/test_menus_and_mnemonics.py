@@ -49,6 +49,12 @@ def native(key: QKeySequence.StandardKey) -> str:
     return QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)
 
 
+def section_key(number: int) -> str:
+    return QKeySequence(f"Ctrl+{number}").toString(
+        QKeySequence.SequenceFormat.NativeText
+    )
+
+
 def make_window(qtbot: QtBot, connection: sqlite3.Connection) -> MainWindow:
     window = MainWindow(connection)
     qtbot.addWidget(window)
@@ -74,10 +80,11 @@ def test_menu_letters_are_what_pages_avoid(
             window.text_menu,
             window.question_menu,
             window.table_menu,
+            window.preferences_menu,
         )
     ]
 
-    assert titles == ["&File", "&Text", "&Question", "T&able"]
+    assert titles == ["&File", "&Text", "&Question", "T&able", "&Preferences"]
     assert set(mnemonics_of(titles)) == MENU_MNEMONICS
 
 
@@ -123,6 +130,7 @@ def test_file_menu_holds_the_form_commands(
     window = make_window(qtbot, connection)
 
     assert menu_texts(window.file_menu) == [
+        f"Form &editor\t{section_key(1)}",
         "&New form",
         "&Open form…",
         "&Save form",
@@ -131,12 +139,33 @@ def test_file_menu_holds_the_form_commands(
         "&Delete form…",
         f"U&ndo form change\t{native(QKeySequence.StandardKey.Undo)}",
         f"Re&do form change\t{native(QKeySequence.StandardKey.Redo)}",
-        "&Organization details…",
         "&Quit",
     ]
-    assert menu_texts(window.question_menu)[0] == "&New question"
-    assert menu_texts(window.table_menu)[0] == "&New table"
-    assert menu_texts(window.text_menu)[0] == "&New text block"
+
+
+def test_each_library_menu_opens_its_library_first(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+
+    assert menu_texts(window.text_menu)[:2] == [
+        f"Text block &library\t{section_key(2)}",
+        "&New text block",
+    ]
+    assert menu_texts(window.question_menu)[:2] == [
+        f"Question &library\t{section_key(3)}",
+        "&New question",
+    ]
+    assert menu_texts(window.table_menu)[:2] == [
+        f"Table &library\t{section_key(4)}",
+        "&New table",
+    ]
+    assert menu_texts(window.preferences_menu) == [
+        f"&Organization details…\t{section_key(5)}"
+    ]
+
+    window.question_menu.actions()[0].trigger()
+    assert window.stack.currentWidget() is window.questions_page
 
 
 def test_a_menu_command_opens_its_section_and_acts_there(
@@ -144,7 +173,9 @@ def test_a_menu_command_opens_its_section_and_acts_there(
 ) -> None:
     save_text_block(connection, TextBlock(name="Footer", content="Thanks"))
     window = make_window(qtbot, connection)
-    new_text = window.text_menu.actions()[0]
+    new_text = next(
+        a for a in window.text_menu.actions() if a.text() == "&New text block"
+    )
 
     new_text.trigger()
 
@@ -160,8 +191,13 @@ def test_menu_commands_are_enabled_like_the_pages_buttons(
 
     menu.aboutToShow.emit()
 
-    enabled = {action.text(): action.isEnabled() for action in menu.actions()}
+    enabled = {
+        action.text(): action.isEnabled()
+        for action in menu.actions()
+        if not action.isSeparator()
+    }
     assert enabled == {
+        f"Question &library\t{section_key(3)}": True,
         "&New question": True,
         "&Save question": False,
         "&Revert question": False,
@@ -175,11 +211,7 @@ def test_organization_details_opens_the_organization_section(
 ) -> None:
     window = make_window(qtbot, connection)
     window.open_section(3)
-    organization = next(
-        action
-        for action in window.file_menu.actions()
-        if action.text() == "&Organization details…"
-    )
+    (organization,) = window.preferences_menu.actions()
 
     organization.trigger()
 

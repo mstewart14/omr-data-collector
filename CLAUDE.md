@@ -26,7 +26,7 @@ engine bridge.
     sibling of its input (that sibling relation is how Qt tells screen readers the
     label; wrapping an input in a container breaks it) and adds its error row; give
     every field label and main button an Alt+letter mnemonic, unique on its page and
-    never one of the menu bar's letters (`MainWindow.MENU_MNEMONICS`: F, T, Q, A).
+    never one of the menu bar's letters (`MainWindow.MENU_MNEMONICS`: F, T, Q, A, P).
     "Move up/down/left/right" buttons have none. `tests/test_menus_and_mnemonics.py`
     checks every page and dialog, so a clash fails the build;
   - say "(required)" in the label, never only in a placeholder;
@@ -45,8 +45,10 @@ engine bridge.
   - have tests for all of the above (see `tests/test_accessibility.py` and
     `tests/test_text_blocks_page.py`).
 - **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
-  `save()` and `initial_focus`; the window handles section switching (Ctrl+1, 2, …)
-  and the unsaved-changes prompt on close.
+  `save()` and `initial_focus`. There is no sections list: the menu bar is the
+  way around (File = form editor, Text, Question, Table = libraries, Preferences
+  = organization details; Ctrl+1 to Ctrl+5 in that order), so each page gets the
+  whole window. The window also handles the unsaved-changes prompt on close.
 - **Block libraries** (text blocks, questions, and next tables) subclass
   `ui/LibraryPage.py`, which owns the list, New/Duplicate/Delete, the name field,
   Save/Revert and unsaved-change prompts; a subclass adds its fields in

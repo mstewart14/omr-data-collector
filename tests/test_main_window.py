@@ -8,7 +8,11 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMessageBox
 
 from omr_data_collector import APP_NAME
-from omr_data_collector.storage.organization_store import load_organization
+from omr_data_collector.models.Organization import Organization
+from omr_data_collector.storage.organization_store import (
+    load_organization,
+    save_organization,
+)
 from omr_data_collector.storage.text_block_store import list_text_blocks
 from omr_data_collector.ui.MainWindow import MainWindow
 
@@ -25,15 +29,34 @@ def make_window(qtbot: QtBot, connection: sqlite3.Connection) -> MainWindow:
     return window
 
 
-def test_main_window_opens_on_the_organization_page(
+def test_first_run_opens_on_the_organization_details(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
     window = make_window(qtbot, connection)
     window.show()
 
     assert window.isVisible()
-    assert window.windowTitle() == f"Organization - {APP_NAME}"
+    assert window.windowTitle() == f"Organization details - {APP_NAME}"
     assert window.stack.currentWidget() is window.organization_page
+
+
+def test_opens_on_the_form_editor_once_the_organization_is_entered(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    save_organization(connection, Organization(name="Food Bank"))
+
+    window = make_window(qtbot, connection)
+
+    assert window.stack.currentWidget() is window.forms_page
+    assert window.windowTitle() == f"Form editor - {APP_NAME}"
+
+
+def test_there_is_no_sections_list_taking_up_room(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    window = make_window(qtbot, connection)
+
+    assert window.centralWidget() is window.stack
 
 
 def test_page_status_messages_show_in_the_status_bar(
@@ -101,16 +124,15 @@ def test_stays_open_when_saving_on_close_fails(
     assert not event.isAccepted()
 
 
-def test_sections_list_switches_pages_and_titles_the_window(
+def test_opening_a_section_titles_the_window(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
     window = make_window(qtbot, connection)
 
-    window.sections.setCurrentRow(1)
+    window.open_section(1)
 
     assert window.stack.currentWidget() is window.text_blocks_page
     assert window.windowTitle() == f"Text blocks - {APP_NAME}"
-    assert window.sections.accessibleName() == "Sections"
 
 
 def test_ctrl_number_opens_a_section_and_focuses_its_first_control(
@@ -125,8 +147,12 @@ def test_ctrl_number_opens_a_section_and_focuses_its_first_control(
     assert window.stack.currentWidget() is window.text_blocks_page
     assert window.focusWidget() is window.text_blocks_page.item_list
 
-    qtbot.keyClick(window, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+    qtbot.keyClick(window, Qt.Key.Key_5, Qt.KeyboardModifier.ControlModifier)
     assert window.focusWidget() is window.organization_page.name_edit
+
+    qtbot.keyClick(window, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+    assert window.stack.currentWidget() is window.forms_page
+    assert window.focusWidget() is window.forms_page.block_list
 
 
 def test_unsaved_changes_survive_switching_sections(
@@ -161,7 +187,7 @@ def test_close_saves_every_page_with_changes(
 
     window.closeEvent(event)
 
-    assert "Organization, Text blocks" in question.call_args.args[1]
+    assert "Text blocks, Organization details" in question.call_args.args[1]
     assert event.isAccepted()
     assert load_organization(connection) is not None
     assert [block.name for block in list_text_blocks(connection)] == ["Footer"]

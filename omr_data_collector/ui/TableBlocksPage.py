@@ -160,7 +160,7 @@ class TableBlocksPage(LibraryPage):
         self.preview_orientation_combo = QComboBox()
         for value, name in ORIENTATION_NAMES.items():
             self.preview_orientation_combo.addItem(name.capitalize(), value)
-        preview_label = QLabel("&Preview on")
+        preview_label = QLabel("S&how page as")
         preview_label.setBuddy(self.preview_orientation_combo)
         form.addRow(preview_label, self.preview_orientation_combo)
         self.preview = TablePreview()

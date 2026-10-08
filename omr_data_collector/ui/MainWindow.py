@@ -4,18 +4,10 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QListWidget,
-    QMainWindow,
-    QMenu,
-    QMenuBar,
-    QMessageBox,
-    QStackedWidget,
-    QWidget,
-)
+from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QMessageBox, QStackedWidget
 
 from omr_data_collector import APP_NAME
+from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
 from omr_data_collector.ui.FormsPage import FormsPage
@@ -29,19 +21,23 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from PySide6.QtGui import QCloseEvent
+    from PySide6.QtWidgets import QWidget
 
     from omr_data_collector.ui.LibraryPage import LibraryPage
 
 STATUS_MESSAGE_TIMEOUT_MS = 5000
 # The menu bar's Alt+letter keys. No page may use these letters for its own
 # labels and buttons: a letter used twice works for neither.
-MENU_MNEMONICS = frozenset("ftqa")
-# Room beside the longest section name, so it never truncates at larger fonts.
-SECTIONS_PADDING = 32
+MENU_MNEMONICS = frozenset("ftqap")
 
 
 class MainWindow(QMainWindow):
-    """The app window: a list of sections on the left, the chosen section's page.
+    """The app window: the menu bar, and one section's page filling the rest.
+
+    The menus are how sections are reached, like a document editor's: File is
+    the form editor (forms are the documents this app makes); Text, Question and
+    Table are the block libraries; Preferences holds the organization's details.
+    Ctrl+1 to Ctrl+5 open them in that order.
 
     Every page provides ``status_message``, ``has_unsaved_changes()``, ``save()``
     and ``initial_focus`` (the control that gets focus when the page is opened).
@@ -52,59 +48,49 @@ class MainWindow(QMainWindow):
         # Room for the form editor's pages beside its palette and details.
         self.resize(1400, 900)
 
-        self.organization_page = OrganizationPage(connection)
+        self.forms_page = FormsPage(connection)
         self.text_blocks_page = TextBlocksPage(connection)
         self.questions_page = QuestionsPage(connection)
         self.tables_page = TableBlocksPage(connection)
-        self.forms_page = FormsPage(connection)
+        self.organization_page = OrganizationPage(connection)
+        # In menu order, which is also Ctrl+1 to Ctrl+5.
         self.pages: list[tuple[str, OrganizationPage | LibraryPage]] = [
-            ("Organization", self.organization_page),
+            ("Form editor", self.forms_page),
             ("Text blocks", self.text_blocks_page),
             ("Questions", self.questions_page),
             ("Tables", self.tables_page),
-            ("Forms", self.forms_page),
+            ("Organization details", self.organization_page),
         ]
 
-        self.sections = QListWidget()
-        self.sections.setAccessibleName("Sections")
         self.stack = QStackedWidget()
         self.section_shortcuts: list[QShortcut] = []
-        for index, (title, page) in enumerate(self.pages):
-            key = QKeySequence(f"Ctrl+{index + 1}")
-            self.sections.addItem(title)
-            self.sections.item(index).setToolTip(
-                f"{title} ({key.toString(QKeySequence.SequenceFormat.NativeText)})"
-            )
+        for index, (_, page) in enumerate(self.pages):
             self.stack.addWidget(page)
             page.status_message.connect(self.show_status)
-            shortcut = QShortcut(key, self)
+            shortcut = QShortcut(_section_key(index), self)
             shortcut.activated.connect(
                 lambda index=index: self.open_section(index, focus_page=True)
             )
             self.section_shortcuts.append(shortcut)
-        self.sections.setFixedWidth(
-            self.sections.sizeHintForColumn(0) + SECTIONS_PADDING
-        )
-        self.sections.currentRowChanged.connect(self.open_section)
-
-        central = QWidget()
-        layout = QHBoxLayout(central)
-        layout.addWidget(self.sections)
-        layout.addWidget(self.stack, stretch=1)
-        self.setCentralWidget(central)
+        self.setCentralWidget(self.stack)
         self._build_menus()
-        self.open_section(0)
+
+        # The form editor is the main work; before the organization is entered,
+        # that comes first, since every form's header shows it.
+        first = (
+            self.forms_page
+            if load_organization(connection) is not None
+            else self.organization_page
+        )
+        self.open_section(self._index_of(first))
 
     def open_section(self, index: int, *, focus_page: bool = False) -> None:
         """Show a section's page, which keeps any unsaved changes while hidden.
 
-        Opened by keyboard shortcut, focus moves into the page so its first
-        control is announced; picked in the list, focus stays in the list so the
-        arrow keys keep moving through the sections.
+        From a menu or shortcut, focus moves into the page so its first control
+        is announced.
         """
         title, page = self.pages[index]
-        if self.sections.currentRow() != index:
-            self.sections.setCurrentRow(index)
         self.stack.setCurrentWidget(page)
         # The title names the section, so it's announced with the window and
         # shown in the task bar.
@@ -115,22 +101,30 @@ class MainWindow(QMainWindow):
     def _build_menus(self) -> None:
         """A menu per kind of document, like a word processor's menu bar.
 
-        File holds the forms, as the documents this app makes; Text, Question
-        and Table hold the reusable blocks. Each command opens its section and
-        acts there, so the result is always in view.
+        Each command opens its section and acts there, so the result is always
+        in view. Shortcuts that belong to a section (Ctrl+N, Ctrl+Z…) are shown
+        after a tab in the item's text, which Qt displays without binding them,
+        so the section's own keys keep working.
         """
         menu_bar = self.menuBar()
-        self.file_menu = self._library_menu(menu_bar, "&File", "form", self.forms_page)
+        self.file_menu = self._library_menu(
+            menu_bar, "&File", "form", self.forms_page, "Form &editor"
+        )
         # Open goes right after New, as in other document editors.
         open_action = QAction("&Open form…", self.file_menu)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(
             lambda: self._run_in(self.forms_page, self.forms_page.open_from_list)
         )
-        self.file_menu.insertAction(self.file_menu.actions()[1], open_action)
-        # Undo and Redo for the form being edited. The keys belong to the form
-        # editor (so a text field's own Ctrl+Z still undoes typing there); the
-        # menu shows them after a tab, which Qt displays without binding them.
+        new_form = next(
+            action
+            for action in self.file_menu.actions()
+            if action.text() == "&New form"
+        )
+        after_new = self.file_menu.actions()[
+            self.file_menu.actions().index(new_form) + 1
+        ]
+        self.file_menu.insertAction(after_new, open_action)
         self.file_menu.addSeparator()
         undo_action = self.file_menu.addAction(
             f"U&ndo form change\t{_native(QKeySequence.StandardKey.Undo)}"
@@ -151,30 +145,40 @@ class MainWindow(QMainWindow):
             )
         )
         self.file_menu.addSeparator()
-        organization = self.file_menu.addAction("&Organization details…")
-        organization.triggered.connect(
-            lambda: self.open_section(
-                self._index_of(self.organization_page), focus_page=True
-            )
-        )
-        self.file_menu.addSeparator()
         quit_action = self.file_menu.addAction("&Quit")
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
+
         self.text_menu = self._library_menu(
-            menu_bar, "&Text", "text block", self.text_blocks_page
+            menu_bar,
+            "&Text",
+            "text block",
+            self.text_blocks_page,
+            "Text block &library",
         )
         self.question_menu = self._library_menu(
-            menu_bar, "&Question", "question", self.questions_page
+            menu_bar, "&Question", "question", self.questions_page, "Question &library"
         )
         self.table_menu = self._library_menu(
-            menu_bar, "T&able", "table", self.tables_page
+            menu_bar, "T&able", "table", self.tables_page, "Table &library"
+        )
+
+        self.preferences_menu = menu_bar.addMenu("&Preferences")
+        self._go_to_action(
+            self.preferences_menu, "&Organization details…", self.organization_page
         )
 
     def _library_menu(
-        self, menu_bar: QMenuBar, title: str, noun: str, page: LibraryPage
+        self,
+        menu_bar: QMenuBar,
+        title: str,
+        noun: str,
+        page: LibraryPage,
+        section_title: str,
     ) -> QMenu:
         menu = menu_bar.addMenu(title)
+        self._go_to_action(menu, section_title, page)
+        menu.addSeparator()
         commands = (
             (f"&New {noun}", page.new_item, None),
             (f"&Save {noun}", page.save_from_user, page.save_button),
@@ -198,6 +202,14 @@ class MainWindow(QMainWindow):
 
         menu.aboutToShow.connect(sync)
         return menu
+
+    def _go_to_action(self, menu: QMenu, text: str, page: QWidget) -> QAction:
+        """The item that opens ``page``'s section, showing its Ctrl+number key."""
+        index = self._index_of(page)
+        key = _section_key(index).toString(QKeySequence.SequenceFormat.NativeText)
+        action = menu.addAction(f"{text}\t{key}")
+        action.triggered.connect(lambda: self.open_section(index, focus_page=True))
+        return action
 
     def _run_in(self, page: LibraryPage, command: Callable[[], object]) -> None:
         self.open_section(self._index_of(page), focus_page=True)
@@ -246,6 +258,10 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         event.accept()
+
+
+def _section_key(index: int) -> QKeySequence:
+    return QKeySequence(f"Ctrl+{index + 1}")
 
 
 def _native(key: QKeySequence.StandardKey) -> str:
