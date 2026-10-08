@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from omr_data_collector.constants import (
@@ -13,6 +15,7 @@ from omr_data_collector.layout.table_layout import (
     CELL_PADDING_MM,
     WRITTEN_BOX_WIDTH_MM,
     column_layout,
+    rows_to_print,
     table_layout,
     text_width_mm,
 )
@@ -149,3 +152,31 @@ def test_summary_for_a_table_without_columns() -> None:
     )
 
     assert summary == "Add columns to preview the table on A4 portrait."
+
+
+def test_fixed_tables_print_their_row_count_wherever_they_are() -> None:
+    table = wide_table(rows=7)
+
+    assert rows_to_print(table, 500) == 7
+    assert rows_to_print(table, 20) == 7
+
+
+def test_filled_tables_print_every_row_that_fits_below_them() -> None:
+    table = replace(wide_table(), fill_page=True)
+    header = table_layout(table).header_height_mm
+
+    assert rows_to_print(table, header + 8 * 10) == 10
+    assert rows_to_print(table, header + 8 * 10 - 1) == 9
+    assert rows_to_print(table, header - 1) == 0
+
+
+def test_summary_explains_that_filled_rows_depend_on_placement() -> None:
+    table = replace(wide_table(), fill_page=True)
+
+    summary = fit_summary(table, PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.LANDSCAPE)
+
+    assert "Fills the page:" in summary
+    assert (
+        "rows on Letter landscape when the table starts at the top of a page" in summary
+    )
+    assert "fewer if it's placed lower on a form." in summary

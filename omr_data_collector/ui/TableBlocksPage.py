@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QHBoxLayout,
@@ -113,6 +114,10 @@ class TableBlocksPage(LibraryPage):
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(1, MAX_TABLE_ROWS)
         self.rows_spin.setToolTip("How many rows are printed for people to fill in")
+        self.fill_page_check = QCheckBox("&Fill to end of page")
+        self.fill_page_check.setToolTip(
+            "Print as many rows as fit below the table on its page"
+        )
         self.column_list = QListWidget()
         self.column_list.setMinimumHeight(
             self.column_list.fontMetrics().lineSpacing() * COLUMN_ROWS_VISIBLE
@@ -128,6 +133,8 @@ class TableBlocksPage(LibraryPage):
                 form, label_text, widget
             )
             self.field_widgets[key] = widget
+            if key == "rows":
+                form.addRow("", self.fill_page_check)
 
         self.add_column_button = QPushButton("&Add column…")
         self.edit_column_button = QPushButton("&Edit column…")
@@ -166,6 +173,7 @@ class TableBlocksPage(LibraryPage):
         return [
             *self.text_fields.focus_chain(),
             self.rows_spin,
+            self.fill_page_check,
             self.column_list,
             *self._column_buttons,
             self.preview_orientation_combo,
@@ -173,9 +181,12 @@ class TableBlocksPage(LibraryPage):
 
     def load_fields(self, item: TableBlock | None) -> None:
         self.text_fields.set_markdown(item.instructions if item is not None else "")
-        with QSignalBlocker(self.rows_spin):
+        with QSignalBlocker(self.rows_spin), QSignalBlocker(self.fill_page_check):
             self.rows_spin.setValue(
                 item.rows if item is not None else DEFAULT_TABLE_ROWS
+            )
+            self.fill_page_check.setChecked(
+                item.fill_page if item is not None else False
             )
         self._columns = list(item.columns) if item is not None else []
         self._fill_column_list(0 if self._columns else -1)
@@ -194,6 +205,7 @@ class TableBlocksPage(LibraryPage):
             name=name,
             instructions=self.text_fields.markdown(),
             rows=self.rows_spin.value(),
+            fill_page=self.fill_page_check.isChecked(),
             columns=tuple(self._columns),
             table_block_id=item_id,
         ).normalized()
@@ -212,6 +224,7 @@ class TableBlocksPage(LibraryPage):
             name=name,
             instructions=item.instructions,
             rows=item.rows,
+            fill_page=item.fill_page,
             columns=item.columns,
         )
 
@@ -220,6 +233,8 @@ class TableBlocksPage(LibraryPage):
 
     def update_state(self) -> None:
         super().update_state()
+        # The count is kept but set aside while the table fills its page.
+        self.rows_spin.setEnabled(not self.fill_page_check.isChecked())
         self._update_column_buttons()
         self._refresh_preview()
 
@@ -269,6 +284,7 @@ class TableBlocksPage(LibraryPage):
 
     def _connect_columns(self) -> None:
         self.rows_spin.valueChanged.connect(self.update_state)
+        self.fill_page_check.toggled.connect(self.update_state)
         self.add_column_button.clicked.connect(self.add_column)
         self.edit_column_button.clicked.connect(self.edit_selected_column)
         self.remove_column_button.clicked.connect(self.remove_selected_column)

@@ -59,12 +59,15 @@ class TableBlock:
     """A reusable table: a row per person or visit, a column per thing recorded.
 
     Covers wiki stories 30001-30010. ``instructions`` is Markdown, like a text
-    block's content.
+    block's content. With ``fill_page`` the table gets as many rows as fit below
+    where it is placed on its page, worked out when a form is laid out; ``rows``
+    is kept for when it's turned off.
     """
 
     name: str
     instructions: str = ""
     rows: int = DEFAULT_TABLE_ROWS
+    fill_page: bool = False
     columns: tuple[Column, ...] = ()
     table_block_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 def list_table_blocks(connection: sqlite3.Connection) -> list[TableBlock]:
     """Every saved table, sorted by name ignoring case."""
     rows = connection.execute(
-        "SELECT table_block_id, name, instructions, row_count, columns"
+        "SELECT table_block_id, name, instructions, row_count, fill_page, columns"
         " FROM table_block ORDER BY name COLLATE NOCASE"
     ).fetchall()
     return [
@@ -25,6 +25,7 @@ def list_table_blocks(connection: sqlite3.Connection) -> list[TableBlock]:
             name=row["name"],
             instructions=row["instructions"],
             rows=row["row_count"],
+            fill_page=bool(row["fill_page"]),
             columns=columns_from_list(json.loads(row["columns"])),
         )
         for row in rows
@@ -40,17 +41,20 @@ def save_table_block(connection: sqlite3.Connection, table: TableBlock) -> None:
     with connection:
         connection.execute(
             "INSERT INTO table_block"
-            " (table_block_id, name, instructions, row_count, columns)"
-            " VALUES (:table_block_id, :name, :instructions, :row_count, :columns)"
+            " (table_block_id, name, instructions, row_count, fill_page, columns)"
+            " VALUES (:table_block_id, :name, :instructions, :row_count,"
+            " :fill_page, :columns)"
             " ON CONFLICT(table_block_id) DO UPDATE SET"
             " name = excluded.name, instructions = excluded.instructions,"
-            " row_count = excluded.row_count, columns = excluded.columns,"
+            " row_count = excluded.row_count, fill_page = excluded.fill_page,"
+            " columns = excluded.columns,"
             " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
             {
                 "table_block_id": table.table_block_id,
                 "name": table.name,
                 "instructions": table.instructions,
                 "row_count": table.rows,
+                "fill_page": int(table.fill_page),
                 "columns": json.dumps(columns_to_list(table.columns)),
             },
         )

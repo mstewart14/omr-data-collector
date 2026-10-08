@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from typing import TYPE_CHECKING
 
 import jsonschema
 import pytest
@@ -17,11 +19,15 @@ from omr_data_collector.models.TableBlock import (
     columns_from_list,
     columns_to_list,
 )
+from omr_data_collector.storage.database import MIGRATIONS, open_database
 from omr_data_collector.storage.table_block_store import (
     delete_table_block,
     list_table_blocks,
     save_table_block,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 TIME = Column(
     "time",
@@ -133,3 +139,38 @@ def test_delete(connection: sqlite3.Connection) -> None:
     delete_table_block(connection, VISIT_LOG.table_block_id)
 
     assert list_table_blocks(connection) == []
+
+
+def test_fill_page_setting_is_stored(connection: sqlite3.Connection) -> None:
+    table = TableBlock(name="Log", rows=4, fill_page=True, columns=(TIME,)).normalized()
+
+    save_table_block(connection, table)
+
+    assert list_table_blocks(connection) == [table]
+
+
+def test_tables_saved_before_fill_page_existed_upgrade_to_fixed_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "old.sqlite3"
+    old = sqlite3.connect(path)
+    # The schema as it was before the fill_page migration.
+    for statements in MIGRATIONS[:-1]:
+        for statement in statements:
+            old.execute(statement)
+    old.execute(f"PRAGMA user_version = {len(MIGRATIONS) - 1}")
+    old.execute(
+        "INSERT INTO table_block (table_block_id, name, row_count, columns)"
+        " VALUES (?, 'Old log', 12, ?)",
+        ("a" * 32, json.dumps(columns_to_list((TIME.normalized(),)))),
+    )
+    old.commit()
+    old.close()
+
+    connection = open_database(path)
+    try:
+        (table,) = list_table_blocks(connection)
+    finally:
+        connection.close()
+
+    assert (table.name, table.rows, table.fill_page) == ("Old log", 12, False)

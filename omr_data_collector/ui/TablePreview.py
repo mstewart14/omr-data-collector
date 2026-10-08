@@ -16,6 +16,7 @@ from omr_data_collector.layout.table_layout import (
     MM_PER_POINT,
     WRITTEN_BOX_WIDTH_MM,
     line_height_mm,
+    rows_to_print,
     table_layout,
 )
 from omr_data_collector.ui.page_setup import (
@@ -60,7 +61,12 @@ def fit_summary(table: TableBlock, paper_size: str, orientation: str) -> str:
     else:
         sentence = f"Fits on {page}: {width} of {room} mm wide."
     per_page = layout.rows_per_page(printable_height)
-    if 0 < per_page < table.rows:
+    if table.fill_page:
+        sentence += (
+            f" Fills the page: {per_page} rows on {page} when the table starts at the "
+            "top of a page; fewer if it's placed lower on a form."
+        )
+    elif 0 < per_page < table.rows:
         pages = -(-table.rows // per_page)
         sentence += f" {per_page} rows fit on a page, so the table takes {pages} pages."
     return sentence
@@ -111,7 +117,9 @@ class TablePreview(QWidget):
                 _, printable_height = printable_size_mm(
                     self._paper_size, self._orientation
                 )
-                shown = min(layout.rows, layout.rows_per_page(printable_height))
+                # A table that fills its page is previewed from the top of one.
+                rows = rows_to_print(self._table, printable_height)
+                shown = min(rows, layout.rows_per_page(printable_height))
                 _paint_table(painter, self._table, replace(layout, rows=shown))
         finally:
             painter.end()

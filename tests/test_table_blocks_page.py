@@ -340,6 +340,7 @@ def test_fields_are_labelled_and_mnemonics_unique(
         "Table li&brary",
         "St&yle",
         "&Preview on",
+        "&Fill to end of page",
         *(label.text() for label in page.field_labels.values()),
         *(
             button.text()
@@ -379,6 +380,7 @@ def test_tab_order_follows_the_screen(
         fields.numbered_button,
         fields.editor,
         page.rows_spin,
+        page.fill_page_check,
         page.column_list,
         page.add_column_button,
         page.edit_column_button,
@@ -490,3 +492,43 @@ def test_dialog_fields_are_labelled_with_unique_mnemonics(qtbot: QtBot) -> None:
     mnemonics = [text[text.index("&") + 1].lower() for text in texts]
 
     assert len(mnemonics) == len(set(mnemonics)), mnemonics
+
+
+# --- Fill to end of page ----------------------------------------------------------
+
+
+def test_fill_to_end_of_page_sets_the_row_count_aside(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    save_table_block(connection, TableBlock(name="t", rows=12, columns=(TIME,)))
+    page = make_page(qtbot, connection)
+
+    page.fill_page_check.setChecked(True)
+    assert not page.rows_spin.isEnabled()
+    assert page.has_unsaved_changes()
+    assert "Fills the page:" in page.preview_summary.text()
+    page.save()
+
+    (saved,) = list_table_blocks(connection)
+    assert saved.fill_page
+    assert saved.rows == 12  # kept for when filling is turned off
+
+    page.fill_page_check.setChecked(False)
+    assert page.rows_spin.isEnabled()
+    assert page.rows_spin.value() == 12
+
+
+def test_filled_tables_load_and_duplicate_with_the_setting(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    save_table_block(
+        connection, TableBlock(name="Log", fill_page=True, columns=(TIME,))
+    )
+    page = make_page(qtbot, connection)
+    assert page.fill_page_check.isChecked()
+    assert not page.has_unsaved_changes()
+
+    page.duplicate_item()
+
+    copy = next(t for t in list_table_blocks(connection) if t.name == "Log (copy)")
+    assert copy.fill_page

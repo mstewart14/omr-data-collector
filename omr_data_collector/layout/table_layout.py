@@ -112,6 +112,17 @@ def column_layout(column: Column) -> ColumnLayout:
     )
 
 
+def rows_to_print(table: TableBlock, space_mm: float) -> int:
+    """How many rows the table prints when ``space_mm`` of page height is left.
+
+    A fixed count, or for a table that fills to the end of its page, every row
+    that fits below its header.
+    """
+    if not table.fill_page:
+        return table.rows
+    return table_layout(table).rows_per_page(space_mm)
+
+
 def table_layout(table: TableBlock) -> TableLayout:
     has_example = any(column.example for column in table.columns)
     has_choices = any(

@@ -69,6 +69,10 @@ MIGRATIONS: list[list[str]] = [
         """,
         "CREATE UNIQUE INDEX table_block_name ON table_block (name COLLATE NOCASE)",
     ],
+    [
+        # 1 when the table fills to the end of its page instead of row_count rows.
+        "ALTER TABLE table_block ADD COLUMN fill_page INTEGER NOT NULL DEFAULT 0",
+    ],
 ]
 
 
