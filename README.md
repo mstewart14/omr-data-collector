@@ -51,8 +51,8 @@ uv run pyright
 ## The vendored OMR engine
 
 `vendor/omrchecker/` is OMRChecker v2 (its `dev` branch), added as a squashed git
-subtree pinned to a specific upstream commit. **Don't edit it here.** Fixes go upstream
-as pull requests, then come in with an update:
+subtree pinned to a specific upstream commit. **Don't edit it here**; work around engine
+issues in `omr_data_collector/engine/` instead. To move to a newer upstream commit:
 
 ```bash
 git subtree pull --prefix=vendor/omrchecker --squash \

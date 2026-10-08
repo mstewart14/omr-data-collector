@@ -11,8 +11,11 @@ engine bridge.
   accuracy): "Paper-Based Data Collection: Research Summary",
   <https://claude.ai/artifact/2S9KJacwcZwoW4zJAtZuuv>.
 - **Never edit `vendor/omrchecker/`.** Work around engine issues in
-  `omr_data_collector/engine/` and propose the real fix upstream. Only that package
-  imports from `src` (OMRChecker's package name).
+  `omr_data_collector/engine/`. Only that package imports from `src` (OMRChecker's
+  package name).
+- **Don't open issues or pull requests on OMRChecker**, or contact its maintainers,
+  until the project owner says otherwise: they are first asking the OMRChecker team
+  whether AI-generated contributions are welcome. Note engine bugs in our own issues.
 - **One layout definition:** the form builder's blocks must generate both the printed
   PDF and the OMRChecker `template.json`, so print and scan can't drift apart. Keep a
   round-trip test (generate, render as an image, scan, compare).
