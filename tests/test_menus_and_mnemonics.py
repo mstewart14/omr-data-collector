@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -278,8 +279,11 @@ def test_question_dialog_text_names_the_question(
 
     ask_new_or_keep_working(parent, "question", "first_visit")
 
-    assert seen == {
-        "title": "Question saved",
-        "text": 'Question "first_visit" saved. Start a new question, or keep working '
-        "on this one?",
-    }
+    assert seen["text"] == (
+        'Question "first_visit" saved. Start a new question, or keep working on '
+        "this one?"
+    )
+    # macOS message boxes have no title bar, so Qt drops the title there; the
+    # text above says the same thing.
+    if sys.platform != "darwin":
+        assert seen["title"] == "Question saved"
