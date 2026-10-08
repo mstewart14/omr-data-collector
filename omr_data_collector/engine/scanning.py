@@ -181,7 +181,11 @@ def read_page(
         ScanError: OMRChecker couldn't find the page or its corner markers.
     """
     if work_dir is None:
-        with tempfile.TemporaryDirectory(prefix="omr-scan-") as temporary:
+        # OMRChecker leaves its ErrorFiles.csv open after a sheet it can't read,
+        # which Windows won't delete; the operating system clears it up later.
+        with tempfile.TemporaryDirectory(
+            prefix="omr-scan-", ignore_cleanup_errors=True
+        ) as temporary:
             return read_page(image_path, form, template, Path(temporary))
     input_dir = work_dir / "input"
     output_dir = work_dir / "output"
