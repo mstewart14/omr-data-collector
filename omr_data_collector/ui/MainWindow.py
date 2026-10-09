@@ -23,6 +23,7 @@ from omr_data_collector.i18n import (
 )
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import announce
+from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
 from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
@@ -59,7 +60,7 @@ class MainWindow(QMainWindow):
     the form editor (forms are the documents this app makes); Text, Question and
     Table are the block libraries; Preferences holds the organization's details and the
     language.
-    Ctrl+1 to Ctrl+5 open them in that order.
+    Capture holds the captured sheets. Ctrl+1 to Ctrl+6 open them in that order.
 
     Every page provides ``status_message``, ``has_unsaved_changes()``, ``save()``
     and ``initial_focus`` (the control that gets focus when the page is opened).
@@ -75,13 +76,15 @@ class MainWindow(QMainWindow):
         self.questions_page = QuestionsPage(connection)
         self.tables_page = TableBlocksPage(connection)
         self.organization_page = OrganizationPage(connection)
-        # In menu order, which is also Ctrl+1 to Ctrl+5.
-        self.pages: list[tuple[str, OrganizationPage | LibraryPage]] = [
+        self.capture_page = CapturePage(connection)
+        # In menu order, which is also Ctrl+1 to Ctrl+6.
+        self.pages: list[tuple[str, OrganizationPage | LibraryPage | CapturePage]] = [
             (tr("Form editor"), self.forms_page),
             (tr("Text blocks"), self.text_blocks_page),
             (tr("Questions"), self.questions_page),
             (tr("Tables"), self.tables_page),
             (tr("Organization details"), self.organization_page),
+            (tr("Captured sheets"), self.capture_page),
         ]
 
         self.stack = QStackedWidget()
@@ -241,6 +244,20 @@ class MainWindow(QMainWindow):
             ),
         )
 
+        self.capture_menu = menu_bar.addMenu(tr("&Capture"))
+        self._go_to_action(self.capture_menu, tr("Captured &sheets"), self.capture_page)
+        self.capture_menu.addSeparator()
+        for text, command in (
+            (tr("Add &images…"), self.capture_page.add_images),
+            (tr("&Read waiting sheets"), self.capture_page.read_waiting),
+        ):
+            action = self.capture_menu.addAction(text)
+            action.triggered.connect(
+                lambda _checked=False, command=command: self._run_in(
+                    self.capture_page, command
+                )
+            )
+
         self.preferences_menu = menu_bar.addMenu(tr("&Preferences"))
         self._go_to_action(
             self.preferences_menu, tr("&Organization details…"), self.organization_page
@@ -297,7 +314,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(lambda: self.open_section(index, focus_page=True))
         return action
 
-    def _run_in(self, page: LibraryPage, command: Callable[[], object]) -> None:
+    def _run_in(self, page: QWidget, command: Callable[[], object]) -> None:
         self.open_section(self._index_of(page), focus_page=True)
         command()
 

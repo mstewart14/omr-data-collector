@@ -117,3 +117,20 @@ TABLE_BREAKS = DotMap(
     },
     _dynamic=False,
 )
+
+# Where a captured sheet is in being turned into data (wiki 60001-60004).
+CAPTURE_STATUSES = DotMap(
+    {
+        # Added, not read yet.
+        "WAITING": "WAITING",
+        # Its QR code or corner markers couldn't be read; Capture.problem says why.
+        "UNREADABLE": "UNREADABLE",
+        # Read, waiting for a person to check it against the image.
+        "READ": "READ",
+        # Checked and saved as data.
+        "SAVED": "SAVED",
+        # Checked and turned down: kept, but not part of the data.
+        "REJECTED": "REJECTED",
+    },
+    _dynamic=False,
+)

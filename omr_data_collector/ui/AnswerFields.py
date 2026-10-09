@@ -151,7 +151,7 @@ class AnswerFields:
             row_height * (CHOICE_ROWS_VISIBLE + 1) + 2 * self.choices_table.frameWidth()
         )
 
-        self.add_choice_button = QPushButton(tr("Add &choice"))
+        self.add_choice_button = QPushButton(tr("Add cho&ice"))
         self.remove_choice_button = QPushButton(tr("Remo&ve choice"))
         self.move_up_button = QPushButton(tr("Move up"))
         self.move_down_button = QPushButton(tr("Move down"))

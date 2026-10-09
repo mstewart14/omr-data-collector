@@ -89,16 +89,60 @@ class TemplateField:
 
 
 @dataclass(frozen=True)
+class AnswerRegion:
+    """Where one answer is on the straightened page, bubbles or handwriting.
+
+    A question's region is its whole block (prompt and answer), a table answer's
+    is its cell. ``rect`` is x, y, width and height in template pixels, the same
+    as the straightened page image OMRChecker saves, so the region can be cut out
+    of it for a close-up.
+    """
+
+    block_index: int
+    rect: tuple[int, int, int, int]
+    table_row: int | None = None
+    column: int | None = None
+
+    @property
+    def key(self) -> tuple[int, int | None, int | None]:
+        return self.block_index, self.table_row, self.column
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "blockIndex": self.block_index,
+            "rect": list(self.rect),
+            "tableRow": self.table_row,
+            "column": self.column,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AnswerRegion:
+        x, y, width, height = data["rect"]
+        return cls(
+            block_index=data["blockIndex"],
+            rect=(x, y, width, height),
+            table_row=data["tableRow"],
+            column=data["column"],
+        )
+
+
+@dataclass(frozen=True)
 class PageTemplate:
-    """A page's template.json content and what each of its fields means."""
+    """A page's template.json content, and what each of its fields means.
+
+    ``regions`` says where every answer on the page is, in reading order,
+    written answers included.
+    """
 
     template: dict[str, Any]
     fields: dict[str, TemplateField]
+    regions: tuple[AnswerRegion, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "template": self.template,
             "fields": {label: field.to_dict() for label, field in self.fields.items()},
+            "regions": [region.to_dict() for region in self.regions],
         }
 
     @classmethod
@@ -109,6 +153,9 @@ class PageTemplate:
                 label: TemplateField.from_dict(field)
                 for label, field in data["fields"].items()
             },
+            regions=tuple(
+                AnswerRegion.from_dict(region) for region in data.get("regions", [])
+            ),
         )
 
 
@@ -158,12 +205,26 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
             "fieldLabels": labels,
         }
 
+    def rect(
+        x_mm: float, y_mm: float, width_mm: float, height_mm: float
+    ) -> tuple[int, int, int, int]:
+        x, y = px(x_mm, left), px(y_mm, top)
+        return x, y, px(x_mm + width_mm, left) - x, px(y_mm + height_mm, top) - y
+
+    regions: list[AnswerRegion] = []
     for placed in page.blocks:
         content = placed.block.content
         if isinstance(content, Question) and placed.question is not None:
             _add_question(placed, content, add_block, fields)
+            regions.append(
+                AnswerRegion(
+                    placed.index,
+                    rect(0, placed.y_mm, layout.width_mm, placed.height_mm),
+                )
+            )
         elif isinstance(content, TableBlock) and placed.table_part is not None:
             _add_table_part(placed, content, add_block, fields)
+            regions += _table_regions(placed, rect)
 
     template = {
         "templateDimensions": [px(right, left), px(bottom, top)],
@@ -173,7 +234,7 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
         "customBubbleFieldTypes": bubble_types,
         "fieldBlocks": blocks,
     }
-    return PageTemplate(template=template, fields=fields)
+    return PageTemplate(template=template, fields=fields, regions=tuple(regions))
 
 
 def marker_image() -> np.ndarray:
@@ -233,6 +294,34 @@ def _add_question(placed: PlacedBlock, question: Question, add_block, fields) ->
             [label],
         )
         fields[label] = TemplateField(placed.index, first, len(bubbles))
+
+
+def _table_regions(placed: PlacedBlock, rect) -> list[AnswerRegion]:
+    """Each cell of a table part, row by row."""
+    part = placed.table_part
+    if part is None:
+        return []
+    layout = part.layout
+    top = placed.y_mm + part.grid_top_mm + layout.header_height_mm
+    regions = []
+    for offset in range(part.row_count):
+        x = 0.0
+        for column, column_layout in enumerate(layout.columns):
+            regions.append(
+                AnswerRegion(
+                    placed.index,
+                    rect(
+                        x,
+                        top + offset * layout.row_height_mm,
+                        column_layout.width_mm,
+                        layout.row_height_mm,
+                    ),
+                    table_row=part.first_row + offset,
+                    column=column,
+                )
+            )
+            x += column_layout.width_mm
+    return regions
 
 
 def _add_table_part(placed: PlacedBlock, table: TableBlock, add_block, fields) -> None:

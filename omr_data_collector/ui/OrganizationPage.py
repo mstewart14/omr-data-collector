@@ -262,7 +262,7 @@ class OrganizationPage(QWidget):
         self.qr_hint = QLabel()
         self.qr_hint.setWordWrap(True)
         self.qr_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.save_qr_button = QPushButton(tr("Save QR &code…"))
+        self.save_qr_button = QPushButton(tr("Sa&ve QR code…"))
         self.print_qr_button = QPushButton(tr("Pr&int QR code…"))
         qr_buttons = QHBoxLayout()
         qr_buttons.addWidget(self.save_qr_button)

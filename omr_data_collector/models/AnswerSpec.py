@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 import jsonschema
@@ -20,6 +21,12 @@ from omr_data_collector.constants import (
 from omr_data_collector.i18n import tr
 from omr_data_collector.schemas.answer_spec_schema import ANSWER_SPEC_SCHEMA
 
+# How each date/time format is read when checking a keyed-in value.
+STRPTIME_FORMATS = {
+    "YYYY/MM/DD": "%Y/%m/%d",
+    "HH:MM": "%H:%M",
+    "YYYY/MM/DD HH:MM": "%Y/%m/%d %H:%M",
+}
 LIST_ANSWER_TYPES = {ANSWER_TYPES.ONE_CHOICE, ANSWER_TYPES.MANY_CHOICES}
 CHOICE_ANSWER_TYPES = {ANSWER_TYPES.YES_NO, *LIST_ANSWER_TYPES}
 
@@ -110,6 +117,54 @@ class AnswerSpec:
             for choice in self.choices
         )
         return replace(self, choices=choices, max_characters=max_characters)
+
+    def entry_error(self, values: tuple[str, ...]) -> str:
+        """What is wrong with ``values`` as this answer's data, or "" if nothing.
+
+        For checking what a person settled on when reviewing a captured sheet:
+        choices must be this answer's saved values (one at most where only one is
+        allowed); a written answer is one string, checked against its data type.
+        Nothing at all (an unanswered question) is always allowed.
+        """
+        if not values or values == ("",):
+            return ""
+        if self.answer_type in CHOICE_ANSWER_TYPES:
+            return self._choice_entry_error(values)
+        (text,) = values
+        if self.data_type == WRITTEN_DATA_TYPES.NUMBER:
+            return self._number_entry_error(text)
+        if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
+            return self._date_time_entry_error(text)
+        if len(text) > self.max_characters:
+            return tr("Use at most %n character(s).", None, self.max_characters)
+        return ""
+
+    def _choice_entry_error(self, values: tuple[str, ...]) -> str:
+        outputs = {choice.output for choice in self.choices}
+        if any(value not in outputs for value in values):
+            return tr("Choose from this answer's choices.")
+        if self.answer_type != ANSWER_TYPES.MANY_CHOICES and len(values) > 1:
+            return tr("Only one choice is allowed.")
+        return ""
+
+    def _date_time_entry_error(self, text: str) -> str:
+        try:
+            datetime.strptime(text, STRPTIME_FORMATS[self.date_time_format])  # noqa: DTZ007 (a local date, as written)
+        except ValueError:
+            return tr("Enter a real date or time, written as {format}.").format(
+                format=self.date_time_format
+            )
+        return ""
+
+    def _number_entry_error(self, text: str) -> str:
+        if not text.isdigit():
+            return tr("Enter digits only.")
+        number = int(text)
+        if self.number_minimum is not None and number < self.number_minimum:
+            return tr("Enter {minimum} or more.").format(minimum=self.number_minimum)
+        if self.number_maximum is not None and number > self.number_maximum:
+            return tr("Enter {maximum} or less.").format(maximum=self.number_maximum)
+        return ""
 
     def validation_errors(self) -> dict[str, str]:
         """Map each invalid setting to a message for the person editing it.

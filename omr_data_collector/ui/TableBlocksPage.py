@@ -161,7 +161,7 @@ class TableBlocksPage(LibraryPage):
             if key == "rows":
                 form.addRow("", self.fill_page_check)
 
-        self.add_column_button = QPushButton(tr("Add &column…"))
+        self.add_column_button = QPushButton(tr("Add co&lumn…"))
         self.edit_column_button = QPushButton(tr("&Edit column…"))
         self.remove_column_button = QPushButton(tr("Remo&ve column"))
         self.move_left_button = QPushButton(tr("Move left"))

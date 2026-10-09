@@ -107,6 +107,29 @@ MIGRATIONS: list[list[str]] = [
         # whatever fonts or paper size the computer scanning them has.
         "ALTER TABLE form_version ADD COLUMN printed_layout TEXT",
     ],
+    [
+        # A photo or scan of a filled-in page (wiki 60001-60004). The image is
+        # kept as a copy in the captures folder beside the database.
+        """
+        CREATE TABLE capture (
+            capture_id TEXT PRIMARY KEY,
+            file_name TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            -- SHA-256 of the image file, so the same image isn't captured twice.
+            content_hash TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            problem TEXT NOT NULL DEFAULT '',
+            -- Which printed page it is, from its QR code, once read.
+            form_id TEXT,
+            form_version INTEGER,
+            page INTEGER,
+            -- Capture.answers as JSON: as read, and as reviewed.
+            answers TEXT NOT NULL DEFAULT '[]',
+            added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """,
+    ],
 ]
 
 

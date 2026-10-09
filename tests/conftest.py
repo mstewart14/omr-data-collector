@@ -10,13 +10,22 @@ from PySide6.QtCore import QLocale, QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from omr_data_collector.i18n import available_languages, install_translators
+from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.database import open_database
+from omr_data_collector.storage.form_store import mark_printed, save_form
+from omr_data_collector.storage.organization_store import save_organization
+from tests.sheets import intake_form
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator
 
     from pytest_mock import MockerFixture
+
+    from omr_data_collector.layout.form_layout import FormLayout
+    from omr_data_collector.models.Form import Form
 
 # Lets Qt run without a display (CI, containers, SSH sessions). Set before pytest-qt
 # creates the QApplication.
@@ -74,3 +83,22 @@ def fail_on_unexpected_dialogs(mocker: MockerFixture) -> None:
     for name in ("question", "warning", "information", "critical"):
         mocker.patch.object(QMessageBox, name, side_effect=unexpected)
     mocker.patch.object(QMessageBox, "exec", side_effect=unexpected)
+
+
+@pytest.fixture
+def organization(connection: sqlite3.Connection) -> Organization:
+    """A saved organization, so forms can be printed."""
+    organization = Organization("Food Bank")
+    save_organization(connection, organization)
+    return organization
+
+
+@pytest.fixture
+def printed_form(
+    connection: sqlite3.Connection, organization: Organization
+) -> tuple[Form, FormLayout]:
+    """The intake form (``tests.sheets``), saved and printed, with its layout."""
+    form = save_form(connection, intake_form())
+    layout = layout_form(form, organization.paper_size)
+    mark_printed(connection, form.form_id, form.version, printed_layout(layout))
+    return form, layout

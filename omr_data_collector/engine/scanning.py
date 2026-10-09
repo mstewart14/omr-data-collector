@@ -93,6 +93,8 @@ class ScannedAnswer:
 class ScannedPage:
     identity: SheetIdentity
     form: Form
+    # The page as printed: its fields, and where each answer is.
+    template: PageTemplate
     answers: tuple[ScannedAnswer, ...]
 
 
@@ -140,8 +142,12 @@ def scan_sheet(
     image_path: Path,
     paper_size: str,
     work_dir: Path | None = None,
+    page_image: Path | None = None,
 ) -> ScannedPage:
     """Identify a filled-in page and read its bubbles.
+
+    ``page_image`` is where to save the straightened page, as OMRChecker saw it
+    (see ``read_page``).
 
     ``paper_size`` is only used for a version stored before page templates were
     kept with printed versions; otherwise the stored templates are used, so the
@@ -164,8 +170,8 @@ def scan_sheet(
         ).format(version=identity.form_version)
         raise ScanError(msg)
     template = _stored_page_template(connection, form, identity, paper_size)
-    answers = read_page(image_path, form, template, work_dir)
-    return ScannedPage(identity=identity, form=form, answers=answers)
+    answers = read_page(image_path, form, template, work_dir, page_image)
+    return ScannedPage(identity=identity, form=form, template=template, answers=answers)
 
 
 def read_page(
@@ -173,11 +179,15 @@ def read_page(
     form: Form,
     template: PageTemplate,
     work_dir: Path | None = None,
+    page_image: Path | None = None,
 ) -> tuple[ScannedAnswer, ...]:
     """Run OMRChecker on one page image with its template.
 
     ``work_dir`` keeps OMRChecker's files (for looking into a problem); by default
-    a temporary directory is used and removed.
+    a temporary directory is used and removed. ``page_image`` is where to save
+    the page straightened on its corner markers, with the marks OMRChecker found
+    drawn on it: at template scale, so ``PageTemplate.regions`` locate each
+    answer in it.
 
     Raises:
         ScanError: OMRChecker couldn't find the page or its corner markers.
@@ -188,7 +198,7 @@ def read_page(
         with tempfile.TemporaryDirectory(
             prefix="omr-scan-", ignore_cleanup_errors=True
         ) as temporary:
-            return read_page(image_path, form, template, Path(temporary))
+            return read_page(image_path, form, template, Path(temporary), page_image)
     input_dir = work_dir / "input"
     output_dir = work_dir / "output"
     shutil.rmtree(input_dir, ignore_errors=True)
@@ -204,6 +214,11 @@ def read_page(
         raise ScanError(_unreadable_message()) from error
     if not rows:
         raise ScanError(_unreadable_message())
+    if page_image is not None:
+        checked = next(output_dir.glob("**/CheckedOMRs/sheet.*"), None)
+        if checked is not None:
+            page_image.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(checked, page_image)
     return interpret(form, template, rows[0])
 
 

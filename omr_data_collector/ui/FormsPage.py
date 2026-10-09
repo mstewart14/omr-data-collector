@@ -302,7 +302,7 @@ class FormsPage(LibraryPage):
         self.add_text_button = QPushButton(tr("Add te&xt…"))
         self.add_question_button = QPushButton(tr("Add quest&ion…"))
         self.add_table_button = QPushButton(tr("Add tabl&e…"))
-        self.edit_block_button = QPushButton(tr("Edit blo&ck…"))
+        self.edit_block_button = QPushButton(tr("Edit bloc&k…"))
         self.remove_block_button = QPushButton(tr("Remo&ve block"))
         self.move_up_button = QPushButton(tr("Move up"))
         self.move_down_button = QPushButton(tr("Move down"))

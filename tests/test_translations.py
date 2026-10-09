@@ -291,7 +291,10 @@ NOT_FOR_PEOPLE = {
     "ui/AnswerFields.py": {"Damm", "Verhoeff"},
 }
 PROSE = re.compile(r"[A-Za-z]{2,}[,.:;?!]? [A-Za-z]{2,}|^[A-Z][a-z]+$")
-SQL = re.compile(r"\s*(SELECT|INSERT|UPDATE|CREATE|DELETE|ALTER|PRAGMA)\b")
+# SQL statements, and lists of column names.
+SQL = re.compile(
+    r"\s*(SELECT|INSERT|UPDATE|CREATE|DELETE|ALTER|PRAGMA)\b|[a-z_]+(, *[a-z_]+)+$"
+)
 
 
 def _ignored_nodes(tree: ast.AST) -> set[int]:

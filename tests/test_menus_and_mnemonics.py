@@ -20,6 +20,7 @@ from omr_data_collector.ui.MainWindow import MainWindow
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Iterator
 
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
@@ -33,14 +34,41 @@ NEW_OR_KEEP_WORKING = (
 
 
 def mnemonics_in(root: QWidget) -> list[str]:
-    """Every Alt+letter on labels and buttons inside ``root``, hidden ones too."""
+    """Every Alt+letter on the labels and buttons showing inside ``root``.
+
+    Hidden ones don't count: Qt only acts on a letter shown, so controls never
+    shown together (a choice list's and a written answer's) can share letters.
+    ``states`` shows each combination in turn.
+    """
     letters = []
     for widget in root.findChildren(QWidget):
-        if isinstance(widget, (QLabel, QAbstractButton)):
+        if isinstance(widget, (QLabel, QAbstractButton)) and widget.isVisibleTo(root):
             match = MNEMONIC.search(widget.text().replace("&&", ""))
             if match:
                 letters.append(match.group(1).lower())
     return letters
+
+
+def states(root: QWidget) -> Iterator[str]:
+    """Show each combination of answer settings in turn, naming it.
+
+    Each kind of answer, and each written data type, shows different fields.
+    """
+    fields = getattr(root, "answer_fields", None)
+    if fields is None:
+        yield "as opened"
+        return
+    for answer_type in range(fields.answer_type_combo.count()):
+        fields.answer_type_combo.setCurrentIndex(answer_type)
+        for data_type in range(fields.data_type_combo.count()):
+            fields.data_type_combo.setCurrentIndex(data_type)
+            yield (
+                f"{fields.answer_type_combo.currentText()}, "
+                f"{fields.data_type_combo.currentText()}"
+            )
+    revert = getattr(root, "revert", None)
+    if revert is not None:
+        revert()  # so closing the window doesn't ask about the changes
 
 
 def mnemonics_of(texts: list[str]) -> list[str]:
@@ -86,12 +114,20 @@ def test_menu_letters_are_what_pages_avoid(
             window.text_menu,
             window.question_menu,
             window.table_menu,
+            window.capture_menu,
             window.preferences_menu,
         )
     ]
 
-    assert titles == ["&File", "&Text", "&Question", "T&able", "&Preferences"]
-    assert window.menu_mnemonics() == set(mnemonics_of(titles)) == set("ftqap")
+    assert titles == [
+        "&File",
+        "&Text",
+        "&Question",
+        "T&able",
+        "&Capture",
+        "&Preferences",
+    ]
+    assert window.menu_mnemonics() == set(mnemonics_of(titles)) == set("ftqacp")
 
 
 # The checks below run in every language: translated labels need letters of their
@@ -110,7 +146,7 @@ def test_the_menus_have_their_own_letters(
 
 
 @pytest.mark.usefixtures("language")
-@pytest.mark.parametrize("section", range(5))
+@pytest.mark.parametrize("section", range(6))
 def test_each_page_has_unique_mnemonics_clear_of_the_menus(
     qtbot: QtBot, connection: sqlite3.Connection, section: int
 ) -> None:
@@ -118,11 +154,16 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
     title, page = window.pages[section]
     menu_letters = window.menu_mnemonics()
 
-    letters = mnemonics_in(page)
+    for state in states(page):
+        letters = mnemonics_in(page)
 
-    assert letters, title
-    assert len(letters) == len(set(letters)), (title, sorted(letters))
-    assert not set(letters) & menu_letters, (title, set(letters) & menu_letters)
+        assert letters, title
+        assert len(letters) == len(set(letters)), (title, state, sorted(letters))
+        assert not set(letters) & menu_letters, (
+            title,
+            state,
+            set(letters) & menu_letters,
+        )
 
 
 @pytest.mark.parametrize(
@@ -141,9 +182,10 @@ def test_each_dialog_has_unique_mnemonics(qtbot: QtBot, make_dialog) -> None:
     dialog = make_dialog()
     qtbot.addWidget(dialog)
 
-    letters = mnemonics_in(dialog)
+    for state in states(dialog):
+        letters = mnemonics_in(dialog)
 
-    assert len(letters) == len(set(letters)), sorted(letters)
+        assert len(letters) == len(set(letters)), (state, sorted(letters))
 
 
 # --- Menus ------------------------------------------------------------------------
@@ -182,6 +224,7 @@ def test_every_menus_items_have_their_own_letters(
         window.text_menu,
         window.question_menu,
         window.table_menu,
+        window.capture_menu,
         window.preferences_menu,
     ):
         letters = mnemonics_of(menu_texts(menu))

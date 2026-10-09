@@ -53,8 +53,8 @@ engine bridge.
   `tests/test_translations.py` fails on text left untranslated.
 - **Pages** in `MainWindow` provide `status_message`, `has_unsaved_changes()`,
   `save()` and `initial_focus`. There is no sections list: the menu bar is the
-  way around (File = form editor, Text, Question, Table = libraries, Preferences
-  = organization details and language; Ctrl+1 to Ctrl+5 in that order), so each page gets the
+  way around (File = form editor, Text, Question, Table = libraries, Capture = captured sheets, Preferences = organization
+  details and language; Ctrl+1 to Ctrl+6 for the sections), so each page gets the
   whole window. The window also handles the unsaved-changes prompt on close.
 - **Block libraries** (text blocks, questions, and next tables) subclass
   `ui/LibraryPage.py`, which owns the list, New/Duplicate/Delete, the name field,
@@ -94,6 +94,16 @@ engine bridge.
   `engine/scanning.scan_sheet` reads the QR code, runs OMRChecker on a copy of the
   image with the stored template, and returns answers, flagging double marks.
   `tests/test_scanning.py` is the round-trip test.
+- **Capture** (`ui/CapturePage.py`, wiki 60001-60004): images are copied into
+  `captures/` beside the database (`storage/capture_store.py`, which refuses an
+  image already added), read with `engine/reading.read_capture`, then checked
+  answer by answer against the straightened page OMRChecker saves. Each
+  answer's place on that page comes from `PageTemplate.regions`, so the
+  outline and close-up need no geometry of their own. Saved data is a capture
+  with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
+- **Mnemonics are checked among controls showing together**: the tests step
+  through each answer type and data type, so fields never shown at once (a
+  choice list's and a written answer's) may share a letter.
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact

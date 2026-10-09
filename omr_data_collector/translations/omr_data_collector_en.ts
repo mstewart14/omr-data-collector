@@ -3,6 +3,13 @@
     <context>
         <name />
         <message numerus="yes">
+            <source>Use at most %n character(s).</source>
+            <translation>
+                <numerusform>Use at most %n character.</numerusform>
+                <numerusform>Use at most %n characters.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Add at least %n choice(s).</source>
             <translation>
                 <numerusform>Add at least %n choice.</numerusform>
@@ -126,6 +133,34 @@
             <translation>
                 <numerusform>so the table takes %n page.</numerusform>
                 <numerusform>so the table takes %n pages.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Added %n image(s). Read waiting sheets reads them.</source>
+            <translation>
+                <numerusform>Added %n image. Read waiting sheets reads them.</numerusform>
+                <numerusform>Added %n images. Read waiting sheets reads them.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Read %n sheet(s).</source>
+            <translation>
+                <numerusform>Read %n sheet.</numerusform>
+                <numerusform>Read %n sheets.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>%n couldn't be read; choose one to see why.</source>
+            <translation>
+                <numerusform>%n couldn't be read; choose one to see why.</numerusform>
+                <numerusform>%n couldn't be read; choose one to see why.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>%n answer(s) to fix before saving.</source>
+            <translation>
+                <numerusform>%n answer to fix before saving.</numerusform>
+                <numerusform>%n answers to fix before saving.</numerusform>
             </translation>
         </message>
     </context>

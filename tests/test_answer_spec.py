@@ -221,3 +221,69 @@ def test_dash_date_formats_saved_earlier_read_as_slashes(
 
     assert spec.date_time_format == read_as
     assert spec.characters() == len(stored)  # same layout as when printed
+
+
+@pytest.mark.parametrize(
+    ("spec", "values", "error"),
+    [
+        (AnswerSpec(YES_NO, choices=choices("Yes", "No")), (), ""),
+        (AnswerSpec(YES_NO, choices=choices("Yes", "No")), ("Yes",), ""),
+        (
+            AnswerSpec(ANSWER_TYPES.ONE_CHOICE, choices=choices("A", "B", "C")),
+            ("A", "B"),
+            "Only one choice is allowed.",
+        ),
+        (
+            AnswerSpec(ANSWER_TYPES.MANY_CHOICES, choices=choices("A", "B", "C")),
+            ("A", "C"),
+            "",
+        ),
+        (
+            AnswerSpec(ANSWER_TYPES.MANY_CHOICES, choices=choices("A", "B", "C")),
+            ("D",),
+            "Choose from this answer's choices.",
+        ),
+        (
+            AnswerSpec(
+                ANSWER_TYPES.WRITTEN,
+                data_type=WRITTEN_DATA_TYPES.NUMBER,
+                number_minimum=1,
+                number_maximum=12,
+            ),
+            ("13",),
+            "Enter 12 or less.",
+        ),
+        (
+            AnswerSpec(ANSWER_TYPES.WRITTEN, data_type=WRITTEN_DATA_TYPES.NUMBER),
+            ("1a",),
+            "Enter digits only.",
+        ),
+        (
+            AnswerSpec(
+                ANSWER_TYPES.WRITTEN,
+                data_type=WRITTEN_DATA_TYPES.DATE_TIME,
+                date_time_format="YYYY/MM/DD",
+            ),
+            ("2026/02/30",),
+            "Enter a real date or time, written as YYYY/MM/DD.",
+        ),
+        (
+            AnswerSpec(
+                ANSWER_TYPES.WRITTEN,
+                data_type=WRITTEN_DATA_TYPES.DATE_TIME,
+                date_time_format="YYYY/MM/DD HH:MM",
+            ),
+            ("2026/10/08 14:05",),
+            "",
+        ),
+        (
+            AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=3),
+            ("abcd",),
+            "Use at most 3 characters.",
+        ),
+    ],
+)
+def test_entered_values_are_checked_against_the_answer(
+    spec: AnswerSpec, values: tuple[str, ...], error: str
+) -> None:
+    assert spec.normalized().entry_error(values) == error
