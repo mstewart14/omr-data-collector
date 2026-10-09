@@ -33,7 +33,8 @@ from omr_data_collector.constants import CAPTURE_STATUSES, PAPER_SIZES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     collect,
-    safe_file_name,
+    json_file_name,
+    output_files,
     saved_sheet_counts,
     write_csv,
     write_json,
@@ -52,6 +53,10 @@ from omr_data_collector.storage.capture_store import (
     page_image_path,
     save_capture,
 )
+from omr_data_collector.storage.export_store import (
+    load_export_names,
+    save_export_names,
+)
 from omr_data_collector.storage.form_store import (
     list_forms,
     load_form_version,
@@ -61,6 +66,7 @@ from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import set_field_error, style_error_label
 from omr_data_collector.ui.AnswerEditor import AnswerEditor
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, ExportDialog
+from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
@@ -71,7 +77,9 @@ from omr_data_collector.ui.PageImageView import PageImageView
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Callable
 
+    from omr_data_collector.export.data_export import ExportNames, OutputFile
     from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.Capture import Capture, CapturedAnswer
     from omr_data_collector.models.Form import Form
@@ -98,9 +106,10 @@ def choose_export(
     parent: QWidget,
     forms: list[tuple[Form, int]],
     sheets: dict[str, list[tuple[str, str]]],
+    edit_names: Callable[[str], object],
 ) -> tuple[str, str, list[str] | None] | None:
     """Ask which form's data to export, which sheets and as what; None if cancelled."""
-    dialog = ExportDialog(parent, forms, sheets)
+    dialog = ExportDialog(parent, forms, sheets, edit_names)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen()
@@ -127,6 +136,16 @@ def _details_summary(form: Form | None, capture: Capture) -> str:
                 )
             )
     return QLocale().createSeparatedList(parts) if parts else ""
+
+
+def choose_export_names(
+    parent: QWidget, files: list[OutputFile], names: ExportNames
+) -> ExportNames | None:
+    """Ask for the names of a form's outputs; None if cancelled."""
+    dialog = ExportNamesDialog(parent, files, names)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.names()
 
 
 def choose_export_folder(parent: QWidget) -> Path | None:
@@ -330,24 +349,31 @@ class CapturePage(QWidget):
             for form in list_forms(self._connection)
             if counts.get(form.form_id)
         ]
-        chosen = choose_export(self, forms, self._sheet_choices(forms))
+        by_id = {form.form_id: form for form, _ in forms}
+        chosen = choose_export(
+            self,
+            forms,
+            self._sheet_choices(forms),
+            lambda form_id: self.edit_export_names(by_id[form_id]),
+        )
         if chosen is None:
             return
         form_id, file_format, combine = chosen
-        form = next(form for form, _ in forms if form.form_id == form_id)
+        form = by_id[form_id]
+        names = load_export_names(self._connection, form.form_id)
         data = collect(self._connection, form, combine)
         try:
             if file_format == CSV_FORMAT:
                 folder = choose_export_folder(self)
                 if folder is None:
                     return
-                files = len(write_csv(data, folder))
+                files = len(write_csv(data, folder, names))
                 where = str(folder)
             else:
-                path = choose_json_path(self, f"{safe_file_name(form.name)}.json")
+                path = choose_json_path(self, json_file_name(form, names))
                 if path is None:
                     return
-                write_json(data, path)
+                write_json(data, path, names)
                 files, where = 1, str(path)
         except OSError as error:
             QMessageBox.warning(self, tr("Couldn't export the data"), str(error))
@@ -359,6 +385,20 @@ class CapturePage(QWidget):
             )
             + " "
             + tr("Wrote %n file(s) to {where}.", None, files).format(where=where)
+        )
+
+    def edit_export_names(self, form: Form) -> None:
+        """Export data > Names: rename a form's exported files and columns."""
+        names = choose_export_names(
+            self,
+            output_files(self._connection, form),
+            load_export_names(self._connection, form.form_id),
+        )
+        if names is None:
+            return
+        save_export_names(self._connection, form.form_id, names)
+        self.status_message.emit(
+            tr('Saved the export names for "{form}".').format(form=form.name)
         )
 
     def _sheet_choices(

@@ -130,6 +130,16 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    [
+        # The names a form's exported files and columns get, where the person
+        # changed them from the defaults (export.data_export.ExportNames).
+        """
+        CREATE TABLE export_names (
+            form_id TEXT PRIMARY KEY REFERENCES form (form_id) ON DELETE CASCADE,
+            names TEXT NOT NULL
+        )
+        """,
+    ],
 ]
 
 

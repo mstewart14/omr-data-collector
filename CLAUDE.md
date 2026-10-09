@@ -122,6 +122,9 @@ engine bridge.
   merged sheets row (differing values all kept, `;`-joined) and their table
   rows in turn, numbered on in `combined_row`. Pages aren't linked automatically:
   sheets may be photocopied, so nothing printed can tell copies apart.
+  Files and columns can be renamed per form (Export data > Names; `ExportNames`,
+  stored by `storage/export_store.py`), keyed by their default names; blank
+  keeps the default, and JSON renames only answer keys, not its structure.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.

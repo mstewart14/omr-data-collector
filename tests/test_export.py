@@ -12,8 +12,13 @@ from PySide6.QtCore import Qt
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.export.data_export import (
+    JSON_FILE,
     SHEET_COLUMNS,
+    SHEETS_FILE,
+    ExportNames,
     collect,
+    json_file_name,
+    output_files,
     saved_sheet_counts,
     write_csv,
     write_json,
@@ -25,14 +30,20 @@ from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.storage.capture_store import add_capture, save_capture
+from omr_data_collector.storage.export_store import (
+    load_export_names,
+    save_export_names,
+)
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, JSON_FORMAT, ExportDialog
+from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
+    from PySide6.QtWidgets import QTableWidgetItem
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
 
@@ -280,7 +291,7 @@ def test_exporting_csv_from_the_capture_screen(
 
     page.export_data()
 
-    ((_, forms, sheets), _) = choose.call_args
+    ((_, forms, sheets, _), _) = choose.call_args
     assert [(f.name, count) for f, count in forms] == [("Shift log", 1)]
     ((_, description),) = sheets[form.form_id]
     assert description.startswith("one.jpg: page 1, captured ")
@@ -448,3 +459,171 @@ def test_combining_from_the_capture_screen(
         (row,) = list(csv.DictReader(file))
     assert row["sheet_file"] == "one.jpg;two.jpg"
     assert messages[0].startswith('Exported 2 sheets of "Shift log".')
+
+
+# --- Export names ------------------------------------------------------------------
+
+
+def test_the_outputs_and_their_default_names(
+    connection: sqlite3.Connection, form: Form
+) -> None:
+    files = output_files(connection, form)
+
+    assert [(f.key, f.default_name) for f in files] == [
+        (SHEETS_FILE, "Shift log - sheets"),
+        ("Visits", "Shift log - Visits"),
+        (JSON_FILE, "Shift log"),
+    ]
+    assert files[0].columns[-3:] == ("Date", "Shift", "services")
+    assert files[1].columns[5:7] == ("row", "combined_row")
+
+
+RENAMED = ExportNames(
+    files={SHEETS_FILE: "intake", "Visits": "visits", JSON_FILE: "intake data"},
+    columns={
+        SHEETS_FILE: {"sheet_id": "id", "services": "Services used"},
+        "Visits": {"time": "Time of visit"},
+    },
+)
+
+
+def test_csv_files_and_columns_take_their_export_names(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    written = write_csv(collect(connection, form), tmp_path, RENAMED)
+
+    assert [path.name for path in written] == ["intake.csv", "visits.csv"]
+    with written[0].open(encoding="utf-8-sig", newline="") as file:
+        (row,) = list(csv.DictReader(file))
+    assert row["id"]
+    assert row["Services used"] == "food;clothing"
+    assert "sheet_id" not in row
+    with written[1].open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert rows[0]["Time of visit"] == "09:30"
+
+
+def test_json_takes_the_export_names(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    path = tmp_path / json_file_name(form, RENAMED)
+
+    write_json(collect(connection, form), path, RENAMED)
+
+    assert path.name == "intake data.json"
+    (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
+    assert sheet["answers"] == {"Services used": ["food", "clothing"]}
+    assert sheet["tables"]["Visits"][0]["values"]["Time of visit"] == "09:30"
+
+
+def test_export_names_are_kept_for_the_form(
+    connection: sqlite3.Connection, form: Form
+) -> None:
+    assert load_export_names(connection, form.form_id) == ExportNames()
+
+    save_export_names(connection, form.form_id, RENAMED)
+
+    assert load_export_names(connection, form.form_id) == RENAMED
+
+
+def names_dialog(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form, names: ExportNames
+) -> ExportNamesDialog:
+    dialog = ExportNamesDialog(None, output_files(connection, form), names)
+    qtbot.addWidget(dialog)
+    return dialog
+
+
+def row_named(dialog: ExportNamesDialog, key: str, default: str) -> int:
+    return next(
+        row
+        for row in range(dialog.table.rowCount())
+        if dialog._row_data(row)[1:] == (key, default)  # noqa: SLF001
+    )
+
+
+def name_cell(dialog: ExportNamesDialog, key: str, default: str) -> QTableWidgetItem:
+    item = dialog.table.item(row_named(dialog, key, default), 2)
+    assert item is not None
+    return item
+
+
+def test_the_names_dialog_keeps_only_changed_names(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, RENAMED)
+    assert name_cell(dialog, SHEETS_FILE, "Shift log - sheets").text() == "intake"
+
+    name_cell(dialog, SHEETS_FILE, "Date").setText("Date")
+    name_cell(dialog, SHEETS_FILE, "Shift").setText(" shift ")
+    dialog.accept()
+
+    accepted = dialog.names()
+    assert accepted is not None
+    assert accepted.columns[SHEETS_FILE] == {
+        "sheet_id": "id",
+        "services": "Services used",
+        "Shift": "shift",
+    }
+
+
+def test_the_names_dialog_refuses_two_columns_with_one_name(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+
+    name_cell(dialog, SHEETS_FILE, "Shift").setText("date")
+    dialog.accept()
+
+    assert dialog.names() is None
+    assert dialog.error_label.text() == (
+        'Two columns of "Shift log - sheets" would both be called "date".'
+    )
+
+    dialog.reset()
+    dialog.accept()
+
+    assert dialog.names() == ExportNames()
+
+
+def test_the_names_dialog_refuses_two_files_with_one_name(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+
+    name_cell(dialog, "Visits", "Shift log - Visits").setText("Shift log - sheets")
+    dialog.accept()
+
+    assert dialog.error_label.text() == (
+        'Two files would both be called "Shift log - sheets".'
+    )
+
+
+def test_names_set_from_the_capture_screen_are_used_by_exports(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    form: Form,
+    tmp_path: Path,
+) -> None:
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_names", return_value=RENAMED
+    )
+
+    page.edit_export_names(form)
+
+    assert load_export_names(connection, form.form_id) == RENAMED
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export",
+        return_value=(form.form_id, CSV_FORMAT, None),
+    )
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_folder",
+        return_value=tmp_path / "export",
+    )
+
+    page.export_data()
+
+    assert (tmp_path / "export" / "intake.csv").exists()

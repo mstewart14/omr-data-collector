@@ -50,6 +50,69 @@ COMBINED_ROW_COLUMN = "combined_row"
 CSV_ENCODING = "utf-8-sig"
 
 
+# The keys of a form's outputs, for naming them: the sheets file, the JSON file,
+# and each table's file under its table's name.
+SHEETS_FILE, JSON_FILE = "sheets", "json"
+
+
+@dataclass
+class ExportNames:
+    """Names given to a form's outputs in place of the defaults.
+
+    ``files`` maps an output's key (SHEETS_FILE, JSON_FILE or a table's name)
+    to a file name, without its extension; ``columns`` maps an output's key to
+    {default column name: name to use}. Anything not named keeps its default.
+    """
+
+    files: dict[str, str] = field(default_factory=dict)
+    columns: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    def file_name(self, key: str, default: str) -> str:
+        return self.files.get(key) or default
+
+    def column(self, key: str, default: str) -> str:
+        return self.columns.get(key, {}).get(default) or default
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"files": self.files, "columns": self.columns}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ExportNames:
+        return cls(
+            files=dict(data.get("files", {})),
+            columns={
+                key: dict(names) for key, names in data.get("columns", {}).items()
+            },
+        )
+
+
+@dataclass(frozen=True)
+class OutputFile:
+    """One output a form's data is exported to, and its default names."""
+
+    key: str
+    default_name: str
+    columns: tuple[str, ...]
+
+
+def output_files(connection: sqlite3.Connection, form: Form) -> list[OutputFile]:
+    """Every file a form's data can be exported to, with its columns.
+
+    The CSV files first (the sheets file, then each table's), then the JSON
+    file, whose columns are the sheets file's; its structure is fixed.
+    """
+    data = collect(connection, form)
+    base = form.name
+    files = [OutputFile(SHEETS_FILE, f"{base} - sheets", tuple(data.sheet_columns))]
+    for table in data.tables:
+        columns = list(table.columns)
+        # combined_row is only there when chosen sheets are combined.
+        columns.insert(columns.index(ROW_COLUMN) + 1, COMBINED_ROW_COLUMN)
+        files.append(OutputFile(table.name, f"{base} - {table.name}", tuple(columns)))
+    files.append(OutputFile(JSON_FILE, base, ()))
+    return files
+
+
 @dataclass
 class TableData:
     name: str
@@ -217,25 +280,64 @@ def _combined_document(documents: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def write_csv(data: FormData, folder: Path) -> list[Path]:
-    """Write the sheets file and one file per table into ``folder``."""
+def write_csv(
+    data: FormData, folder: Path, names: ExportNames | None = None
+) -> list[Path]:
+    """Write the sheets file and one file per table into ``folder``.
+
+    ``names`` renames files and columns from their defaults.
+    """
+    names = names or ExportNames()
     folder.mkdir(parents=True, exist_ok=True)
-    base = safe_file_name(data.form.name)
-    written = [folder / f"{base} - sheets.csv"]
-    _write_rows(written[0], data.sheet_columns, data.sheets)
+    base = data.form.name
+    sheets = names.file_name(SHEETS_FILE, f"{base} - sheets")
+    written = [folder / f"{safe_file_name(sheets)}.csv"]
+    _write_rows(written[0], data.sheet_columns, data.sheets, names, SHEETS_FILE)
     for table in data.tables:
-        path = folder / f"{base} - {safe_file_name(table.name)}.csv"
-        _write_rows(path, table.columns, table.rows)
+        name = names.file_name(table.name, f"{base} - {table.name}")
+        path = folder / f"{safe_file_name(name)}.csv"
+        _write_rows(path, table.columns, table.rows, names, table.name)
         written.append(path)
     return written
 
 
-def write_json(data: FormData, path: Path) -> None:
+def json_file_name(form: Form, names: ExportNames | None = None) -> str:
+    """The JSON file's name, extension included."""
+    name = (names or ExportNames()).file_name(JSON_FILE, form.name)
+    return f"{safe_file_name(name)}.json"
+
+
+def write_json(data: FormData, path: Path, names: ExportNames | None = None) -> None:
+    """Write the nested data; ``names`` renames the answers' keys."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    document = _renamed_document(data.document, names or ExportNames())
     path.write_text(
-        json.dumps(data.document, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(document, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str, Any]:
+    """The JSON document with question, field and table column keys renamed."""
+
+    def rename(values: dict[str, Any], key: str) -> dict[str, Any]:
+        return {names.column(key, name): value for name, value in values.items()}
+
+    def sheet(entry: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **entry,
+            "details": rename(entry["details"], SHEETS_FILE),
+            "answers": rename(entry["answers"], SHEETS_FILE),
+            "tables": {
+                table: [{**row, "values": rename(row["values"], table)} for row in rows]
+                for table, rows in entry["tables"].items()
+            },
+        }
+
+    renamed = {**document, "sheets": [sheet(entry) for entry in document["sheets"]]}
+    if "combined" in document:
+        renamed["combined"] = sheet(document["combined"])
+    return renamed
 
 
 def safe_file_name(name: str) -> str:
@@ -243,11 +345,18 @@ def safe_file_name(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "-", name).strip(" .-") or "data"
 
 
-def _write_rows(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
+def _write_rows(
+    path: Path,
+    columns: list[str],
+    rows: list[dict[str, str]],
+    names: ExportNames,
+    key: str,
+) -> None:
+    headers = [names.column(key, column) for column in columns]
     with path.open("w", newline="", encoding=CSV_ENCODING) as file:
-        writer = csv.DictWriter(file, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+        writer = csv.writer(file)
+        writer.writerow(headers)
+        writer.writerows([row.get(column, "") for column in columns] for row in rows)
 
 
 def _columns(

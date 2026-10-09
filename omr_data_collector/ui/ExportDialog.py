@@ -24,7 +24,7 @@ from omr_data_collector.i18n import tr
 from omr_data_collector.ui.form_helpers import add_field_row
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from omr_data_collector.models.Form import Form
 
@@ -52,11 +52,13 @@ class ExportDialog(QDialog):
         parent: QWidget | None,
         forms: Sequence[tuple[Form, int]],
         sheets: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+        edit_names: Callable[[str], object] | None = None,
     ) -> None:
         """``forms`` are the forms with checked sheets and how many each has.
 
         ``sheets`` are each form's checked sheets, by form ID, as (capture ID,
-        description) in the order they were added.
+        description) in the order they were added. ``edit_names`` opens the names
+        of a form's outputs (by form ID) for renaming.
         """
         super().__init__(parent)
         self.setWindowTitle(tr("Export data"))
@@ -70,12 +72,22 @@ class ExportDialog(QDialog):
         self.format_combo = QComboBox()
         for value, label in format_labels().items():
             self.format_combo.addItem(label, value)
+        self.names_button = QPushButton(tr("&Names…"))
+        self.names_button.setToolTip(
+            tr("Rename the files and columns this form's data is exported to")
+        )
+        self.names_button.setEnabled(bool(forms) and edit_names is not None)
+        if edit_names is not None:
+            self.names_button.clicked.connect(
+                lambda: edit_names(self.form_combo.currentData())
+            )
 
         moves = self._build_sheet_chooser()
 
         form_layout = QFormLayout()
         add_field_row(form_layout, tr("&Form"), self.form_combo)
         add_field_row(form_layout, tr("File &type"), self.format_combo)
+        form_layout.addRow("", self.names_button)
         self.note = QLabel(
             tr(
                 "Only sheets saved on the Capture screen are exported: not ones "
@@ -117,6 +129,7 @@ class ExportDialog(QDialog):
             [
                 self.form_combo,
                 self.format_combo,
+                self.names_button,
                 self.every_button,
                 self.chosen_button,
                 self.sheet_list,

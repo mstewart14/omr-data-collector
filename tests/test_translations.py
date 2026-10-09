@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.constants import BLOCK_KINDS
+from omr_data_collector.export.data_export import ExportNames, OutputFile
 from omr_data_collector.i18n import (
     TRANSLATIONS_DIR,
     PseudoTranslator,
@@ -39,6 +40,7 @@ from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.ExportDialog import ExportDialog
+from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
@@ -170,6 +172,11 @@ def test_every_page_and_menu_is_translatable(
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
         lambda: ExportDialog(None, []),
+        lambda: ExportNamesDialog(
+            None,
+            [OutputFile("sheets", "Intake - sheets", ("sheet_id", "visit"))],
+            ExportNames(),
+        ),
     ],
     ids=[
         "column",
@@ -182,6 +189,7 @@ def test_every_page_and_menu_is_translatable(
         "sheet details",
         "sheet detail field",
         "export",
+        "export names",
     ],
 )
 def test_every_dialog_is_translatable(qtbot: QtBot, make_dialog) -> None:

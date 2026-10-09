@@ -9,6 +9,7 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QAbstractButton, QLabel, QMessageBox, QWidget
 
 from omr_data_collector.constants import BLOCK_KINDS
+from omr_data_collector.export.data_export import ExportNames, OutputFile
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.storage.question_store import list_questions
@@ -16,6 +17,7 @@ from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.ExportDialog import ExportDialog
+from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
@@ -180,6 +182,11 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
         lambda: ExportDialog(None, []),
+        lambda: ExportNamesDialog(
+            None,
+            [OutputFile("sheets", "Intake - sheets", ("sheet_id", "visit"))],
+            ExportNames(),
+        ),
     ],
     ids=[
         "column",
@@ -190,6 +197,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         "details",
         "field",
         "export",
+        "export names",
     ],
 )
 @pytest.mark.usefixtures("language")
