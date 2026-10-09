@@ -15,6 +15,7 @@ from omr_data_collector.storage.question_store import list_questions
 from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
+from omr_data_collector.ui.ExportDialog import ExportDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
@@ -178,8 +179,18 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: LanguageDialog(None, ""),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
+        lambda: ExportDialog(None, []),
     ],
-    ids=["column", "text", "question", "picker", "language", "details", "field"],
+    ids=[
+        "column",
+        "text",
+        "question",
+        "picker",
+        "language",
+        "details",
+        "field",
+        "export",
+    ],
 )
 @pytest.mark.usefixtures("language")
 def test_each_dialog_has_unique_mnemonics(qtbot: QtBot, make_dialog) -> None:

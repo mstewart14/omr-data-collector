@@ -157,6 +157,20 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Exported %n sheet(s) of "{form}".</source>
+            <translation>
+                <numerusform>Exported %n sheet of "{form}".</numerusform>
+                <numerusform>Exported %n sheets of "{form}".</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Wrote %n file(s) to {where}.</source>
+            <translation>
+                <numerusform>Wrote %n file to {where}.</numerusform>
+                <numerusform>Wrote %n files to {where}.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>%n answer(s) to fix before saving.</source>
             <translation>
                 <numerusform>%n answer to fix before saving.</numerusform>
@@ -168,6 +182,13 @@
             <translation>
                 <numerusform>Use at most %n field.</numerusform>
                 <numerusform>Use at most %n fields.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>{name} (%n checked sheet(s))</source>
+            <translation>
+                <numerusform>{name} (%n checked sheet)</numerusform>
+                <numerusform>{name} (%n checked sheets)</numerusform>
             </translation>
         </message>
     </context>

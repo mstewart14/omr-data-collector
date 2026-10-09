@@ -250,6 +250,7 @@ class MainWindow(QMainWindow):
         for text, command in (
             (tr("Add &images…"), self.capture_page.add_images),
             (tr("&Read waiting sheets"), self.capture_page.read_waiting),
+            (tr("&Export data…"), self.capture_page.export_data),
         ):
             action = self.capture_menu.addAction(text)
             action.triggered.connect(

@@ -111,6 +111,13 @@ engine bridge.
   answer's place on that page comes from `PageTemplate.regions`, so the
   outline and close-up need no geometry of their own. Saved data is a capture
   with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
+- **Export** (`export/data_export.py`, Capture > Export data): a form's saved
+  captures, from every version, as a sheets CSV (sheet columns, sheet details,
+  questions) plus a CSV per table (one row per filled row, repeating the sheet
+  and its details), or one JSON file nesting the same. The columns describing
+  the sheet (`SHEET_COLUMNS`) have fixed, untranslated names for analysis
+  scripts; question, field and column names are the export names, so a
+  question may not share a sheet details field's name.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.

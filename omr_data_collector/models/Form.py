@@ -203,17 +203,9 @@ class Form:
                     name=block.content.name,
                     problem=first,
                 )
-        in_header = [
-            number
-            for number, block in enumerate(self.blocks, start=1)
-            if isinstance(block.content, SheetDetails)
-            and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
-        ]
-        if len(in_header) > 1:
-            return tr(
-                "Blocks {first} and {second} are both sheet details in the header, "
-                "which has room for one; put one along a line instead."
-            ).format(first=in_header[0], second=in_header[1])
+        details_error = self._sheet_details_error()
+        if details_error:
+            return details_error
         # Question and table names become export column and file names, so two
         # blocks of the same kind can't share one.
         for kind in (BLOCK_KINDS.QUESTION, BLOCK_KINDS.TABLE):
@@ -238,4 +230,35 @@ class Form:
                         first=seen[key], second=number, name=block.content.name
                     )
                 seen[key] = number
+        return ""
+
+    def _sheet_details_error(self) -> str:
+        """One set of sheet details in the header, and no field named like a question."""
+        in_header = [
+            number
+            for number, block in enumerate(self.blocks, start=1)
+            if isinstance(block.content, SheetDetails)
+            and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+        ]
+        if len(in_header) > 1:
+            return tr(
+                "Blocks {first} and {second} are both sheet details in the header, "
+                "which has room for one; put one along a line instead."
+            ).format(first=in_header[0], second=in_header[1])
+        # Sheet details and questions are columns of the same exported file.
+        detail_names = {
+            column.name.casefold(): column.name
+            for block in self.blocks
+            if isinstance(block.content, SheetDetails)
+            for column in block.content.fields
+        }
+        for block in self.blocks:
+            if (
+                isinstance(block.content, Question)
+                and block.content.name.casefold() in detail_names
+            ):
+                return tr(
+                    'The question "{name}" has the same name as a sheet details '
+                    "field; rename one so their data can be told apart."
+                ).format(name=block.content.name)
         return ""

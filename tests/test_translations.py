@@ -38,6 +38,7 @@ from omr_data_collector.i18n import (
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
+from omr_data_collector.ui.ExportDialog import ExportDialog
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
@@ -168,6 +169,7 @@ def test_every_page_and_menu_is_translatable(
         lambda: LanguageDialog(None, ""),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
+        lambda: ExportDialog(None, []),
     ],
     ids=[
         "column",
@@ -179,6 +181,7 @@ def test_every_page_and_menu_is_translatable(
         "language",
         "sheet details",
         "sheet detail field",
+        "export",
     ],
 )
 def test_every_dialog_is_translatable(qtbot: QtBot, make_dialog) -> None:

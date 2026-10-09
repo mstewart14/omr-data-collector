@@ -10,6 +10,7 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -30,6 +31,13 @@ from PySide6.QtWidgets import (
 
 from omr_data_collector.constants import CAPTURE_STATUSES, PAPER_SIZES
 from omr_data_collector.engine.reading import read_capture
+from omr_data_collector.export.data_export import (
+    collect,
+    safe_file_name,
+    saved_sheet_counts,
+    write_csv,
+    write_json,
+)
 from omr_data_collector.i18n import tr
 from omr_data_collector.layout.omr_template import PageTemplate
 from omr_data_collector.models.Question import Question
@@ -45,12 +53,14 @@ from omr_data_collector.storage.capture_store import (
     save_capture,
 )
 from omr_data_collector.storage.form_store import (
+    list_forms,
     load_form_version,
     load_printed_layout,
 )
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import set_field_error, style_error_label
 from omr_data_collector.ui.AnswerEditor import AnswerEditor
+from omr_data_collector.ui.ExportDialog import CSV_FORMAT, ExportDialog
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
@@ -82,6 +92,33 @@ def status_text(capture: Capture) -> str:
     if capture.status == CAPTURE_STATUSES.SAVED:
         return tr("{file}: saved").format(file=capture.original_name)
     return tr("{file}: rejected").format(file=capture.original_name)
+
+
+def choose_export(
+    parent: QWidget, forms: list[tuple[Form, int]]
+) -> tuple[str, str] | None:
+    """Ask which form's data to export, and as what; None if cancelled."""
+    dialog = ExportDialog(parent, forms)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.chosen()
+
+
+def choose_export_folder(parent: QWidget) -> Path | None:
+    folder = QFileDialog.getExistingDirectory(
+        parent, tr("Choose a folder for the CSV files")
+    )
+    return Path(folder) if folder else None
+
+
+def choose_json_path(parent: QWidget, default_name: str) -> Path | None:
+    name, _ = QFileDialog.getSaveFileName(
+        parent, tr("Export data as JSON"), default_name, tr("JSON file (*.json)")
+    )
+    if not name:
+        return None
+    path = Path(name)
+    return path if path.suffix else path.with_suffix(".json")
 
 
 def choose_images(parent: QWidget) -> list[Path]:
@@ -133,7 +170,8 @@ class CapturePage(QWidget):
         for before, after in (
             (self.add_button, self.read_button),
             (self.read_button, self.remove_button),
-            (self.remove_button, self.answers_table),
+            (self.remove_button, self.export_button),
+            (self.export_button, self.answers_table),
             (self.answers_table, self.answer_editor.choice_combo),
             (self.answer_editor.choice_combo, self.answer_editor.choices_list),
             (self.answer_editor.choices_list, self.answer_editor.text_edit),
@@ -259,6 +297,45 @@ class CapturePage(QWidget):
             )
         self.status_message.emit(message)
 
+    def export_data(self) -> None:
+        """Export a form's checked sheets as CSV files or a JSON file."""
+        counts = saved_sheet_counts(self._connection)
+        forms = [
+            (form, counts[form.form_id])
+            for form in list_forms(self._connection)
+            if counts.get(form.form_id)
+        ]
+        chosen = choose_export(self, forms)
+        if chosen is None:
+            return
+        form_id, file_format = chosen
+        form = next(form for form, _ in forms if form.form_id == form_id)
+        data = collect(self._connection, form)
+        try:
+            if file_format == CSV_FORMAT:
+                folder = choose_export_folder(self)
+                if folder is None:
+                    return
+                files = len(write_csv(data, folder))
+                where = str(folder)
+            else:
+                path = choose_json_path(self, f"{safe_file_name(form.name)}.json")
+                if path is None:
+                    return
+                write_json(data, path)
+                files, where = 1, str(path)
+        except OSError as error:
+            QMessageBox.warning(self, tr("Couldn't export the data"), str(error))
+            return
+        # Two counts, so two sentences: each gets its own plural form.
+        self.status_message.emit(
+            tr('Exported %n sheet(s) of "{form}".', None, data.sheet_count).format(
+                form=form.name
+            )
+            + " "
+            + tr("Wrote %n file(s) to {where}.", None, files).format(where=where)
+        )
+
     def remove_sheet(self) -> None:
         capture = self._current
         if capture is None:
@@ -355,11 +432,21 @@ class CapturePage(QWidget):
         self.read_button.clicked.connect(self.read_waiting)
         self.remove_button = QPushButton(tr("Remo&ve sheet"))
         self.remove_button.clicked.connect(self.remove_sheet)
+        self.export_button = QPushButton(tr("E&xport data…"))
+        self.export_button.setToolTip(
+            tr("Save a form's checked sheets as CSV files or a JSON file")
+        )
+        self.export_button.clicked.connect(self.export_data)
         layout = QVBoxLayout(box)
         layout.addWidget(list_label)
         layout.addWidget(self.sheet_list)
         layout.addWidget(self.empty_note)
-        for button in (self.add_button, self.read_button, self.remove_button):
+        for button in (
+            self.add_button,
+            self.read_button,
+            self.remove_button,
+            self.export_button,
+        ):
             layout.addWidget(button)
         return box
 
