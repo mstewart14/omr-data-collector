@@ -100,7 +100,9 @@ engine bridge.
   they're stacked in the header beside the QR code on every page (one set per
   form): `layout_form` places them before stacking anything, grows the header to
   fit (`FormLayout.header_height_mm`) and narrows the names beside them; the
-  other placement runs them along a line where the block is. Its answers are keyed `(block, None, field)` in templates and
+  other placement runs them along a line where the block is. Where they go is a
+  form detail (`FormsPage.sheet_details_combo`, with Edit sheet details), not a
+  setting in the sheet details dialog. Its answers are keyed `(block, None, field)` in templates and
   captures, where a question's is `(block, None, None)`.
 - **Capture** (`ui/CapturePage.py`, wiki 60001-60004): images are copied into
   `captures/` beside the database (`storage/capture_store.py`, which refuses an

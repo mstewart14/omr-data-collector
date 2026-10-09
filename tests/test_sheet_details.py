@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -32,7 +33,7 @@ from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.storage.capture_store import add_capture
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
-from omr_data_collector.ui.FormsPage import FormsPage
+from omr_data_collector.ui.FormsPage import NO_SHEET_DETAILS, FormsPage
 from omr_data_collector.ui.PageCanvas import PageCanvas
 from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 from tests.sheets import Sheet
@@ -353,15 +354,110 @@ def test_dropping_a_block_on_the_header_doesnt_place_it_there(qtbot: QtBot) -> N
     assert canvas.insert_index_at(header.rect.center()) == 1
 
 
-def test_the_dialog_sets_where_the_details_go(qtbot: QtBot) -> None:
-    dialog = SheetDetailsDialog(None, details(SHIFT))
-    qtbot.addWidget(dialog)
-    dialog.placement_combo.setCurrentIndex(
-        dialog.placement_combo.findData(SHEET_DETAILS_PLACEMENTS.LINE)
+def make_forms_page(qtbot: QtBot, connection: sqlite3.Connection) -> FormsPage:
+    page = FormsPage(connection)
+    qtbot.addWidget(page)
+    return page
+
+
+def choose_placement(page: FormsPage, placement: str) -> None:
+    page.sheet_details_combo.setCurrentIndex(
+        page.sheet_details_combo.findData(placement)
     )
 
-    dialog.accept()
 
-    accepted = dialog.details()
-    assert accepted is not None
-    assert accepted.placement == SHEET_DETAILS_PLACEMENTS.LINE
+def details_blocks(page: FormsPage) -> list[SheetDetails]:
+    return [
+        block.content
+        for block in page._blocks  # noqa: SLF001 (the form being edited)
+        if isinstance(block.content, SheetDetails)
+    ]
+
+
+def test_form_details_add_move_and_remove_the_sheet_details(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_forms_page(qtbot, connection)
+    assert page.sheet_details_combo.currentData() == NO_SHEET_DETAILS
+    assert not page.edit_details_button.isEnabled()
+
+    choose_placement(page, SHEET_DETAILS_PLACEMENTS.HEADER)
+
+    (added,) = details_blocks(page)
+    assert added.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+    assert [field.name for field in added.fields][:2] == ["Date", "Shift"]
+    assert page.edit_details_button.isEnabled()
+
+    choose_placement(page, SHEET_DETAILS_PLACEMENTS.LINE)
+
+    (moved,) = details_blocks(page)
+    assert moved.placement == SHEET_DETAILS_PLACEMENTS.LINE
+    assert moved.fields == added.fields
+
+    choose_placement(page, NO_SHEET_DETAILS)
+
+    assert details_blocks(page) == []
+
+    page.undo()
+
+    assert page.sheet_details_combo.currentData() == SHEET_DETAILS_PLACEMENTS.LINE
+    page.revert()
+
+
+def test_the_combo_follows_the_form_opened(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    form = save_form(
+        connection,
+        Form(
+            name="Log",
+            blocks=(
+                FormBlock(details(SHIFT, placement=SHEET_DETAILS_PLACEMENTS.LINE)),
+            ),
+        ),
+    )
+    page = make_forms_page(qtbot, connection)
+
+    assert page.open_item(form.form_id)
+
+    assert page.sheet_details_combo.currentData() == SHEET_DETAILS_PLACEMENTS.LINE
+
+
+def test_edit_sheet_details_opens_the_fields(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    page = make_forms_page(qtbot, connection)
+    choose_placement(page, SHEET_DETAILS_PLACEMENTS.HEADER)
+    (current,) = details_blocks(page)
+    edited = replace(current, fields=(SHIFT,))
+    write = mocker.patch(
+        "omr_data_collector.ui.FormsPage.write_block", return_value=edited
+    )
+
+    page.edit_details_button.click()
+
+    write.assert_called_once_with(page, BLOCK_KINDS.SHEET_DETAILS, current)
+    assert details_blocks(page) == [edited]
+    page.revert()
+
+
+def test_the_header_keeps_one_set_when_another_moves_in(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_forms_page(qtbot, connection)
+    page.load_fields(
+        Form(
+            name="Log",
+            blocks=(
+                FormBlock(details(SHIFT, placement=SHEET_DETAILS_PLACEMENTS.LINE)),
+                FormBlock(details(SHIFT, placement=SHEET_DETAILS_PLACEMENTS.HEADER)),
+            ),
+        )
+    )
+
+    choose_placement(page, SHEET_DETAILS_PLACEMENTS.HEADER)
+
+    first, second = details_blocks(page)
+    assert first.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+    assert second.placement == SHEET_DETAILS_PLACEMENTS.LINE
+    page.revert()

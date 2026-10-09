@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from omr_data_collector.constants import SHEET_DETAILS_PLACEMENTS
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import set_field_error, style_error_label
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
@@ -34,15 +32,6 @@ if TYPE_CHECKING:
 FIELD_ROWS_VISIBLE = 6
 
 
-def placement_labels() -> dict[str, str]:
-    return {
-        SHEET_DETAILS_PLACEMENTS.HEADER: tr(
-            "In the header, beside the QR code, on every page"
-        ),
-        SHEET_DETAILS_PLACEMENTS.LINE: tr("Along a line, where the block is"),
-    }
-
-
 def edit_field(
     parent: QWidget, field: Column | None, other_names: set[str]
 ) -> Column | None:
@@ -55,6 +44,8 @@ def edit_field(
 
 class SheetDetailsDialog(QDialog):
     """Set up a sheet details block: its name and its fields, in order.
+
+    Where they go is a form detail, set in the form editor.
 
     The form keeps its own copy, so each form (and each organization) can ask
     for the details it needs.
@@ -79,17 +70,10 @@ class SheetDetailsDialog(QDialog):
         self.field_list.setAccessibleDescription(
             tr("Printed left to right along a line, wrapping when they don't fit")
         )
-        self.placement_combo = QComboBox()
-        for value, label in placement_labels().items():
-            self.placement_combo.addItem(label, value)
-        self.placement_combo.setCurrentIndex(
-            max(self.placement_combo.findData(details.placement), 0)
-        )
         self.field_widgets: dict[str, QWidget] = {}
         self.error_labels: dict[str, QLabel] = {}
         for key, label_text, widget in (
             ("name", tr("&Name (required)"), self.name_edit),
-            ("placement", tr("&Place them"), self.placement_combo),
             ("fields", tr("&Fields (required)"), self.field_list),
         ):
             _, self.error_labels[key] = add_field_row(self.form, label_text, widget)
@@ -135,7 +119,6 @@ class SheetDetailsDialog(QDialog):
         for before, after in pairwise(
             [
                 self.name_edit,
-                self.placement_combo,
                 self.field_list,
                 *self.field_buttons,
                 *self.buttons.buttons(),
@@ -189,7 +172,6 @@ class SheetDetailsDialog(QDialog):
         details = replace(
             self._details,
             name=self.name_edit.text(),
-            placement=self.placement_combo.currentData(),
             fields=tuple(self._fields),
         ).normalized()
         errors = details.validation_errors(set())

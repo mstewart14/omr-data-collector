@@ -81,6 +81,18 @@ if TYPE_CHECKING:
     from omr_data_collector.models.Organization import Organization
 
 
+# The form details' Sheet details choice when the form has none.
+NO_SHEET_DETAILS = "NONE"
+
+
+def sheet_details_choices() -> dict[str, str]:
+    return {
+        NO_SHEET_DETAILS: tr("None"),
+        SHEET_DETAILS_PLACEMENTS.HEADER: tr("In the header, on every page"),
+        SHEET_DETAILS_PLACEMENTS.LINE: tr("Along a line, where the block is"),
+    }
+
+
 def table_break_labels() -> dict[str, str]:
     return {
         TABLE_BREAKS.SPLIT: tr("Split it across pages"),
@@ -310,8 +322,17 @@ class FormsPage(LibraryPage):
         self.block_list.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
+        # Where the form's sheet details go, if it has any (wiki 50013-50016).
+        self.sheet_details_combo = QComboBox()
+        for value, label in sheet_details_choices().items():
+            self.sheet_details_combo.addItem(label, value)
+        self.edit_details_button = QPushButton(tr("Edit s&heet details…"))
+        self.edit_details_button.setToolTip(
+            tr("Change the sheet details' fields: add, edit, reorder or remove them")
+        )
         for key, label_text, widget in (
             ("orientation", tr("Page &orientation"), self.orientation_combo),
+            ("sheet_details", tr("Sheet &details"), self.sheet_details_combo),
             ("blocks", tr("B&locks (required)"), self.block_list),
         ):
             self.field_labels[key], self.error_labels[key] = add_field_row(
@@ -321,6 +342,8 @@ class FormsPage(LibraryPage):
             if key == "orientation":
                 form.addRow("", self.version_note)
                 form.addRow("", self.problems_note)
+            if key == "sheet_details":
+                form.addRow("", self.edit_details_button)
 
         self.add_text_button = QPushButton(tr("Add te&xt…"))
         self.add_question_button = QPushButton(tr("Add quest&ion…"))
@@ -355,13 +378,15 @@ class FormsPage(LibraryPage):
         self.table_break_combo = QComboBox()
         for value, label in table_break_labels().items():
             self.table_break_combo.addItem(label, value)
-        table_break_label = QLabel(tr("If t&he table doesn't fit"))
+        table_break_label = QLabel(tr("If the ta&ble doesn't fit"))
         table_break_label.setBuddy(self.table_break_combo)
         form.addRow(table_break_label, self.table_break_combo)
 
         self._connect_blocks()
         return [
             self.orientation_combo,
+            self.sheet_details_combo,
+            self.edit_details_button,
             self.block_list,
             *self._block_buttons,
             self.new_page_check,
@@ -438,7 +463,101 @@ class FormsPage(LibraryPage):
     def update_state(self) -> None:
         super().update_state()
         self._update_block_controls()
+        self._update_sheet_details_controls()
         self._refresh_pages()
+
+    # --- Sheet details (wiki 50013-50016) -------------------------------------------
+
+    def _sheet_details_index(self) -> int | None:
+        """The form's (first) sheet details block, which the form details set."""
+        return next(
+            (
+                index
+                for index, block in enumerate(self._blocks)
+                if isinstance(block.content, SheetDetails)
+            ),
+            None,
+        )
+
+    def _update_sheet_details_controls(self) -> None:
+        index = self._sheet_details_index()
+        placement = NO_SHEET_DETAILS
+        if index is not None:
+            content = self._blocks[index].content
+            assert isinstance(content, SheetDetails)  # noqa: S101 (found as one)
+            placement = content.placement
+        with QSignalBlocker(self.sheet_details_combo):
+            self.sheet_details_combo.setCurrentIndex(
+                self.sheet_details_combo.findData(placement)
+            )
+        self.edit_details_button.setEnabled(index is not None)
+
+    def set_sheet_details_placement(self, placement: str) -> None:
+        """Form details > Sheet details: add the usual set, move it, or remove it.
+
+        Choosing a place for a form without sheet details adds the usual set at
+        the top; choosing none removes them. Either can be undone.
+        """
+        index = self._sheet_details_index()
+        if placement == NO_SHEET_DETAILS:
+            if index is None:
+                return
+            removed = self._blocks.pop(index)
+            self._fill_block_list([])
+            self.update_state()
+            self._commit_change(
+                tr('removed "{name}"').format(name=removed.content.name)
+            )
+            self.status_message.emit(tr("Removed the sheet details. Ctrl+Z undoes it."))
+            return
+        if index is None:
+            details = SheetDetails(name=tr("Sheet details"), placement=placement)
+            self._blocks.insert(0, FormBlock(content=details, source_id=None))
+            self._fill_block_list([0])
+            self.update_state()
+            self._commit_change(tr('added "{name}"').format(name=details.name))
+            self.status_message.emit(
+                tr(
+                    "Added the usual sheet details. Edit sheet details changes "
+                    "their fields."
+                )
+            )
+            return
+        block = self._blocks[index]
+        assert isinstance(block.content, SheetDetails)  # noqa: S101 (found as one)
+        if block.content.placement == placement:
+            return
+        others_in_header = any(
+            isinstance(other.content, SheetDetails)
+            and other.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+            for number, other in enumerate(self._blocks)
+            if number != index
+        )
+        if placement == SHEET_DETAILS_PLACEMENTS.HEADER and others_in_header:
+            # Only one set fits in the header: the others move to a line.
+            self._blocks = [
+                replace(
+                    other,
+                    content=replace(
+                        other.content, placement=SHEET_DETAILS_PLACEMENTS.LINE
+                    ),
+                )
+                if isinstance(other.content, SheetDetails) and number != index
+                else other
+                for number, other in enumerate(self._blocks)
+            ]
+        self._blocks[index] = replace(
+            block, content=replace(block.content, placement=placement)
+        )
+        self._fill_block_list([index])
+        self.update_state()
+        self._commit_change(tr("changed where the sheet details go"))
+
+    def edit_sheet_details(self) -> None:
+        """Form details > Edit sheet details: the fields of the form's details."""
+        index = self._sheet_details_index()
+        if index is not None:
+            self._edit_block_at(index)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 (Qt override)
         # The libraries may have changed in their own sections meanwhile.
@@ -861,6 +980,12 @@ class FormsPage(LibraryPage):
         self.update_state()
 
     def _connect_blocks(self) -> None:
+        self.sheet_details_combo.currentIndexChanged.connect(
+            lambda: self.set_sheet_details_placement(
+                self.sheet_details_combo.currentData()
+            )
+        )
+        self.edit_details_button.clicked.connect(self.edit_sheet_details)
         self.orientation_combo.currentIndexChanged.connect(self.update_state)
         self.orientation_combo.currentIndexChanged.connect(
             lambda: self._commit_change(tr("changed the page orientation"))

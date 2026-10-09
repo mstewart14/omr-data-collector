@@ -385,6 +385,8 @@ def test_tab_order_follows_the_screen(
         *page.block_palette.focus_chain(),
         page.name_edit,
         page.orientation_combo,
+        page.sheet_details_combo,
+        page.edit_details_button,
         page.block_list,
         page.add_text_button,
         page.add_question_button,
