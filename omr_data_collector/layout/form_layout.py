@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QPageLayout
 
 from omr_data_collector.constants import ANSWER_TYPES, TABLE_BREAKS
-from omr_data_collector.i18n import tr
+from omr_data_collector.i18n import tr, tr_printed
 from omr_data_collector.layout.page_setup import (
     page_layout_for,
     printable_size_mm,
@@ -34,11 +34,14 @@ from omr_data_collector.layout.text import (
     plain_document,
     text_width_mm,
 )
+from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 
 if TYPE_CHECKING:
+    from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.Form import Form, FormBlock
 
 HEADER_HEIGHT_MM = 24.0
@@ -60,6 +63,10 @@ INSTRUCTIONS_GAP_MM = 2.0
 # Free text is written on a line this far down its row: room above for the
 # letters, as on lined paper.
 WRITING_LINE_DROP_MM = 7.0
+# Sheet details: bold labels, and room between one field and the next.
+DETAIL_LABEL_POINT_SIZE = 9
+DETAIL_LABEL_GAP_MM = 1.5
+DETAIL_FIELD_GAP_MM = 6.0
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,32 @@ class WritingLine:
     x_mm: float
     y_mm: float
     width_mm: float
+
+
+@dataclass(frozen=True)
+class DetailField:
+    """One field of a sheet details block: its label, then its answer.
+
+    Positions are relative to the block's top-left. ``answer_x_mm`` is where the
+    answer starts, after the label; its bubbles, boxes or line are placed as a
+    question's are, all on the field's own line.
+    """
+
+    field_index: int
+    x_mm: float
+    y_mm: float
+    width_mm: float
+    answer_x_mm: float
+    choice_pitch_mm: float
+    bubbles: tuple[Bubble, ...]
+    boxes: tuple[WrittenBox, ...]
+    lines: tuple[WritingLine, ...]
+
+
+@dataclass(frozen=True)
+class DetailsGeometry:
+    fields: tuple[DetailField, ...]
+    height_mm: float
 
 
 @dataclass(frozen=True)
@@ -145,6 +178,7 @@ class PlacedBlock:
     height_mm: float
     question: QuestionGeometry | None = None
     table_part: TablePart | None = None
+    details: DetailsGeometry | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +215,109 @@ def layout_form(form: Form, paper_size: str) -> FormLayout:
         warnings=tuple(builder.warnings),
         paper_width_mm=paper.width(),
         paper_height_mm=paper.height(),
+    )
+
+
+def details_geometry(details: SheetDetails, width_mm: float) -> DetailsGeometry:
+    """Lay a sheet details block's fields along lines ``width_mm`` wide.
+
+    Each field takes the room its label and answer need, and fields wrap onto a
+    new line when the next one doesn't fit. A field is never split: one wider
+    than the page runs off its edge.
+    """
+    placed: list[DetailField] = []
+    x, line = 0.0, 0
+    for index, column in enumerate(details.fields):
+        label = text_width_mm(
+            detail_label(column.name), DETAIL_LABEL_POINT_SIZE, bold=True
+        )
+        answer_width, pitch = _detail_answer_width(column.answer)
+        width = label + DETAIL_LABEL_GAP_MM + answer_width
+        if x > 0 and x + width > width_mm:
+            x, line = 0.0, line + 1
+        top = line * ANSWER_ROW_HEIGHT_MM
+        answer_x = x + label + DETAIL_LABEL_GAP_MM
+        placed.append(
+            DetailField(
+                field_index=index,
+                x_mm=x,
+                y_mm=top,
+                width_mm=width,
+                answer_x_mm=answer_x,
+                choice_pitch_mm=pitch,
+                bubbles=_detail_bubbles(column.answer, answer_x, top, pitch),
+                boxes=_detail_boxes(column.answer, answer_x, top),
+                lines=_detail_lines(column.answer, answer_x, top),
+            )
+        )
+        x += width + DETAIL_FIELD_GAP_MM
+    lines = (line + 1) if placed else 0
+    return DetailsGeometry(fields=tuple(placed), height_mm=lines * ANSWER_ROW_HEIGHT_MM)
+
+
+def detail_label(name: str) -> str:
+    """A field's printed label, like "Date:"."""
+    return tr_printed("{name}:").format(name=name)
+
+
+def _detail_answer_width(answer: AnswerSpec) -> tuple[float, float]:
+    """How wide a field's answer is, and its bubble spacing (0 for written)."""
+    if answer.answer_type in CHOICE_ANSWER_TYPES:
+        choices = answer.printed_choices()
+        widest = max(
+            (
+                text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
+                for choice in choices
+            ),
+            default=0.0,
+        )
+        pitch = BUBBLE_DIAMETER_MM + BUBBLE_LABEL_GAP_MM + widest + CHOICE_SPACING_MM
+        return len(choices) * pitch - CHOICE_SPACING_MM, pitch
+    return answer.characters() * WRITTEN_BOX_WIDTH_MM, 0.0
+
+
+def _detail_bubbles(
+    answer: AnswerSpec, left: float, top: float, pitch: float
+) -> tuple[Bubble, ...]:
+    if answer.answer_type not in CHOICE_ANSWER_TYPES:
+        return ()
+    return tuple(
+        Bubble(
+            centre_x_mm=left + index * pitch + BUBBLE_DIAMETER_MM / 2,
+            centre_y_mm=top + ANSWER_ROW_HEIGHT_MM / 2,
+            label=choice.label,
+            choice_index=index,
+        )
+        for index, choice in enumerate(answer.printed_choices())
+    )
+
+
+def _detail_boxes(
+    answer: AnswerSpec, left: float, top: float
+) -> tuple[WrittenBox, ...]:
+    cells = answer.written_cells()
+    if not cells:
+        return ()
+    margin = (ANSWER_ROW_HEIGHT_MM - WRITTEN_BOX_HEIGHT_MM) / 2
+    return tuple(
+        WrittenBox(
+            x_mm=left + index * WRITTEN_BOX_WIDTH_MM, y_mm=top + margin, printed=printed
+        )
+        for index, printed in enumerate(cells)
+    )
+
+
+def _detail_lines(
+    answer: AnswerSpec, left: float, top: float
+) -> tuple[WritingLine, ...]:
+    if answer.answer_type != ANSWER_TYPES.WRITTEN or answer.written_cells() is not None:
+        return ()
+    return (
+        WritingLine(
+            x_mm=left,
+            y_mm=top + WRITING_LINE_DROP_MM,
+            width_mm=answer.characters() * WRITTEN_BOX_WIDTH_MM,
+        ),
     )
 
 
@@ -325,6 +462,14 @@ class _PageBuilder:
         content = block.content
         if isinstance(content, TableBlock):
             self._place_table(index, block, content)
+            return
+        if isinstance(content, SheetDetails):
+            details = details_geometry(content, self.width)
+            if details.height_mm > self.space and not self.page_is_empty:
+                self.new_page()
+            self.put(
+                PlacedBlock(index, block, self.y, details.height_mm, details=details)
+            )
             return
         question = None
         if isinstance(content, Question):

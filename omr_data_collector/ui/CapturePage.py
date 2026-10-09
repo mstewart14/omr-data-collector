@@ -33,6 +33,7 @@ from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.i18n import tr
 from omr_data_collector.layout.omr_template import PageTemplate
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.storage.capture_store import (
     DuplicateCaptureError,
@@ -643,6 +644,8 @@ class CapturePage(QWidget):
         content = self._form.blocks[answer.block_index].content
         if isinstance(content, TableBlock) and answer.column is not None:
             return content.columns[answer.column].answer
+        if isinstance(content, SheetDetails) and answer.column is not None:
+            return content.fields[answer.column].answer
         if isinstance(content, Question):
             return content.answer
         return None
@@ -669,6 +672,8 @@ class CapturePage(QWidget):
                 row=answer.table_row + 1,
                 column=content.columns[answer.column].name,
             )
+        if isinstance(content, SheetDetails) and answer.column is not None:
+            return content.fields[answer.column].name
         return content.name
 
     def _value_labels(self, answer: CapturedAnswer) -> list[str]:

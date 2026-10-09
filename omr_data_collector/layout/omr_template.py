@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from omr_data_collector.layout.form_layout import ANSWER_ROW_HEIGHT_MM
 from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
 from omr_data_collector.layout.table_layout import (
     BUBBLE_DIAMETER_MM,
@@ -26,6 +27,7 @@ from omr_data_collector.layout.table_layout import (
 )
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 
 if TYPE_CHECKING:
@@ -225,6 +227,8 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
         elif isinstance(content, TableBlock) and placed.table_part is not None:
             _add_table_part(placed, content, add_block, fields)
             regions += _table_regions(placed, rect)
+        elif isinstance(content, SheetDetails) and placed.details is not None:
+            regions += _add_details(placed, add_block, fields, rect)
 
     template = {
         "templateDimensions": [px(right, left), px(bottom, top)],
@@ -294,6 +298,42 @@ def _add_question(placed: PlacedBlock, question: Question, add_block, fields) ->
             [label],
         )
         fields[label] = TemplateField(placed.index, first, len(bubbles))
+
+
+def _add_details(placed: PlacedBlock, add_block, fields, rect) -> list[AnswerRegion]:
+    """A field block for each field answered with bubbles; a region for every field."""
+    geometry = placed.details
+    if geometry is None:
+        return []
+    regions = []
+    for detail in geometry.fields:
+        if detail.bubbles:
+            label = f"d{placed.index}f{detail.field_index}"
+            first = detail.bubbles[0]
+            add_block(
+                label,
+                first.centre_x_mm,
+                placed.y_mm + first.centre_y_mm,
+                CHOICE_LETTERS[: len(detail.bubbles)],
+                detail.choice_pitch_mm,
+                [label],
+            )
+            fields[label] = TemplateField(
+                placed.index, 0, len(detail.bubbles), column=detail.field_index
+            )
+        regions.append(
+            AnswerRegion(
+                placed.index,
+                rect(
+                    detail.x_mm,
+                    placed.y_mm + detail.y_mm,
+                    detail.width_mm,
+                    ANSWER_ROW_HEIGHT_MM,
+                ),
+                column=detail.field_index,
+            )
+        )
+    return regions
 
 
 def _table_regions(placed: PlacedBlock, rect) -> list[AnswerRegion]:

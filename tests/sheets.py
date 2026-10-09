@@ -139,6 +139,13 @@ class Sheet:
             if bubble.choice_index in choices:
                 self._fill(bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm)
 
+    def fill_detail(self, index: int, field: int, choice: int) -> None:
+        placed = self._placed(index)
+        assert placed.details is not None
+        detail = next(f for f in placed.details.fields if f.field_index == field)
+        bubble = detail.bubbles[choice]
+        self._fill(bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm)
+
     def fill_cell(self, index: int, row: int, column: int, choice: int) -> None:
         placed = self._placed(index)
         part = placed.table_part

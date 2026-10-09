@@ -30,6 +30,7 @@ from omr_data_collector.layout.omr_template import (
     page_template,
 )
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.storage.form_store import (
     load_form_version,
@@ -286,6 +287,8 @@ def _answer_spec(form: Form, block_index: int, column: int | None) -> AnswerSpec
     content = form.blocks[block_index].content
     if isinstance(content, TableBlock) and column is not None:
         return content.columns[column].answer
+    if isinstance(content, SheetDetails) and column is not None:
+        return content.fields[column].answer
     if isinstance(content, Question):
         return content.answer
     msg = tr("Block {number} of the form has no bubbles.").format(

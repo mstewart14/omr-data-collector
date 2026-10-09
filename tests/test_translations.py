@@ -35,11 +35,13 @@ from omr_data_collector.i18n import (
     pseudo_translate,
     tr,
 )
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
+from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 
 if TYPE_CHECKING:
     import sqlite3
@@ -164,6 +166,8 @@ def test_every_page_and_menu_is_translatable(
         lambda: BlockPickerDialog(None, BLOCK_KINDS.TABLE, [], can_write_new=False),
         lambda: OpenFormDialog(None, [], set()),
         lambda: LanguageDialog(None, ""),
+        lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
+        lambda: ColumnDialog(None, None, set(), sheet_detail=True),
     ],
     ids=[
         "column",
@@ -173,6 +177,8 @@ def test_every_page_and_menu_is_translatable(
         "table picker",
         "open form",
         "language",
+        "sheet details",
+        "sheet detail field",
     ],
 )
 def test_every_dialog_is_translatable(qtbot: QtBot, make_dialog) -> None:

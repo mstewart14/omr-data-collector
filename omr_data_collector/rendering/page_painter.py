@@ -23,9 +23,11 @@ from omr_data_collector.layout.form_layout import (
     ANSWER_ROW_HEIGHT_MM,
     BODY_POINT_SIZE,
     BUBBLE_LABEL_GAP_MM,
+    DETAIL_LABEL_POINT_SIZE,
     EXAMPLE_POINT_SIZE,
     HEADER_HEIGHT_MM,
     QR_SIZE_MM,
+    detail_label,
 )
 from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
 from omr_data_collector.layout.table_layout import BUBBLE_DIAMETER_MM
@@ -37,15 +39,20 @@ from omr_data_collector.layout.text import (
     plain_document,
 )
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.rendering.table_painter import paint_table
 
 if TYPE_CHECKING:
     from omr_data_collector.layout.form_layout import (
+        Bubble,
+        DetailsGeometry,
         FormLayout,
         PageLayout,
         PlacedBlock,
+        WritingLine,
+        WrittenBox,
     )
     from omr_data_collector.models.Form import Form
     from omr_data_collector.models.Organization import Organization
@@ -186,6 +193,8 @@ def _paint_block(painter: QPainter, placed: PlacedBlock, width: float) -> None:
         )
     elif isinstance(content, Question) and placed.question is not None:
         _paint_question(painter, content, placed, width)
+    elif isinstance(content, SheetDetails) and placed.details is not None:
+        _paint_details(painter, content, placed.details, width)
     elif isinstance(content, TableBlock) and placed.table_part is not None:
         part = placed.table_part
         if part.instructions_height_mm:
@@ -217,10 +226,48 @@ def _paint_question(
             0,
             geometry.example_top_mm,
         )
+    _paint_answer_marks(
+        painter, geometry.bubbles, geometry.boxes, geometry.lines, width
+    )
+
+
+def _paint_details(
+    painter: QPainter, details: SheetDetails, geometry: DetailsGeometry, width: float
+) -> None:
+    """Each field's bold label, then its answer's bubbles, boxes or line."""
+    for placed in geometry.fields:
+        column = details.fields[placed.field_index]
+        painter.setPen(QPen(INK))
+        draw_text(
+            painter,
+            QRectF(
+                placed.x_mm,
+                placed.y_mm,
+                placed.answer_x_mm - placed.x_mm,
+                ANSWER_ROW_HEIGHT_MM,
+            ),
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
+            | Qt.TextFlag.TextSingleLine,
+            detail_label(column.name),
+            DETAIL_LABEL_POINT_SIZE,
+            bold=True,
+        )
+        _paint_answer_marks(painter, placed.bubbles, placed.boxes, placed.lines, width)
+
+
+def _paint_answer_marks(
+    painter: QPainter,
+    bubbles: tuple[Bubble, ...],
+    boxes: tuple[WrittenBox, ...],
+    lines: tuple[WritingLine, ...],
+    width: float,
+) -> None:
+    """Bubbles with their labels, boxes to write in, and lines to write on."""
     painter.setPen(QPen(INK, LINE_WIDTH_MM))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     radius = BUBBLE_DIAMETER_MM / 2
-    for bubble in geometry.bubbles:
+    for bubble in bubbles:
         painter.drawEllipse(
             QPointF(bubble.centre_x_mm, bubble.centre_y_mm), radius, radius
         )
@@ -239,13 +286,13 @@ def _paint_question(
             bubble.label,
             ANSWER_LABEL_POINT_SIZE,
         )
-    for box in geometry.boxes:
+    for box in boxes:
         rect = QRectF(box.x_mm, box.y_mm, box.width_mm, box.height_mm)
         if box.printed:
             draw_printed_character(painter, rect, box.printed)
         else:
             painter.drawRect(rect)
-    for line in geometry.lines:
+    for line in lines:
         painter.drawLine(
             QPointF(line.x_mm, line.y_mm), QPointF(line.x_mm + line.width_mm, line.y_mm)
         )

@@ -14,16 +14,18 @@ from omr_data_collector.constants import (
 )
 from omr_data_collector.i18n import tr
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.schemas.form_schema import FORM_DEFINITION_SCHEMA
 
-BlockContent = TextBlock | Question | TableBlock
+BlockContent = TextBlock | Question | TableBlock | SheetDetails
 
-CONTENT_TYPES: dict[str, type[TextBlock | Question | TableBlock]] = {
+CONTENT_TYPES: dict[str, type[BlockContent]] = {
     BLOCK_KINDS.TEXT: TextBlock,
     BLOCK_KINDS.QUESTION: Question,
     BLOCK_KINDS.TABLE: TableBlock,
+    BLOCK_KINDS.SHEET_DETAILS: SheetDetails,
 }
 
 
@@ -33,6 +35,7 @@ def kind_name(kind: str) -> str:
         BLOCK_KINDS.TEXT: tr("text block"),
         BLOCK_KINDS.QUESTION: tr("question"),
         BLOCK_KINDS.TABLE: tr("table"),
+        BLOCK_KINDS.SHEET_DETAILS: tr("sheet details"),
     }[kind]
 
 
@@ -42,6 +45,7 @@ def kind_title(kind: str) -> str:
         BLOCK_KINDS.TEXT: tr("Text block"),
         BLOCK_KINDS.QUESTION: tr("Question"),
         BLOCK_KINDS.TABLE: tr("Table"),
+        BLOCK_KINDS.SHEET_DETAILS: tr("Sheet details"),
     }[kind]
 
 
@@ -51,6 +55,8 @@ def content_id(content: BlockContent) -> str:
         return content.text_block_id
     if isinstance(content, Question):
         return content.question_id
+    if isinstance(content, SheetDetails):
+        return content.sheet_details_id
     return content.table_block_id
 
 

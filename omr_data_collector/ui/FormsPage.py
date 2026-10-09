@@ -40,6 +40,7 @@ from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_title
 from omr_data_collector.models.ordering import move_by, move_to
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.rendering.print_form import render_form, save_pdf
 from omr_data_collector.storage.form_store import (
     delete_form,
@@ -66,6 +67,7 @@ from omr_data_collector.ui.form_helpers import (
 from omr_data_collector.ui.LibraryPage import LibraryPage, LibraryTexts
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
 from omr_data_collector.ui.PageCanvas import PageCanvas
+from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 from omr_data_collector.ui.TablePreview import orientation_names
 
 if TYPE_CHECKING:
@@ -94,7 +96,9 @@ DETAILS_START_WIDTH = 340
 PAGES_START_WIDTH = 4000
 # Blocks written on the form itself can be; table copies are edited in the
 # library for now.
-EDITABLE_KINDS = {BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION}
+EDITABLE_KINDS = {BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION, BLOCK_KINDS.SHEET_DETAILS}
+# The palette's one sheet details entry, which adds a fresh copy to start from.
+STARTER_DETAILS_ID = "starter"
 
 
 def pick_block(
@@ -117,7 +121,20 @@ def pick_block(
 def write_block(
     parent: QWidget, kind: str, content: BlockContent | None
 ) -> BlockContent | None:
-    """Write a new text block or question, or edit a form's copy; None if cancelled."""
+    """Write a new text block or question, or edit a form's copy; None if cancelled.
+
+    Sheet details are only ever edited: they're added from the palette.
+    """
+    if kind == BLOCK_KINDS.SHEET_DETAILS:
+        details_dialog = SheetDetailsDialog(
+            parent,
+            content
+            if isinstance(content, SheetDetails)
+            else SheetDetails(name=tr("Sheet details")),
+        )
+        if details_dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return details_dialog.details()
     dialog = BlockContentDialog(parent, kind, content)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
@@ -446,6 +463,11 @@ class FormsPage(LibraryPage):
             BLOCK_KINDS.TEXT: list(list_text_blocks(self._connection)),
             BLOCK_KINDS.QUESTION: list(list_questions(self._connection)),
             BLOCK_KINDS.TABLE: list(list_table_blocks(self._connection)),
+            BLOCK_KINDS.SHEET_DETAILS: [
+                SheetDetails(
+                    name=tr("Sheet details"), sheet_details_id=STARTER_DETAILS_ID
+                )
+            ],
         }
 
     def _edit_block_at(self, index: int) -> None:
@@ -477,6 +499,18 @@ class FormsPage(LibraryPage):
             None,
         )
         if chosen is None:
+            return
+        if isinstance(chosen, SheetDetails):
+            # A fresh set to change: written on the form, not from a library.
+            self._insert_block(
+                FormBlock(content=SheetDetails(name=chosen.name), source_id=None), index
+            )
+            self._commit_change(tr('added "{name}"').format(name=chosen.name))
+            self.status_message.emit(
+                tr('Added "{name}" to the form. Edit block changes its fields.').format(
+                    name=chosen.name
+                )
+            )
             return
         self._insert_block(FormBlock(content=chosen, source_id=item_id), index)
         self._commit_change(tr('added "{name}"').format(name=chosen.name))

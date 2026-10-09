@@ -105,9 +105,13 @@ BLOCK_KINDS = DotMap(
         "TEXT": "TEXT",
         "QUESTION": "QUESTION",
         "TABLE": "TABLE",
+        # Details about the sheet itself (date, shift, who filled it in), as
+        # labelled answers along a line.
+        "SHEET_DETAILS": "SHEET_DETAILS",
     },
     _dynamic=False,
 )
+MAX_SHEET_DETAIL_FIELDS = 12
 
 # What a table does when it doesn't fit in the space left on its page.
 TABLE_BREAKS = DotMap(

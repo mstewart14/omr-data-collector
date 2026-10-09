@@ -163,5 +163,12 @@
                 <numerusform>%n answers to fix before saving.</numerusform>
             </translation>
         </message>
+        <message numerus="yes">
+            <source>Use at most %n field(s).</source>
+            <translation>
+                <numerusform>Use at most %n field.</numerusform>
+                <numerusform>Use at most %n fields.</numerusform>
+            </translation>
+        </message>
     </context>
 </TS>

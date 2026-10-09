@@ -34,22 +34,34 @@ class ColumnDialog(QDialog):
     """
 
     def __init__(
-        self, parent: QWidget | None, column: Column | None, other_names: set[str]
+        self,
+        parent: QWidget | None,
+        column: Column | None,
+        other_names: set[str],
+        *,
+        sheet_detail: bool = False,
     ) -> None:
         """Edit ``column``, or a new one when it's None.
 
         ``other_names`` are the table's other column names, which this one may not
-        repeat.
+        repeat. With ``sheet_detail`` it edits a field of a sheet details block
+        instead, which has a label but no example.
         """
         super().__init__(parent)
-        self.setWindowTitle(tr("Edit column") if column else tr("Add column"))
+        self._sheet_detail = sheet_detail
+        if sheet_detail:
+            self.setWindowTitle(tr("Edit field") if column else tr("Add field"))
+        else:
+            self.setWindowTitle(tr("Edit column") if column else tr("Add column"))
         self._other_names = other_names
         self._column: Column | None = None
 
         self.form = QFormLayout()
         self.name_edit = QLineEdit()
         self.name_edit.setToolTip(
-            tr("Printed as the heading, and the export column name")
+            tr("Printed as the field's label, and the export column name")
+            if sheet_detail
+            else tr("Printed as the heading, and the export column name")
         )
         self.example_edit = QLineEdit()
         self.example_edit.setPlaceholderText(
@@ -59,7 +71,13 @@ class ColumnDialog(QDialog):
         self.field_labels: dict[str, QLabel] = {}
         self.error_labels: dict[str, QLabel] = {}
         for key, label_text, widget in (
-            ("name", tr("Column &name (required)"), self.name_edit),
+            (
+                "name",
+                tr("Field &name (required)")
+                if sheet_detail
+                else tr("Column &name (required)"),
+                self.name_edit,
+            ),
             ("example", tr("&Example"), self.example_edit),
         ):
             self.field_labels[key], self.error_labels[key] = add_field_row(
@@ -79,6 +97,9 @@ class ColumnDialog(QDialog):
         )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
+
+        # A sheet detail's label says it all: no example is printed.
+        self.form.setRowVisible(self.example_edit, not sheet_detail)
 
         layout = QVBoxLayout(self)
         layout.addLayout(self.form)
@@ -116,6 +137,12 @@ class ColumnDialog(QDialog):
     def accept(self) -> None:
         column = self.entered_column()
         errors = column.validation_errors(self._other_names)
+        if self._sheet_detail and column.name.casefold() in {
+            name.casefold() for name in self._other_names
+        }:
+            errors["name"] = tr(
+                'These sheet details already have a field called "{name}".'
+            ).format(name=column.name)
         for key, label in self.error_labels.items():
             set_field_error(
                 self.form, self.field_widgets[key], label, errors.get(key, "")

@@ -9,6 +9,7 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QAbstractButton, QLabel, QMessageBox, QWidget
 
 from omr_data_collector.constants import BLOCK_KINDS
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.storage.question_store import list_questions
 from omr_data_collector.storage.text_block_store import save_text_block
@@ -17,6 +18,7 @@ from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
+from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 
 if TYPE_CHECKING:
     import sqlite3
@@ -174,8 +176,10 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: BlockContentDialog(None, BLOCK_KINDS.QUESTION, None),
         lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
         lambda: LanguageDialog(None, ""),
+        lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
+        lambda: ColumnDialog(None, None, set(), sheet_detail=True),
     ],
-    ids=["column", "text", "question", "picker", "language"],
+    ids=["column", "text", "question", "picker", "language", "details", "field"],
 )
 @pytest.mark.usefixtures("language")
 def test_each_dialog_has_unique_mnemonics(qtbot: QtBot, make_dialog) -> None:
