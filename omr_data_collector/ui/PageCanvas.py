@@ -59,6 +59,8 @@ class _BlockArea:
 
     index: int
     rect: QRectF
+    # Sheet details in the header: selectable, but not a place to drop blocks.
+    in_header: bool = False
 
 
 class PageCanvas(QWidget):
@@ -171,15 +173,21 @@ class PageCanvas(QWidget):
         for page_index, page in enumerate(self._layout.pages):
             origin = self._page_origin(page_index)
             for placed in page.blocks:
+                width = (
+                    placed.width_mm
+                    if placed.width_mm is not None
+                    else self._layout.width_mm
+                )
                 self._areas.append(
                     _BlockArea(
                         placed.index,
                         QRectF(
-                            origin.x() + PAGE_MARGIN_MM * scale,
+                            origin.x() + (PAGE_MARGIN_MM + placed.x_mm) * scale,
                             origin.y() + (PAGE_MARGIN_MM + placed.y_mm) * scale,
-                            self._layout.width_mm * scale,
+                            width * scale,
                             placed.height_mm * scale,
                         ),
+                        in_header=placed.in_header,
                     )
                 )
         _, page_height = self._page_size_mm()
@@ -201,18 +209,20 @@ class PageCanvas(QWidget):
 
         Before the first block whose middle is below it, or at the end.
         """
-        for area in self._areas:
+        # Sheet details in the header stay there wherever they are in the list.
+        for area in (area for area in self._areas if not area.in_header):
             same_page_or_later = area.rect.bottom() >= position.y() - PAGE_GAP_PX
             if same_page_or_later and position.y() < area.rect.center().y():
                 return area.index
         return len(self._form.blocks) if self._form else 0
 
     def _drop_line_y(self, index: int) -> float | None:
-        before = [area for area in self._areas if area.index == index]
+        stacked = [area for area in self._areas if not area.in_header]
+        before = [area for area in stacked if area.index == index]
         if before:
             return before[0].rect.top() - 2
-        if self._areas:
-            return self._areas[-1].rect.bottom() + 2
+        if stacked:
+            return stacked[-1].rect.bottom() + 2
         return None
 
     # --- Painting -----------------------------------------------------------------

@@ -32,6 +32,7 @@ from omr_data_collector.constants import (
     BLOCK_KINDS,
     PAGE_ORIENTATIONS,
     PAPER_SIZES,
+    SHEET_DETAILS_PLACEMENTS,
     TABLE_BREAKS,
 )
 from omr_data_collector.i18n import tr
@@ -179,6 +180,11 @@ def block_summary(number: int, block: FormBlock) -> str:
     """One line describing a block, for the blocks list and screen readers."""
     origin = tr("from the library") if block.source_id else tr("written on this form")
     parts = [origin]
+    if (
+        isinstance(block.content, SheetDetails)
+        and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+    ):
+        parts.append(tr("in the header of every page"))
     if block.start_on_new_page:
         parts.append(tr("starts a new page"))
     if block.kind == BLOCK_KINDS.TABLE:
@@ -501,16 +507,33 @@ class FormsPage(LibraryPage):
         if chosen is None:
             return
         if isinstance(chosen, SheetDetails):
-            # A fresh set to change: written on the form, not from a library.
-            self._insert_block(
-                FormBlock(content=SheetDetails(name=chosen.name), source_id=None), index
+            # A fresh set to change: written on the form, not from a library. The
+            # header has room for one set; another goes along a line.
+            in_header = any(
+                isinstance(block.content, SheetDetails)
+                and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+                for block in self._blocks
             )
+            details = SheetDetails(
+                name=chosen.name,
+                placement=SHEET_DETAILS_PLACEMENTS.LINE
+                if in_header
+                else SHEET_DETAILS_PLACEMENTS.HEADER,
+            )
+            self._insert_block(FormBlock(content=details, source_id=None), index)
             self._commit_change(tr('added "{name}"').format(name=chosen.name))
-            self.status_message.emit(
-                tr('Added "{name}" to the form. Edit block changes its fields.').format(
-                    name=chosen.name
+            message = (
+                tr(
+                    'Added "{name}" along a line: the header already has sheet '
+                    "details. Edit block changes its fields."
+                )
+                if in_header
+                else tr(
+                    'Added "{name}" to the header. Edit block changes its fields, '
+                    "or where they go."
                 )
             )
+            self.status_message.emit(message.format(name=chosen.name))
             return
         self._insert_block(FormBlock(content=chosen, source_id=item_id), index)
         self._commit_change(tr('added "{name}"').format(name=chosen.name))

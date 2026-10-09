@@ -112,6 +112,16 @@ BLOCK_KINDS = DotMap(
     _dynamic=False,
 )
 MAX_SHEET_DETAIL_FIELDS = 12
+# Where a sheet details block prints. Values are stored.
+SHEET_DETAILS_PLACEMENTS = DotMap(
+    {
+        # Stacked in the page header, beside the QR code, on every page.
+        "HEADER": "HEADER",
+        # Along a line, where the block is in the form.
+        "LINE": "LINE",
+    },
+    _dynamic=False,
+)
 
 # What a table does when it doesn't fit in the space left on its page.
 TABLE_BREAKS = DotMap(

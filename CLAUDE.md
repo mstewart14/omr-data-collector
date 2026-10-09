@@ -94,10 +94,13 @@ engine bridge.
   `engine/scanning.scan_sheet` reads the QR code, runs OMRChecker on a copy of the
   image with the stored template, and returns answers, flagging double marks.
   `tests/test_scanning.py` is the round-trip test.
-- **Sheet details** (`models/SheetDetails.py`): a block of labelled answers
-  along a line (Date, Shift, Manager...), each field a table `Column`, written on
-  the form (added from the palette, starting from a usual set) rather than kept
-  in a library. Its answers are keyed `(block, None, field)` in templates and
+- **Sheet details** (`models/SheetDetails.py`): labelled answers (Date, Shift,
+  Manager...), each field a table `Column`, written on the form (added from the
+  palette, starting from a usual set) rather than kept in a library. By default
+  they're stacked in the header beside the QR code on every page (one set per
+  form): `layout_form` places them before stacking anything, grows the header to
+  fit (`FormLayout.header_height_mm`) and narrows the names beside them; the
+  other placement runs them along a line where the block is. Its answers are keyed `(block, None, field)` in templates and
   captures, where a question's is `(block, None, None)`.
 - **Capture** (`ui/CapturePage.py`, wiki 60001-60004): images are copied into
   `captures/` beside the database (`storage/capture_store.py`, which refuses an

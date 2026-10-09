@@ -11,11 +11,16 @@ from omr_data_collector.constants import (
     ANSWER_TYPES,
     BLOCK_KINDS,
     PAPER_SIZES,
+    SHEET_DETAILS_PLACEMENTS,
     WRITTEN_DATA_TYPES,
 )
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.layout.form_layout import (
     ANSWER_ROW_HEIGHT_MM,
+    HEADER_DETAIL_ROW_MM,
+    HEADER_HEIGHT_MM,
+    HEADER_TEXT_GAP_MM,
+    QR_SIZE_MM,
     details_geometry,
     layout_form,
 )
@@ -23,11 +28,12 @@ from omr_data_collector.layout.omr_template import page_template, printed_layout
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.SheetDetails import SheetDetails
-from omr_data_collector.models.TableBlock import Column
+from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.storage.capture_store import add_capture
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.FormsPage import FormsPage
+from omr_data_collector.ui.PageCanvas import PageCanvas
 from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 from tests.sheets import Sheet
 
@@ -56,8 +62,12 @@ SHIFT = Column(
 )
 
 
-def details(*fields: Column) -> SheetDetails:
-    return SheetDetails(name="Sheet details", fields=fields).normalized()
+def details(
+    *fields: Column, placement: str = SHEET_DETAILS_PLACEMENTS.HEADER
+) -> SheetDetails:
+    return SheetDetails(
+        name="Sheet details", fields=fields, placement=placement
+    ).normalized()
 
 
 def test_new_sheet_details_start_with_the_usual_fields() -> None:
@@ -175,9 +185,21 @@ def test_the_palette_adds_a_fresh_set_to_change(
     assert block.source_id is None
     assert isinstance(block.content, SheetDetails)
     assert len(block.content.fields) == 5
+    assert block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
     assert messages == [
-        'Added "Sheet details" to the form. Edit block changes its fields.'
+        'Added "Sheet details" to the header. Edit block changes its fields, or '
+        "where they go."
     ]
+    assert "in the header of every page" in page.block_list.item(0).text()
+
+    page.add_library_block(
+        BLOCK_KINDS.SHEET_DETAILS, starter.data(Qt.ItemDataRole.UserRole), None
+    )
+
+    second = page._blocks[1].content  # noqa: SLF001
+    assert isinstance(second, SheetDetails)
+    assert second.placement == SHEET_DETAILS_PLACEMENTS.LINE
+    assert messages[-1].startswith('Added "Sheet details" along a line')
     assert page.edit_block_button.isEnabled()
     page.revert()
 
@@ -226,3 +248,120 @@ def test_a_field_is_set_up_like_a_column_without_an_example(qtbot: QtBot) -> Non
     assert dialog.error_labels["name"].text() == (
         'These sheet details already have a field called "date".'
     )
+
+
+# --- In the header (the default) ---------------------------------------------------
+
+
+def long_form(*blocks: FormBlock) -> Form:
+    """Sheet details, then a table long enough for two pages."""
+    table = TableBlock(
+        "Visits",
+        rows=50,
+        columns=(Column("time", answer=AnswerSpec(ANSWER_TYPES.WRITTEN)),),
+    )
+    return Form(name="Log", blocks=(*blocks, FormBlock(table)))
+
+
+def test_header_details_stack_beside_the_qr_code_on_every_page() -> None:
+    form = long_form(FormBlock(SheetDetails(name="Sheet details").normalized()))
+
+    layout = layout_form(form, LETTER)
+
+    assert len(layout.pages) == 2
+    for page in layout.pages:
+        header, *_ = page.blocks
+        assert header.in_header
+        assert header.y_mm == 0
+        assert header.details is not None
+        assert [f.y_mm for f in header.details.fields] == [
+            n * HEADER_DETAIL_ROW_MM for n in range(5)
+        ]
+        assert header.x_mm + (header.width_mm or 0) == pytest.approx(
+            layout.width_mm - QR_SIZE_MM - HEADER_TEXT_GAP_MM
+        )
+    # Five fields need a taller header, and the names get less room.
+    assert layout.header_height_mm > HEADER_HEIGHT_MM
+    assert layout.header_text_width_mm < layout.width_mm - QR_SIZE_MM
+    first_table = layout.pages[0].blocks[1]
+    assert first_table.y_mm >= layout.header_height_mm
+    assert layout.warnings == ()
+
+
+def test_a_few_header_details_keep_the_usual_header() -> None:
+    starter = SheetDetails(name="Sheet details").fields
+    form = long_form(FormBlock(details(starter[0], starter[1], starter[2])))
+
+    assert layout_form(form, LETTER).header_height_mm == HEADER_HEIGHT_MM
+
+
+def test_header_details_too_wide_are_reported() -> None:
+    wide = Column(
+        "Program",
+        answer=AnswerSpec(
+            ANSWER_TYPES.ONE_CHOICE,
+            choices=tuple(Choice(f"Program {n}", str(n)) for n in range(6)),
+        ),
+    )
+
+    layout = layout_form(long_form(FormBlock(details(wide))), LETTER)
+
+    (warning,) = layout.warnings
+    assert warning.startswith('The sheet details "Sheet details" are ')
+    assert "put them along a line" in warning
+
+
+def test_only_one_set_of_details_fits_in_the_header() -> None:
+    form = Form(
+        name="Log",
+        blocks=(FormBlock(details(SHIFT)), FormBlock(details(SHIFT))),
+    )
+
+    assert form.validation_errors(set())["blocks"] == (
+        "Blocks 1 and 2 are both sheet details in the header, which has room "
+        "for one; put one along a line instead."
+    )
+
+
+def test_details_stored_before_placement_existed_stay_along_a_line() -> None:
+    data = details(SHIFT).to_dict()
+    del data["placement"]
+
+    assert SheetDetails.from_dict(data).placement == SHEET_DETAILS_PLACEMENTS.LINE
+
+
+def test_every_page_reads_the_header_details() -> None:
+    form = long_form(FormBlock(details(SHIFT)))
+    layout = layout_form(form, LETTER)
+
+    templates = [page_template(layout, page) for page in layout.pages]
+
+    for template in templates:
+        assert template.fields["d0f0"].column == 0
+        assert template.regions[0].key == (0, None, 0)
+
+
+def test_dropping_a_block_on_the_header_doesnt_place_it_there(qtbot: QtBot) -> None:
+    canvas = PageCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(800, 1200)
+    form = long_form(FormBlock(details(SHIFT)))
+    canvas.set_form(form, None, LETTER)
+    header = next(area for area in canvas._areas if area.in_header)  # noqa: SLF001
+
+    assert canvas.block_at(header.rect.center()) == 0
+    assert canvas.insert_index_at(header.rect.center()) == 1
+
+
+def test_the_dialog_sets_where_the_details_go(qtbot: QtBot) -> None:
+    dialog = SheetDetailsDialog(None, details(SHIFT))
+    qtbot.addWidget(dialog)
+    dialog.placement_combo.setCurrentIndex(
+        dialog.placement_combo.findData(SHEET_DETAILS_PLACEMENTS.LINE)
+    )
+
+    dialog.accept()
+
+    accepted = dialog.details()
+    assert accepted is not None
+    assert accepted.placement == SHEET_DETAILS_PLACEMENTS.LINE

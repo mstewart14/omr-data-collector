@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from omr_data_collector.layout.form_layout import ANSWER_ROW_HEIGHT_MM
 from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
 from omr_data_collector.layout.table_layout import (
     BUBBLE_DIAMETER_MM,
@@ -328,7 +327,7 @@ def _add_details(placed: PlacedBlock, add_block, fields, rect) -> list[AnswerReg
                     detail.x_mm,
                     placed.y_mm + detail.y_mm,
                     detail.width_mm,
-                    ANSWER_ROW_HEIGHT_MM,
+                    geometry.row_height_mm,
                 ),
                 column=detail.field_index,
             )

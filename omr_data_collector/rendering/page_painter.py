@@ -25,7 +25,7 @@ from omr_data_collector.layout.form_layout import (
     BUBBLE_LABEL_GAP_MM,
     DETAIL_LABEL_POINT_SIZE,
     EXAMPLE_POINT_SIZE,
-    HEADER_HEIGHT_MM,
+    HEADER_TEXT_GAP_MM,
     QR_SIZE_MM,
     detail_label,
 )
@@ -63,7 +63,6 @@ LINE_WIDTH_MM = 0.3
 ORGANIZATION_POINT_SIZE = 12
 FORM_NAME_POINT_SIZE = 11
 DETAIL_POINT_SIZE = 8
-HEADER_TEXT_GAP_MM = 4.0
 # Large and bold, so the separators read clearly between the boxes.
 PRINTED_SEPARATOR_POINT_SIZE = 14
 
@@ -129,7 +128,8 @@ def _paint_header(
             painter, qr, Qt.AlignmentFlag.AlignCenter, tr("QR code"), DETAIL_POINT_SIZE
         )
 
-    text_width = width - QR_SIZE_MM - HEADER_TEXT_GAP_MM
+    # Narrower when sheet details share the header.
+    text_width = layout.header_text_width_mm or width - QR_SIZE_MM - HEADER_TEXT_GAP_MM
     y = 0.0
 
     def line(
@@ -180,7 +180,7 @@ def _paint_header(
     )
 
     painter.setPen(QPen(INK, LINE_WIDTH_MM))
-    rule = HEADER_HEIGHT_MM - LINE_WIDTH_MM
+    rule = layout.header_height_mm - LINE_WIDTH_MM
     painter.drawLine(QPointF(0, rule), QPointF(width, rule))
 
 
@@ -244,7 +244,7 @@ def _paint_details(
                 placed.x_mm,
                 placed.y_mm,
                 placed.answer_x_mm - placed.x_mm,
-                ANSWER_ROW_HEIGHT_MM,
+                geometry.row_height_mm,
             ),
             Qt.AlignmentFlag.AlignLeft
             | Qt.AlignmentFlag.AlignVCenter

@@ -10,6 +10,7 @@ from omr_data_collector.constants import (
     BLOCK_KINDS,
     FORM_NAME_MAX_LENGTH,
     PAGE_ORIENTATIONS,
+    SHEET_DETAILS_PLACEMENTS,
     TABLE_BREAKS,
 )
 from omr_data_collector.i18n import tr
@@ -202,6 +203,17 @@ class Form:
                     name=block.content.name,
                     problem=first,
                 )
+        in_header = [
+            number
+            for number, block in enumerate(self.blocks, start=1)
+            if isinstance(block.content, SheetDetails)
+            and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
+        ]
+        if len(in_header) > 1:
+            return tr(
+                "Blocks {first} and {second} are both sheet details in the header, "
+                "which has room for one; put one along a line instead."
+            ).format(first=in_header[0], second=in_header[1])
         # Question and table names become export column and file names, so two
         # blocks of the same kind can't share one.
         for kind in (BLOCK_KINDS.QUESTION, BLOCK_KINDS.TABLE):

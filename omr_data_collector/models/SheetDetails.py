@@ -7,6 +7,7 @@ from typing import Any
 from omr_data_collector.constants import (
     ANSWER_TYPES,
     MAX_SHEET_DETAIL_FIELDS,
+    SHEET_DETAILS_PLACEMENTS,
     TABLE_NAME_MAX_LENGTH,
     WRITTEN_DATA_TYPES,
 )
@@ -45,10 +46,12 @@ def starter_fields() -> tuple[Column, ...]:
 
 @dataclass(frozen=True)
 class SheetDetails:
-    """Details about a sheet and how it was filled in, along a line of the page.
+    """Details about a sheet and how it was filled in: date, shift, who filled it in.
 
     Each field is a label and its answer, like "Date: [boxes]" or "Shift: o Day
-    o Night"; fields run left to right and wrap onto further lines. A field is
+    o Night". In the header (the default) the fields are stacked beside the QR
+    code on every page; along a line they run left to right where the block is,
+    wrapping onto further lines. A field is
     set up like a table column (a name and how it's answered), and each one is
     read and exported like a question. Written on the form itself, so every
     organization can have its own set.
@@ -56,6 +59,7 @@ class SheetDetails:
 
     name: str
     fields: tuple[Column, ...] = field(default_factory=starter_fields)
+    placement: str = SHEET_DETAILS_PLACEMENTS.HEADER
     sheet_details_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def normalized(self) -> SheetDetails:
@@ -71,6 +75,7 @@ class SheetDetails:
             "id": self.sheet_details_id,
             "name": self.name,
             "fields": columns_to_list(self.fields),
+            "placement": self.placement,
         }
 
     @classmethod
@@ -78,6 +83,8 @@ class SheetDetails:
         return cls(
             name=data["name"],
             fields=columns_from_list(data["fields"]),
+            # Stored before there was a choice: they were along a line.
+            placement=data.get("placement", SHEET_DETAILS_PLACEMENTS.LINE),
             sheet_details_id=data["id"],
         )
 
@@ -92,6 +99,8 @@ class SheetDetails:
                 None,
                 TABLE_NAME_MAX_LENGTH,
             )
+        if self.placement not in SHEET_DETAILS_PLACEMENTS.values():
+            errors["placement"] = tr("Choose where the details go.")
         if not self.fields:
             errors["fields"] = tr("Add at least one field.")
         elif len(self.fields) > MAX_SHEET_DETAIL_FIELDS:
