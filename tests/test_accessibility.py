@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAccessible, QColor, QFont, QKeySequence, QPalette
-from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit, QWidget
+from PySide6.QtWidgets import QApplication, QFormLayout, QLabel, QLineEdit, QWidget
 
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.organization_store import save_organization
@@ -16,6 +16,7 @@ from omr_data_collector.ui.accessibility import (
     error_text_color,
     set_field_error,
 )
+from omr_data_collector.ui.LibraryPage import LibraryPage
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OrganizationPage import OrganizationPage, form_fields
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
@@ -319,3 +320,37 @@ def test_formatting_icons_follow_the_theme_and_font_size(
 
     assert "#e8eaed" in icon_colors(bold)
     assert bold.iconSize().height() > small
+
+
+@pytest.mark.parametrize("section", range(4))
+def test_details_panels_fit_their_fields_at_a_large_font_size(
+    qtbot: QtBot, connection: sqlite3.Connection, section: int
+) -> None:
+    """Nothing is cut off at the left, as a sideways scroll would at Sans 14."""
+    app = QApplication.instance()
+    assert isinstance(app, QApplication)
+    usual = app.font()
+    large = QFont(usual)
+    large.setPointSize(16)
+    app.setFont(large)
+    try:
+        window = MainWindow(connection)
+        qtbot.addWidget(window)
+        window.resize(1400, 900)
+        window.show()
+        window.open_section(section)
+        _, page = window.pages[section]
+        assert isinstance(page, LibraryPage)
+        page.name_edit.setFocus()
+        qtbot.wait(20)
+
+        scroll = page.form_scroll
+        form = scroll.widget()
+        assert form is not None
+        assert scroll.viewport().width() >= form.minimumSizeHint().width()
+        assert scroll.horizontalScrollBar().value() == 0
+        assert (
+            scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+    finally:
+        app.setFont(usual)

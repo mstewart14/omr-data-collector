@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import QEvent, QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -372,6 +372,14 @@ class LibraryPage(QWidget):
         # Not a Tab stop of its own: focus goes to the fields inside it.
         self.form_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.form_scroll.setWidget(form_container)
+        # It scrolls up and down only, and is never narrower than its fields at
+        # the font size in use: a sideways scroll would leave the start of every
+        # label and field out of view (as at a large desktop font size).
+        self.form_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        form_container.installEventFilter(self)
+        self._fit_form_width()
         app = QApplication.instance()
         if isinstance(app, QApplication):
             app.focusChanged.connect(self._scroll_to_focus)
@@ -381,6 +389,28 @@ class LibraryPage(QWidget):
         box_layout.addWidget(self.form_scroll)
         box_layout.addLayout(buttons)
         return self.editor_box
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 (Qt override)
+        # Fields shown or hidden, or a new font size, change the width needed.
+        if watched is self.form_scroll.widget() and event.type() in {
+            QEvent.Type.LayoutRequest,
+            QEvent.Type.FontChange,
+            QEvent.Type.StyleChange,
+        }:
+            self._fit_form_width()
+        return super().eventFilter(watched, event)
+
+    def _fit_form_width(self) -> None:
+        """Keep the form's scroll area at least as wide as the form needs."""
+        form = self.form_scroll.widget()
+        if form is None:
+            return
+        scroll_bar = self.form_scroll.verticalScrollBar().sizeHint().width()
+        self.form_scroll.setMinimumWidth(
+            form.minimumSizeHint().width()
+            + scroll_bar
+            + 2 * self.form_scroll.frameWidth()
+        )
 
     def _scroll_to_focus(self, _old: QWidget | None, new: QWidget | None) -> None:
         # A scroll area doesn't follow keyboard focus by itself; without this,
