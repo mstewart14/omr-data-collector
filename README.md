@@ -109,6 +109,16 @@ Writing translatable text (see `omr_data_collector/i18n.py`):
 translatable (under the pseudo-translation), that no prose is left outside `tr()`,
 and that translations keep their placeholders.
 
+## Icon and packaging files
+
+The app icon is `omr_data_collector/resources/app-icon.svg`, with
+`app-icon-small.svg` drawn simpler for 16-24 px. `uv run python
+scripts/build_icons.py` builds `packaging/icons/` from them: PNGs at the usual
+sizes, a multi-size Windows `.ico` and macOS `.icns`. On Linux,
+`packaging/linux/omr-data-collector.desktop` is the menu entry; install it with
+the PNGs (as `omr-data-collector.png` in the hicolor theme) so desktops show the
+icon in the task bar.
+
 ## The vendored OMR engine
 
 `vendor/omrchecker/` is OMRChecker v2 (its `dev` branch), added as a squashed git

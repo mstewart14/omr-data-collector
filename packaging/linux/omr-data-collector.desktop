@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OMR Data Collector
+GenericName=Paper form data collection
+Comment=Build paper forms, capture photos or scans of them filled in, and export the data
+Exec=omr-data-collector
+Icon=omr-data-collector
+Terminal=false
+Categories=Office;Education;
+Keywords=OMR;form;survey;scan;bubble;
+StartupWMClass=omr-data-collector

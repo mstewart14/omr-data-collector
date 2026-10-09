@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- OMR Data Collector: a form whose lines of text are rows of answer bubbles,
+       one marked in each row. app-icon-small.svg is its 16-24 px version. -->
+  <path d="M52 16 H164 L212 64 V232 Q212 240 204 240 H52 Q44 240 44 232 V24 Q44 16 52 16 Z" fill="#ffffff" stroke="#1f3a5f" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M164 16 V56 Q164 64 172 64 H212" fill="#dbe6f5" stroke="#1f3a5f" stroke-width="10" stroke-linejoin="round"/>
+  <g stroke="#1f3a5f" stroke-width="7" fill="none">
+    <circle cx="86" cy="104" r="13"/><circle cx="128" cy="104" r="13"/><circle cx="170" cy="104" r="13"/>
+    <circle cx="86" cy="150" r="13"/><circle cx="128" cy="150" r="13"/><circle cx="170" cy="150" r="13"/>
+    <circle cx="86" cy="196" r="13"/><circle cx="128" cy="196" r="13"/><circle cx="170" cy="196" r="13"/>
+  </g>
+  <g fill="#0b57d0">
+    <circle cx="128" cy="104" r="16"/><circle cx="86" cy="150" r="16"/><circle cx="170" cy="196" r="16"/>
+  </g>
+</svg>

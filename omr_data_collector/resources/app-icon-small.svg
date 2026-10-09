@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- The app icon simplified for 16-24 px: fewer, bigger bubbles and thicker
+       lines, so it stays crisp in title bars and menus. -->
+  <path d="M48 12 H160 L216 68 V236 Q216 244 208 244 H48 Q40 244 40 236 V20 Q40 12 48 12 Z" fill="#ffffff" stroke="#1f3a5f" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M160 12 V60 Q160 68 168 68 H216" fill="#dbe6f5" stroke="#1f3a5f" stroke-width="18" stroke-linejoin="round"/>
+  <circle cx="96" cy="128" r="22" fill="#0b57d0"/>
+  <circle cx="160" cy="128" r="20" fill="none" stroke="#1f3a5f" stroke-width="14"/>
+  <circle cx="96" cy="192" r="20" fill="none" stroke="#1f3a5f" stroke-width="14"/>
+  <circle cx="160" cy="192" r="22" fill="#0b57d0"/>
+</svg>

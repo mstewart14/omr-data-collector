@@ -39,6 +39,10 @@ def test_main_shows_main_window_and_returns_exit_code(
 
     application_class.return_value.setApplicationName.assert_called_once_with(APP_NAME)
     install_translators.assert_called_once_with(application_class.return_value)
+    application_class.return_value.setWindowIcon.assert_called_once()
+    application_class.return_value.setDesktopFileName.assert_called_once_with(
+        "omr-data-collector"
+    )
     assert len(windows) == 1
     assert windows[0].isVisible()
     assert database_path.exists()
