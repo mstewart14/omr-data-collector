@@ -44,6 +44,8 @@ MULTIPLE_SEPARATOR = ";"
 # The columns describing each sheet, before its answers.
 SHEET_COLUMNS = ("sheet_id", "sheet_file", "form_version", "page", "captured_at")
 ROW_COLUMN = "row"
+# When chosen sheets are combined: each table row's place in the combined rows.
+COMBINED_ROW_COLUMN = "combined_row"
 # Excel only reads a CSV file as UTF-8 when it starts with a byte order mark.
 CSV_ENCODING = "utf-8-sig"
 
@@ -65,10 +67,8 @@ class FormData:
     tables: list[TableData]
     # The same data nested, for JSON.
     document: dict[str, Any]
-
-    @property
-    def sheet_count(self) -> int:
-        return len(self.sheets)
+    # How many captured sheets went in (combined ones make one row).
+    sheet_count: int = 0
 
 
 def saved_sheet_counts(connection: sqlite3.Connection) -> dict[str, int]:
@@ -80,13 +80,25 @@ def saved_sheet_counts(connection: sqlite3.Connection) -> dict[str, int]:
     return counts
 
 
-def collect(connection: sqlite3.Connection, form: Form) -> FormData:
-    """Gather the checked sheets of ``form`` (its latest version), all versions."""
-    captures = [
-        capture
+def collect(
+    connection: sqlite3.Connection, form: Form, chosen: list[str] | None = None
+) -> FormData:
+    """Gather the checked sheets of ``form`` (its latest version), all versions.
+
+    With ``chosen`` (capture IDs, in order), only those sheets are gathered and
+    they are combined into one: a single row of sheet details and answers, and
+    their table rows one after another, numbered on in ``COMBINED_ROW_COLUMN``.
+    """
+    saved = {
+        capture.capture_id: capture
         for capture in list_captures(connection)
         if capture.status == CAPTURE_STATUSES.SAVED and capture.form_id == form.form_id
-    ]
+    }
+    captures = (
+        list(saved.values())
+        if chosen is None
+        else [saved[capture_id] for capture_id in chosen if capture_id in saved]
+    )
     versions: dict[int, Form] = {form.version: form}
     for capture in captures:
         version = capture.form_version
@@ -96,10 +108,12 @@ def collect(connection: sqlite3.Connection, form: Form) -> FormData:
                 versions[version] = loaded
     ordered = [versions[number] for number in sorted(versions, reverse=True)]
     detail_columns, question_columns, table_columns = _columns(ordered)
+    combined = chosen is not None
+    row_columns = [ROW_COLUMN, COMBINED_ROW_COLUMN] if combined else [ROW_COLUMN]
 
     sheets: list[dict[str, str]] = []
     tables = {
-        name: TableData(name, [*SHEET_COLUMNS, ROW_COLUMN, *detail_columns, *columns])
+        name: TableData(name, [*SHEET_COLUMNS, *row_columns, *detail_columns, *columns])
         for name, columns in table_columns.items()
     }
     documents = []
@@ -116,27 +130,91 @@ def collect(connection: sqlite3.Connection, form: Form) -> FormData:
             }
         )
         for name, rows in sheet["tables"].items():
+            table = tables[name]
             for number, values in rows:
-                tables[name].rows.append(
-                    {
-                        **sheet["meta"],
-                        ROW_COLUMN: str(number),
-                        **_flat(sheet["details"]),
-                        **_flat(values),
-                    }
-                )
+                row = {
+                    **sheet["meta"],
+                    ROW_COLUMN: str(number),
+                    **_flat(sheet["details"]),
+                    **_flat(values),
+                }
+                if combined:
+                    row[COMBINED_ROW_COLUMN] = str(len(table.rows) + 1)
+                table.rows.append(row)
         documents.append(document)
+    sheet_columns = [*SHEET_COLUMNS, *detail_columns, *question_columns]
+    document: dict[str, Any] = {
+        "form": {"id": form.form_id, "name": form.name},
+        "exportedAt": datetime.now(UTC).isoformat(timespec="seconds"),
+        "sheets": documents,
+    }
+    if combined:
+        document["combined"] = _combined_document(documents)
     return FormData(
         form=form,
-        sheet_columns=[*SHEET_COLUMNS, *detail_columns, *question_columns],
-        sheets=sheets,
+        sheet_columns=sheet_columns,
+        sheets=[_merged(sheets, sheet_columns)] if combined and sheets else sheets,
         tables=list(tables.values()),
-        document={
-            "form": {"id": form.form_id, "name": form.name},
-            "exportedAt": datetime.now(UTC).isoformat(timespec="seconds"),
-            "sheets": documents,
-        },
+        document=document,
+        sheet_count=len(documents),
     )
+
+
+def _merged(rows: list[dict[str, str]], columns: list[str]) -> dict[str, str]:
+    """Several sheets' rows as one: each column's different values, in order.
+
+    A value the sheets agree on appears once; different ones are all kept,
+    joined with MULTIPLE_SEPARATOR, so a clash (two dates, say) stays visible.
+    """
+    merged = {}
+    for column in columns:
+        values: list[str] = []
+        for row in rows:
+            value = row.get(column, "")
+            if value and value not in values:
+                values.append(value)
+        merged[column] = MULTIPLE_SEPARATOR.join(values)
+    return merged
+
+
+def _combined_document(documents: list[dict[str, Any]]) -> dict[str, Any]:
+    """The chosen sheets as one, for JSON.
+
+    Details and answers are merged (a value, or a list where the sheets
+    differ), and every table row follows the last, in the sheets' order.
+    """
+
+    def merge(key: str) -> dict[str, Any]:
+        merged: dict[str, list[Any]] = {}
+        for document in documents:
+            for name, value in document[key].items():
+                found = merged.setdefault(name, [])
+                if value not in ("", []) and value not in found:
+                    found.append(value)
+        return {
+            name: (values[0] if len(values) == 1 else values if values else "")
+            for name, values in merged.items()
+        }
+
+    tables: dict[str, list[dict[str, Any]]] = {}
+    for document in documents:
+        for name, rows in document["tables"].items():
+            combined_rows = tables.setdefault(name, [])
+            for row in rows:
+                combined_rows.append(
+                    {
+                        "sheetId": document["sheetId"],
+                        "row": row["row"],
+                        "combinedRow": len(combined_rows) + 1,
+                        "values": row["values"],
+                    }
+                )
+    return {
+        "sheetIds": [document["sheetId"] for document in documents],
+        "details": merge("details"),
+        "answers": merge("answers"),
+        "tables": tables,
+    }
 
 
 def write_csv(data: FormData, folder: Path) -> list[Path]:

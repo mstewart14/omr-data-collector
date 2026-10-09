@@ -117,7 +117,11 @@ engine bridge.
   and its details), or one JSON file nesting the same. The columns describing
   the sheet (`SHEET_COLUMNS`) have fixed, untranslated names for analysis
   scripts; question, field and column names are the export names, so a
-  question may not share a sheet details field's name.
+  question may not share a sheet details field's name. Chosen sheets can be
+  combined into one, in the order picked (`collect(..., chosen=[ids])`): one
+  merged sheets row (differing values all kept, `;`-joined) and their table
+  rows in turn, numbered on in `combined_row`. Pages aren't linked automatically:
+  sheets may be photocopied, so nothing printed can tell copies apart.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.

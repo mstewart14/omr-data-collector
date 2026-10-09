@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, QLocale, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -95,13 +95,38 @@ def status_text(capture: Capture) -> str:
 
 
 def choose_export(
-    parent: QWidget, forms: list[tuple[Form, int]]
-) -> tuple[str, str] | None:
-    """Ask which form's data to export, and as what; None if cancelled."""
-    dialog = ExportDialog(parent, forms)
+    parent: QWidget,
+    forms: list[tuple[Form, int]],
+    sheets: dict[str, list[tuple[str, str]]],
+) -> tuple[str, str, list[str] | None] | None:
+    """Ask which form's data to export, which sheets and as what; None if cancelled."""
+    dialog = ExportDialog(parent, forms, sheets)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen()
+
+
+def _details_summary(form: Form | None, capture: Capture) -> str:
+    """The sheet details written on a sheet, like "Date 2026/10/08, Shift night"."""
+    if form is None:
+        return ""
+    parts = []
+    for answer in capture.answers:
+        if not 0 <= answer.block_index < len(form.blocks):
+            continue
+        content = form.blocks[answer.block_index].content
+        if (
+            isinstance(content, SheetDetails)
+            and answer.column is not None
+            and answer.values
+        ):
+            parts.append(
+                tr("{field} {value}").format(
+                    field=content.fields[answer.column].name,
+                    value=", ".join(answer.values),
+                )
+            )
+    return QLocale().createSeparatedList(parts) if parts else ""
 
 
 def choose_export_folder(parent: QWidget) -> Path | None:
@@ -305,12 +330,12 @@ class CapturePage(QWidget):
             for form in list_forms(self._connection)
             if counts.get(form.form_id)
         ]
-        chosen = choose_export(self, forms)
+        chosen = choose_export(self, forms, self._sheet_choices(forms))
         if chosen is None:
             return
-        form_id, file_format = chosen
+        form_id, file_format, combine = chosen
         form = next(form for form, _ in forms if form.form_id == form_id)
-        data = collect(self._connection, form)
+        data = collect(self._connection, form, combine)
         try:
             if file_format == CSV_FORMAT:
                 folder = choose_export_folder(self)
@@ -335,6 +360,40 @@ class CapturePage(QWidget):
             + " "
             + tr("Wrote %n file(s) to {where}.", None, files).format(where=where)
         )
+
+    def _sheet_choices(
+        self, forms: list[tuple[Form, int]]
+    ) -> dict[str, list[tuple[str, str]]]:
+        """Each form's checked sheets, described so the right ones can be picked.
+
+        The description has the file, page, when it was captured, and the sheet
+        details written on it.
+        """
+        wanted = {form.form_id for form, _ in forms}
+        versions: dict[tuple[str, int], Form | None] = {}
+        choices: dict[str, list[tuple[str, str]]] = {}
+        for capture in self._captures:
+            if (
+                capture.status != CAPTURE_STATUSES.SAVED
+                or capture.form_id not in wanted
+                or capture.form_version is None
+            ):
+                continue
+            key = (capture.form_id, capture.form_version)
+            if key not in versions:
+                versions[key] = load_form_version(self._connection, *key)
+            description = tr("{file}: page {page}, captured {when}").format(
+                file=capture.original_name,
+                page=capture.page,
+                when=capture.added_at[:16].replace("T", " "),
+            )
+            details = _details_summary(versions[key], capture)
+            if details:
+                description = f"{description} · {details}"
+            choices.setdefault(capture.form_id, []).append(
+                (capture.capture_id, description)
+            )
+        return choices
 
     def remove_sheet(self) -> None:
         capture = self._current

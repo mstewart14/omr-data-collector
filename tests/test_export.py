@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
+from PySide6.QtCore import Qt
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.export.data_export import (
@@ -268,7 +269,7 @@ def test_exporting_csv_from_the_capture_screen(
     qtbot.addWidget(page)
     choose = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, CSV_FORMAT),
+        return_value=(form.form_id, CSV_FORMAT, None),
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_folder",
@@ -279,8 +280,11 @@ def test_exporting_csv_from_the_capture_screen(
 
     page.export_data()
 
-    ((_, forms), _) = choose.call_args
+    ((_, forms, sheets), _) = choose.call_args
     assert [(f.name, count) for f, count in forms] == [("Shift log", 1)]
+    ((_, description),) = sheets[form.form_id]
+    assert description.startswith("one.jpg: page 1, captured ")
+    assert description.endswith("Date 2026/10/08 and Shift night")
     assert (tmp_path / "export" / "Shift log - sheets.csv").exists()
     assert messages == [
         f'Exported 1 sheet of "Shift log". Wrote 2 files to {tmp_path / "export"}.'
@@ -298,7 +302,7 @@ def test_exporting_json_from_the_capture_screen(
     qtbot.addWidget(page)
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, JSON_FORMAT),
+        return_value=(form.form_id, JSON_FORMAT, None),
     )
     choose_path = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_json_path",
@@ -316,3 +320,131 @@ def test_the_dialog_says_when_theres_nothing_to_export(qtbot: QtBot) -> None:
     qtbot.addWidget(dialog)
 
     assert not dialog.buttons.buttons()[0].isEnabled()
+
+
+# --- Combining chosen sheets ---------------------------------------------------------
+
+SHEET_TWO = {
+    (0, None, 0): ("2026/10/08",),
+    (0, None, 1): ("night",),
+    (1, None, None): (),
+    (2, 0, 0): ("23:10",),
+    (2, 0, 1): ("no",),
+}
+
+
+def ids_by_file(connection: sqlite3.Connection) -> dict[str, str]:
+    from omr_data_collector.storage.capture_store import list_captures  # noqa: PLC0415
+
+    return {c.original_name: c.capture_id for c in list_captures(connection)}
+
+
+def test_chosen_sheets_combine_into_one_in_the_order_given(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    add_sheet(connection, tmp_path, form, "two.jpg", SHEET_TWO)
+    ids = ids_by_file(connection)
+
+    data = collect(connection, form, [ids["two.jpg"], ids["one.jpg"]])
+
+    assert data.sheet_count == 2
+    (sheet,) = data.sheets
+    assert sheet["sheet_file"] == "two.jpg;one.jpg"
+    assert sheet["Date"] == "2026/10/08"  # the same on both: once
+    assert sheet["services"] == "food;clothing"
+    (visits,) = data.tables
+    assert "combined_row" in visits.columns
+    assert [
+        (row["sheet_file"], row["row"], row["combined_row"], row["time"])
+        for row in visits.rows
+    ] == [
+        ("two.jpg", "1", "1", "23:10"),
+        ("one.jpg", "1", "2", "09:30"),
+        ("one.jpg", "2", "3", ""),
+    ]
+
+
+def test_combined_values_that_differ_are_all_kept(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    other_day = {**SHEET_TWO, (0, None, 0): ("2026/10/09",)}
+    add_sheet(connection, tmp_path, form, "two.jpg", other_day)
+    ids = ids_by_file(connection)
+
+    data = collect(connection, form, [ids["one.jpg"], ids["two.jpg"]])
+
+    assert data.sheets[0]["Date"] == "2026/10/08;2026/10/09"
+    combined = data.document["combined"]
+    assert combined["details"]["Date"] == ["2026/10/08", "2026/10/09"]
+    assert combined["details"]["Shift"] == "night"
+    assert [row["combinedRow"] for row in combined["tables"]["Visits"]] == [1, 2, 3]
+
+
+def test_only_saved_sheets_can_be_combined(
+    connection: sqlite3.Connection, form: Form
+) -> None:
+    ids = ids_by_file(connection)
+
+    data = collect(connection, form, [ids["spoilt.jpg"], ids["one.jpg"]])
+
+    assert data.sheet_count == 1
+
+
+def test_the_dialog_combines_the_ticked_sheets_in_list_order(qtbot: QtBot) -> None:
+    form = Form(name="Shift log")
+    dialog = ExportDialog(
+        None,
+        [(form, 3)],
+        {form.form_id: [("a", "a.jpg"), ("b", "b.jpg"), ("c", "c.jpg")]},
+    )
+    qtbot.addWidget(dialog)
+    assert not dialog.sheet_list.isEnabled()
+
+    dialog.chosen_button.setChecked(True)
+
+    assert dialog.sheet_list.isEnabled()
+    assert not dialog.ok_button.isEnabled()  # nothing ticked yet
+    for row in (0, 2):
+        dialog.sheet_list.item(row).setCheckState(Qt.CheckState.Checked)
+    dialog.sheet_list.setCurrentRow(2)
+    dialog.move_sheet(-1)
+    dialog.move_sheet(-1)
+
+    assert dialog.ok_button.isEnabled()
+    assert dialog.chosen() == (form.form_id, CSV_FORMAT, ["c", "a"])
+
+    dialog.every_button.setChecked(True)
+
+    assert dialog.chosen() == (form.form_id, CSV_FORMAT, None)
+
+
+def test_combining_from_the_capture_screen(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    form: Form,
+    tmp_path: Path,
+) -> None:
+    add_sheet(connection, tmp_path, form, "two.jpg", SHEET_TWO)
+    ids = ids_by_file(connection)
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export",
+        return_value=(form.form_id, CSV_FORMAT, [ids["one.jpg"], ids["two.jpg"]]),
+    )
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_folder",
+        return_value=tmp_path / "export",
+    )
+    messages: list[str] = []
+    page.status_message.connect(messages.append)
+
+    page.export_data()
+
+    with (tmp_path / "export" / "Shift log - sheets.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as file:
+        (row,) = list(csv.DictReader(file))
+    assert row["sheet_file"] == "one.jpg;two.jpg"
+    assert messages[0].startswith('Exported 2 sheets of "Shift log".')
