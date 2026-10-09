@@ -110,8 +110,6 @@ PAGES_START_WIDTH = 4000
 # Blocks written on the form itself can be; table copies are edited in the
 # library for now.
 EDITABLE_KINDS = {BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION, BLOCK_KINDS.SHEET_DETAILS}
-# The palette's one sheet details entry, which adds a fresh copy to start from.
-STARTER_DETAILS_ID = "starter"
 
 
 def pick_block(
@@ -588,11 +586,6 @@ class FormsPage(LibraryPage):
             BLOCK_KINDS.TEXT: list(list_text_blocks(self._connection)),
             BLOCK_KINDS.QUESTION: list(list_questions(self._connection)),
             BLOCK_KINDS.TABLE: list(list_table_blocks(self._connection)),
-            BLOCK_KINDS.SHEET_DETAILS: [
-                SheetDetails(
-                    name=tr("Sheet details"), sheet_details_id=STARTER_DETAILS_ID
-                )
-            ],
         }
 
     def _edit_block_at(self, index: int) -> None:
@@ -624,35 +617,6 @@ class FormsPage(LibraryPage):
             None,
         )
         if chosen is None:
-            return
-        if isinstance(chosen, SheetDetails):
-            # A fresh set to change: written on the form, not from a library. The
-            # header has room for one set; another goes along a line.
-            in_header = any(
-                isinstance(block.content, SheetDetails)
-                and block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
-                for block in self._blocks
-            )
-            details = SheetDetails(
-                name=chosen.name,
-                placement=SHEET_DETAILS_PLACEMENTS.LINE
-                if in_header
-                else SHEET_DETAILS_PLACEMENTS.HEADER,
-            )
-            self._insert_block(FormBlock(content=details, source_id=None), index)
-            self._commit_change(tr('added "{name}"').format(name=chosen.name))
-            message = (
-                tr(
-                    'Added "{name}" along a line: the header already has sheet '
-                    "details. Edit block changes its fields."
-                )
-                if in_header
-                else tr(
-                    'Added "{name}" to the header. Edit block changes its fields, '
-                    "or where they go."
-                )
-            )
-            self.status_message.emit(message.format(name=chosen.name))
             return
         self._insert_block(FormBlock(content=chosen, source_id=item_id), index)
         self._commit_change(tr('added "{name}"').format(name=chosen.name))

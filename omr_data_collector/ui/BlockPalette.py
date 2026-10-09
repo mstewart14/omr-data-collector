@@ -47,12 +47,6 @@ def _sections() -> tuple[tuple[str, str, str, str], ...]:
             tr("Tables in the library"),
             tr("Add the selected table to the form"),
         ),
-        (
-            BLOCK_KINDS.SHEET_DETAILS,
-            tr("Sheet details"),
-            tr("Sheet details to add: date, shift and who filled the sheet in"),
-            tr("Add sheet details to the form, to change as needed"),
-        ),
     )
 
 

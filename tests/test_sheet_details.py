@@ -6,7 +6,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from PySide6.QtCore import Qt
 
 from omr_data_collector.constants import (
     ANSWER_TYPES,
@@ -167,42 +166,15 @@ def test_a_filled_in_shift_is_read_from_the_photo(
 # --- Editing ---------------------------------------------------------------------------
 
 
-def test_the_palette_adds_a_fresh_set_to_change(
+def test_sheet_details_arent_added_from_the_palette(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
     page = FormsPage(connection)
     qtbot.addWidget(page)
-    messages: list[str] = []
-    page.status_message.connect(messages.append)
+
     page.refresh_palette()
-    starter = page.block_palette.lists[BLOCK_KINDS.SHEET_DETAILS].item(0)
 
-    page.add_library_block(
-        BLOCK_KINDS.SHEET_DETAILS, starter.data(Qt.ItemDataRole.UserRole), None
-    )
-
-    (block,) = page._blocks  # noqa: SLF001 (the form being edited)
-    assert block.kind == BLOCK_KINDS.SHEET_DETAILS
-    assert block.source_id is None
-    assert isinstance(block.content, SheetDetails)
-    assert len(block.content.fields) == 5
-    assert block.content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
-    assert messages == [
-        'Added "Sheet details" to the header. Edit block changes its fields, or '
-        "where they go."
-    ]
-    assert "in the header of every page" in page.block_list.item(0).text()
-
-    page.add_library_block(
-        BLOCK_KINDS.SHEET_DETAILS, starter.data(Qt.ItemDataRole.UserRole), None
-    )
-
-    second = page._blocks[1].content  # noqa: SLF001
-    assert isinstance(second, SheetDetails)
-    assert second.placement == SHEET_DETAILS_PLACEMENTS.LINE
-    assert messages[-1].startswith('Added "Sheet details" along a line')
-    assert page.edit_block_button.isEnabled()
-    page.revert()
+    assert BLOCK_KINDS.SHEET_DETAILS not in page.block_palette.lists
 
 
 def test_the_dialog_adds_reorders_and_removes_fields(
