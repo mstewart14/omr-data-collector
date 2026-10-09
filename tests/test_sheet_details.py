@@ -173,6 +173,7 @@ def test_the_palette_adds_a_fresh_set_to_change(
     (block,) = page._blocks  # noqa: SLF001 (the form being edited)
     assert block.kind == BLOCK_KINDS.SHEET_DETAILS
     assert block.source_id is None
+    assert isinstance(block.content, SheetDetails)
     assert len(block.content.fields) == 5
     assert messages == [
         'Added "Sheet details" to the form. Edit block changes its fields.'
