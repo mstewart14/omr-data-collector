@@ -19,7 +19,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
+from omr_data_collector.layout.markers import (
+    MARKER_DIAMETER_MM,
+    marker_centres_mm,
+    marker_rings_mm,
+)
 from omr_data_collector.layout.table_layout import (
     BUBBLE_DIAMETER_MM,
     cell_bubble_centres_mm,
@@ -293,12 +297,16 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
 
 
 def marker_image() -> np.ndarray:
-    """The marker as OMRChecker matches it: a black disc filling a white square."""
+    """The marker as OMRChecker matches it: the printed target filling a square."""
     size = MARKER_IMAGE_PX
     y, x = np.ogrid[:size, :size]
     centre = (size - 1) / 2
-    disc = (x - centre) ** 2 + (y - centre) ** 2 <= (size / 2) ** 2
-    return np.where(disc, 0, 255).astype(np.uint8)
+    distance = np.sqrt((x - centre) ** 2 + (y - centre) ** 2)
+    image = np.full((size, size), 255, dtype=np.uint8)
+    for diameter, black in marker_rings_mm():
+        radius = size / 2 * diameter / MARKER_DIAMETER_MM
+        image[distance <= radius] = 0 if black else 255
+    return image
 
 
 def _pre_processors(layout: FormLayout) -> list[dict[str, Any]]:

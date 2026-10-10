@@ -29,7 +29,7 @@ from omr_data_collector.layout.form_layout import (
     QR_SIZE_MM,
     detail_label,
 )
-from omr_data_collector.layout.markers import MARKER_DIAMETER_MM, marker_centres_mm
+from omr_data_collector.layout.markers import marker_centres_mm, marker_rings_mm
 from omr_data_collector.layout.table_layout import BUBBLE_DIAMETER_MM
 from omr_data_collector.layout.text import (
     draw_document,
@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from omr_data_collector.models.Organization import Organization
 
 INK = QColor("black")
+PAPER = QColor("white")
 MUTED_INK = QColor("#5f6368")
 LINE_WIDTH_MM = 0.3
 ORGANIZATION_POINT_SIZE = 12
@@ -91,10 +92,10 @@ def _paint_markers(painter: QPainter, layout: FormLayout) -> None:
     """The four registration markers, in the margins (negative coordinates)."""
     painter.save()
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(INK)
-    radius = MARKER_DIAMETER_MM / 2
     for x, y in marker_centres_mm(layout.paper_width_mm, layout.paper_height_mm):
-        painter.drawEllipse(QPointF(x, y), radius, radius)
+        for diameter, black in marker_rings_mm():
+            painter.setBrush(INK if black else PAPER)
+            painter.drawEllipse(QPointF(x, y), diameter / 2, diameter / 2)
     painter.restore()
 
 

@@ -2,7 +2,7 @@
 
 OMRChecker finds these four markers in a photo or scan and straightens the page
 on them, so every bubble lands where the template expects it. They sit in the
-page margin, clear of everything else, as solid discs: unlike the QR code's
+page margin, clear of everything else, as round targets: unlike the QR code's
 square corner patterns, and too big to be mistaken for a filled-in bubble.
 """
 
@@ -11,6 +11,21 @@ from __future__ import annotations
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
 
 MARKER_DIAMETER_MM = 6.0
+# Drawn as a target: a black ring, a white ring, then a black centre. Easy to
+# aim a camera at, and unlike anything else printed on the page.
+MARKER_WHITE_RING_DIAMETER_MM = 4.0
+MARKER_CENTRE_DIAMETER_MM = 2.2
+
+
+def marker_rings_mm() -> tuple[tuple[float, bool], ...]:
+    """The marker's discs from the outside in: (diameter, black?)."""
+    return (
+        (MARKER_DIAMETER_MM, True),
+        (MARKER_WHITE_RING_DIAMETER_MM, False),
+        (MARKER_CENTRE_DIAMETER_MM, True),
+    )
+
+
 # Centre of each marker from the two nearest paper edges: inside what office
 # printers can print (about 5 mm from the edge), and outside the printable area
 # the form's content uses.

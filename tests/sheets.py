@@ -32,7 +32,8 @@ LETTER = PAPER_SIZES.LETTER
 PIXELS_PER_MM = 8
 # Grey "table" showing around the sheet, as in a photo.
 BORDER_MM = 20
-FILL_RADIUS_MM = 1.9
+# A pen mark filling a 3 mm bubble, and a little over its edge.
+FILL_RADIUS_MM = 1.6
 
 
 def intake_form() -> Form:

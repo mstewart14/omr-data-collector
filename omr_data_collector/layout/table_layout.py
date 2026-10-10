@@ -21,9 +21,10 @@ if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.TableBlock import Column, TableBlock
 
-# OMR marks need room: a bubble about 4.5 mm across fits a pen stroke, and 7 mm
-# between bubble centres keeps a sloppy mark from touching its neighbour.
-BUBBLE_DIAMETER_MM = 4.5
+# A bubble 3 mm across, the size Gambit's pick'em sheets print theirs, is quick
+# to fill with a pen or pencil; 7 mm between bubble centres keeps a sloppy mark
+# from touching its neighbour.
+BUBBLE_DIAMETER_MM = 3.0
 BUBBLE_PITCH_MM = 7.0
 # One handwritten character per box.
 WRITTEN_BOX_WIDTH_MM = 5.0
