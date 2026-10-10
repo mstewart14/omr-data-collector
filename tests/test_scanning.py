@@ -308,8 +308,13 @@ def test_a_photo_taken_at_a_tilt_still_reads(
     assert image is not None
     height, width = image.shape[:2]
     inset = width * 0.15 / 2
-    corners = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
-    slanted = np.float32([[inset, 0], [width - inset, 0], [0, height], [width, height]])
+    corners = np.array(
+        [[0, 0], [width, 0], [0, height], [width, height]], dtype=np.float32
+    )
+    slanted = np.array(
+        [[inset, 0], [width - inset, 0], [0, height], [width, height]],
+        dtype=np.float32,
+    )
     image = cv2.warpPerspective(
         image,
         cv2.getPerspectiveTransform(corners, slanted),
