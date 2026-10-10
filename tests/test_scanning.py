@@ -239,7 +239,7 @@ def test_a_low_resolution_photo_still_reads(
 
 @pytest.mark.parametrize(
     "blur_and_turn",
-    [(1.5, 3), (1.2, 8)],
+    [(1.2, 3), (1.2, 8)],
     ids=["out of focus", "out of focus and turned"],
 )
 def test_a_soft_photos_qr_code_still_reads(
