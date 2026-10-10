@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import cv2
 import numpy as np
 import pytest
 from PySide6.QtCore import QByteArray, QMimeData, QPointF, Qt
 from PySide6.QtGui import QColor, QDropEvent, QImage, QPainter
 from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
-from pyzbar.pyzbar import decode
 
 from omr_data_collector.constants import ANSWER_TYPES, BLOCK_KINDS, PAPER_SIZES
 from omr_data_collector.identity.qr_code import parse_payload
@@ -129,8 +129,8 @@ def test_each_page_carries_a_qr_code_naming_the_form_version_and_page() -> None:
         pixels = np.frombuffer(image.constBits(), dtype=np.uint8).reshape(
             image.height(), image.bytesPerLine()
         )[:, : image.width()]
-        (symbol,) = decode(pixels)
-        payload = parse_payload(symbol.data.decode())
+        (text,), (corners,) = cv2.wechat_qrcode.WeChatQRCode().detectAndDecode(pixels)
+        payload = parse_payload(text)
         assert payload == {
             "type": "form",
             "version": 1,
@@ -140,7 +140,7 @@ def test_each_page_carries_a_qr_code_naming_the_form_version_and_page() -> None:
             "page": page.number,
         }
         # In the top-right corner of the printable area.
-        left = min(point.x for point in symbol.polygon) / pixels_per_mm - PAGE_MARGIN_MM
+        left = corners[:, 0].min() / pixels_per_mm - PAGE_MARGIN_MM
         assert left > layout.width_mm - QR_SIZE_MM
 
 

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 import pytest
-from pyzbar.pyzbar import decode
 
 from omr_data_collector.identity.qr_code import (
     build_form_payload,
@@ -14,6 +13,7 @@ from omr_data_collector.identity.qr_code import (
     make_qr_code,
     parse_payload,
     qr_code_png,
+    read_qr_codes,
     save_qr_code,
 )
 from omr_data_collector.models.Organization import Organization
@@ -32,8 +32,9 @@ ORGANIZATION = Organization(
 
 def decode_png(png: bytes) -> str:
     image = cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
-    (symbol,) = decode(image)
-    return symbol.data.decode("utf-8")
+    assert image is not None
+    (text,) = read_qr_codes(image)
+    return text
 
 
 def test_payload_identifies_the_organization_without_contact_details() -> None:
@@ -59,8 +60,7 @@ def test_payload_leaves_out_an_empty_url() -> None:
 
 
 def test_generated_code_scans_back_to_the_same_payload() -> None:
-    # pyzbar is the reader OMRChecker's BARCODE_QR fields use, so this is the same
-    # round trip a scanned form will make.
+    # The same reader scanning uses, so this is the round trip a scanned form makes.
     payload = build_organization_payload(ORGANIZATION)
 
     scanned = decode_png(qr_code_png(make_qr_code(payload), scale=4))

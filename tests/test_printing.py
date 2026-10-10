@@ -11,14 +11,13 @@ from PySide6.QtCore import QSize
 from PySide6.QtGui import QImage
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrinter
-from pyzbar.pyzbar import decode
 
 from omr_data_collector.constants import (
     ANSWER_TYPES,
     PAGE_ORIENTATIONS,
     PAPER_SIZES,
 )
-from omr_data_collector.identity.qr_code import parse_payload
+from omr_data_collector.identity.qr_code import parse_payload, read_qr_codes
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Organization import Organization
@@ -85,8 +84,8 @@ def qr_payload(image: QImage) -> dict:
     pixels = np.frombuffer(gray.constBits(), dtype=np.uint8).reshape(
         gray.height(), gray.bytesPerLine()
     )[:, : gray.width()]
-    (symbol,) = decode(pixels)
-    return parse_payload(symbol.data.decode())
+    (text,) = read_qr_codes(pixels)
+    return parse_payload(text)
 
 
 def pdf_page_size(path: Path) -> tuple[float, float]:

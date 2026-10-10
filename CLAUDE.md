@@ -91,8 +91,9 @@ engine bridge.
   question choices, which is why choices are evenly spaced, and one per table
   cell); bubble values are letters, mapped back to choices by `TemplateField`.
   Printing stores those templates with the version (`printed_layout`), and
-  `engine/scanning.scan_sheet` reads the QR code, runs OMRChecker on a copy of the
-  image with the stored template, and returns answers, flagging double marks.
+  `engine/scanning.scan_sheet` reads the QR code (`qr_code.read_qr_codes`,
+  OpenCV's WeChat reader: no zbar, so installers needn't bundle it), runs
+  OMRChecker on a copy of the image with the stored template, and returns answers, flagging double marks.
   `tests/test_scanning.py` is the round-trip test.
 - **Sheet details** (`models/SheetDetails.py`): labelled answers (Date, Shift,
   Manager...), each field a table `Column`, written on the form (added from the form details,

@@ -9,9 +9,9 @@ from PySide6.QtCore import QSize
 from PySide6.QtGui import QPageLayout, QPdfWriter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
-from pyzbar.pyzbar import decode
 
 from omr_data_collector.constants import PAGE_ORIENTATIONS, PAPER_SIZES
+from omr_data_collector.identity.qr_code import read_qr_codes
 from omr_data_collector.layout.page_setup import page_layout
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.organization_store import (
@@ -163,8 +163,9 @@ def test_save_qr_code_writes_the_chosen_file(
     page.save_qr_code()
 
     image = cv2.imread(str(tmp_path / "food-bank.png"), cv2.IMREAD_GRAYSCALE)
-    (symbol,) = decode(image)
-    assert json.loads(symbol.data)["organizationId"] == organization.organization_id
+    assert image is not None
+    (text,) = read_qr_codes(image)
+    assert json.loads(text)["organizationId"] == organization.organization_id
 
 
 def test_save_qr_code_reports_failures(
@@ -234,5 +235,7 @@ def test_printed_page_carries_a_scannable_code(tmp_path: Path) -> None:
     )
     image_path = tmp_path / "page.png"
     image.save(str(image_path))
-    (symbol,) = decode(cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE))
-    assert json.loads(symbol.data)["organizationId"] == organization.organization_id
+    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    assert image is not None
+    (text,) = read_qr_codes(image)
+    assert json.loads(text)["organizationId"] == organization.organization_id

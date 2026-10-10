@@ -16,12 +16,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
-from pyzbar import pyzbar
 
 from omr_data_collector.constants import ANSWER_TYPES, QR_PAYLOAD_TYPES
 from omr_data_collector.engine.runner import run_omr
 from omr_data_collector.i18n import tr
-from omr_data_collector.identity.qr_code import parse_payload
+from omr_data_collector.identity.qr_code import parse_payload, read_qr_codes
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.omr_template import (
     MARKER_FILE_NAME,
@@ -54,7 +53,7 @@ OMR_CONFIG = {
         "filter_out_multimarked_files": False,
     }
 }
-# Photos are often far bigger than a QR code needs; if zbar misses the code at
+# Photos are often far bigger than a QR code needs; if the reader misses the code at
 # full size, it gets another try at these widths.
 QR_RETRY_WIDTHS = (2000, 1200)
 # Photos narrower than this also get a try at twice their size.
@@ -111,8 +110,8 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
     candidates = [gray]
     height, width = gray.shape
     if width < QR_UPSCALE_BELOW_WIDTH:
-        # zbar misses codes whose squares are only a few pixels wide; enlarged,
-        # a small or soft photo's code often reads.
+        # Codes whose squares are only a few pixels wide are often missed;
+        # enlarged, a small or soft photo's code often reads.
         candidates.append(
             cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
         )
@@ -127,10 +126,10 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
                 )
             )
     for candidate in candidates:
-        for symbol in pyzbar.decode(candidate, symbols=[pyzbar.ZBarSymbol.QRCODE]):
+        for text in read_qr_codes(candidate):
             try:
-                payload = parse_payload(symbol.data.decode("ascii"))
-            except (UnicodeDecodeError, ValueError):
+                payload = parse_payload(text)
+            except ValueError:
                 continue
             if payload["type"] == QR_PAYLOAD_TYPES.FORM:
                 return SheetIdentity(

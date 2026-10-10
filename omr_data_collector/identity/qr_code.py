@@ -4,6 +4,7 @@ import io
 import json
 from typing import TYPE_CHECKING, Any
 
+import cv2
 import jsonschema
 import segno
 
@@ -13,6 +14,8 @@ from omr_data_collector.schemas.qr_payload_schema import QR_PAYLOAD_SCHEMA
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import numpy as np
 
     from omr_data_collector.models.Organization import Organization
 
@@ -42,8 +45,8 @@ def build_organization_payload(organization: Organization) -> str:
         payload["url"] = organization.url
     # Compact separators: every byte saved keeps the printed code less dense. ASCII
     # only: QR codes carry bytes, and readers guess their text encoding (zbar, which
-    # OMRChecker uses, turns UTF-8 "é" into Shift-JIS), whereas JSON's \u escapes
-    # read back the same everywhere.
+    # OMRChecker's barcode fields use, turns UTF-8 "é" into Shift-JIS), whereas
+    # JSON's \u escapes read back the same everywhere.
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
 
 
@@ -160,3 +163,15 @@ def save_qr_code(qr_code: segno.QRCode, path: Path) -> None:
     # 10 pixels per module keeps a PNG sharp when it is enlarged for printing; SVG
     # and PDF are vector, so the scale only sets their nominal size.
     qr_code.save(str(path), scale=10, border=QR_BORDER_MODULES)
+
+
+def read_qr_codes(image: np.ndarray) -> list[str]:
+    """The text of every QR code found in a grayscale or colour image.
+
+    OpenCV's WeChat reader (in the contrib build the app already needs) reads
+    blurred, small and unevenly lit photos that zbar and OpenCV's standard
+    detector miss, and needs no system library, so installers don't have to
+    bundle zbar.
+    """
+    texts, _ = cv2.wechat_qrcode.WeChatQRCode().detectAndDecode(image)
+    return list(texts)

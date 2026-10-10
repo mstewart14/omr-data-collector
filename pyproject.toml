@@ -8,13 +8,16 @@ dependencies = [
     "pyside6==6.11.2",
     "segno==1.6.6",
     # OMRChecker v2's runtime dependencies (vendor/omrchecker/pyproject.toml), at the
-    # versions it pins. Two deliberate differences:
+    # versions it pins. Three deliberate differences:
     # - OpenCV is the single headless contrib build instead of both opencv-python and
     #   opencv-contrib-python: those two packages overwrite each other's cv2 module,
     #   and the GUI builds ship their own Qt, which clashes with PySide6's on Linux.
     #   The app shows images through Qt, so OpenCV never needs a window.
     # - mike (a docs tool) and easyocr (optional OCR) are left out; the app only uses
     #   OCR scan zones for where to crop, not for recognising handwriting.
+    # - pyzbar is left out: it needs the system zbar library, which installers would
+    #   have to bundle, and OMRChecker only imports it for barcode fields, which our
+    #   templates never have. QR codes are read with OpenCV's WeChat reader instead.
     "deepmerge==2.0",
     "dotmap==1.3.30",
     "jsonschema==4.25.0",
@@ -22,7 +25,6 @@ dependencies = [
     "numpy==2.2.6",
     "opencv-contrib-python-headless==4.12.0.88",
     "pandas==2.3.1",
-    "pyzbar==0.1.9",
     "rich==13.8.0",
     "scipy==1.15.1",
     "screeninfo==0.8.1",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import cv2
 import numpy as np
 import pytest
 
@@ -233,3 +234,32 @@ def test_a_low_resolution_photo_still_reads(
 
     answers = {answer.block_index: answer.values for answer in page.answers}
     assert answers[1] == ("food", "other")
+
+
+@pytest.mark.parametrize(
+    "blur_and_turn",
+    [(1.5, 3), (1.2, 8)],
+    ids=["out of focus", "out of focus and turned"],
+)
+def test_a_soft_photos_qr_code_still_reads(
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    blur_and_turn: tuple[float, float],
+) -> None:
+    """Slightly out of focus, about 1100 pixels across: what zbar couldn't read."""
+    monkeypatch.setattr(sheets, "PIXELS_PER_MM", 5)
+    blur, turn = blur_and_turn
+    form, layout = printed_form
+    photo = sheets.Sheet(form, organization, layout).photograph(
+        tmp_path / "soft.jpg", degrees=turn
+    )
+    image = cv2.imread(str(photo))
+    assert image is not None
+    image = cv2.GaussianBlur(image, (0, 0), blur)
+
+    identity = read_sheet_identity(image)
+
+    assert identity.form_id == form.form_id
+    assert identity.page == 1
