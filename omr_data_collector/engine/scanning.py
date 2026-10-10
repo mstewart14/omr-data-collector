@@ -53,11 +53,13 @@ OMR_CONFIG = {
         "filter_out_multimarked_files": False,
     }
 }
-# Photos are often far bigger than a QR code needs; if the reader misses the code at
-# full size, it gets another try at these widths.
-QR_RETRY_WIDTHS = (2000, 1200)
-# Photos narrower than this also get a try at twice their size.
-QR_UPSCALE_BELOW_WIDTH = 2500
+# The QR reader only ever sees pictures at most this wide. It reads a page's
+# code well at this size, and wider pictures can take it minutes to give up on
+# when there's no code it can read: a blurred 4000-pixel photo ran for over ten
+# minutes, where 2000 pixels took two seconds.
+QR_MAX_WIDTH = 2000
+# If the code isn't found at the first size, it gets another try this wide.
+QR_RETRY_WIDTH = 1200
 
 
 class ScanError(Exception):
@@ -107,24 +109,14 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
         ScanError: No form QR code from this app could be read.
     """
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    candidates = [gray]
     height, width = gray.shape
-    if width < QR_UPSCALE_BELOW_WIDTH:
+    candidates = [_resized_to_width(gray, min(width, QR_MAX_WIDTH))]
+    if width > QR_RETRY_WIDTH:
+        candidates.append(_resized_to_width(gray, QR_RETRY_WIDTH))
+    if width < QR_MAX_WIDTH:
         # Codes whose squares are only a few pixels wide are often missed;
         # enlarged, a small or soft photo's code often reads.
-        candidates.append(
-            cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
-        )
-    for target in QR_RETRY_WIDTHS:
-        if width > target:
-            scale = target / width
-            candidates.append(
-                cv2.resize(
-                    gray,
-                    (target, round(height * scale)),
-                    interpolation=cv2.INTER_AREA,
-                )
-            )
+        candidates.append(_resized_to_width(gray, min(width * 2, QR_MAX_WIDTH)))
     for candidate in candidates:
         for text in read_qr_codes(candidate):
             try:
@@ -143,6 +135,16 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
         "whole page is in the picture, in focus and evenly lit."
     )
     raise ScanError(msg)
+
+
+def _resized_to_width(image: np.ndarray, width: int) -> np.ndarray:
+    height, current = image.shape
+    if width == current:
+        return image
+    interpolation = cv2.INTER_AREA if width < current else cv2.INTER_CUBIC
+    return cv2.resize(
+        image, (width, round(height * width / current)), interpolation=interpolation
+    )
 
 
 def scan_sheet(

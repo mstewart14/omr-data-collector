@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import cv2
@@ -263,3 +264,64 @@ def test_a_soft_photos_qr_code_still_reads(
 
     assert identity.form_id == form.form_id
     assert identity.page == 1
+
+
+def test_an_unreadable_full_size_photo_is_given_up_on_quickly(
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 12-megapixel phone photo too blurred to read: once took over ten minutes."""
+    monkeypatch.setattr(sheets, "PIXELS_PER_MM", 16)
+    form, layout = printed_form
+    photo = sheets.Sheet(form, organization, layout).photograph(tmp_path / "big.jpg")
+    image = cv2.imread(str(photo))
+    assert image is not None
+    image = cv2.GaussianBlur(image, (0, 0), 12)
+
+    started = time.perf_counter()
+    with pytest.raises(ScanError, match="QR code"):
+        read_sheet_identity(image)
+
+    assert time.perf_counter() - started < 30
+
+
+def test_a_photo_taken_at_a_tilt_still_reads(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+) -> None:
+    """The top of the page 15% narrower than the bottom, as from a phone held at a slant.
+
+    The same tilt failed a real photo in another OMRChecker-based app, whose
+    corner markers were matched at one size for the whole page; OMRChecker v2
+    sizes each corner's marker on its own.
+    """
+    form, layout = printed_form
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_question(1, 0, 3)
+    sheet.fill_cell(2, row=2, column=2, choice=0)
+    photo = sheet.photograph(tmp_path / "flat.jpg")
+    image = cv2.imread(str(photo))
+    assert image is not None
+    height, width = image.shape[:2]
+    inset = width * 0.15 / 2
+    corners = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+    slanted = np.float32([[inset, 0], [width - inset, 0], [0, height], [width, height]])
+    image = cv2.warpPerspective(
+        image,
+        cv2.getPerspectiveTransform(corners, slanted),
+        (width, height),
+        borderValue=(112, 112, 112),
+    )
+    tilted = tmp_path / "tilted.jpg"
+    cv2.imwrite(str(tilted), image)
+
+    page = scan_sheet(connection, tilted, LETTER)
+
+    answers = answers_by_place(page)
+    assert answers[1, None, None] == ("food", "other")
+    assert answers[2, 2, 2] == ("food",)
+    assert all(not answer.problem for answer in page.answers)
