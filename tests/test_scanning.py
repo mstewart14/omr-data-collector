@@ -16,6 +16,7 @@ from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.markers import marker_centres_mm
 from omr_data_collector.layout.omr_template import (
     PageTemplate,
+    TemplateField,
     page_template,
 )
 from omr_data_collector.storage.form_store import (
@@ -166,3 +167,48 @@ def test_the_template_has_a_field_per_question_row_and_table_cell() -> None:
         round((right - left) * 6),
         round((bottom - top) * 6),
     ]
+
+
+@pytest.mark.parametrize(
+    ("value", "marked"),
+    [
+        ("", []),
+        ("food", [0]),
+        ("foodother", [0, 3]),
+        ("clothingreferral", [1, 2]),
+        ("nonsense", None),
+    ],
+)
+def test_joined_bubble_values_split_back_into_choices(
+    value: str, marked: list[int] | None
+) -> None:
+    field = TemplateField(0, 0, ("food", "clothing", "referral", "other"))
+
+    assert field.choices_marked(value) == marked
+
+
+def test_values_that_join_alike_are_left_for_a_person() -> None:
+    # "ab" could be the one choice "ab", or "a" then "b".
+    field = TemplateField(0, 0, ("a", "b", "ab"))
+
+    assert field.choices_marked("ab") is None
+    assert field.choices_marked("b") == [1]
+
+
+def test_bubbles_carry_the_answers_real_values(
+    printed_form: tuple[Form, FormLayout],
+) -> None:
+    _, layout = printed_form
+
+    template = page_template(layout, layout.pages[0])
+
+    types = template.template["customBubbleFieldTypes"]
+    assert types["CUSTOM_q1r0"]["bubbleValues"] == [
+        "food",
+        "clothing",
+        "referral",
+        "other",
+    ]
+    assert types["CUSTOM_q0r0"]["bubbleValues"] == ["yes"]
+    services = next(r for r in template.regions if r.key == (1, None, None))
+    assert len(services.bubbles) == 4

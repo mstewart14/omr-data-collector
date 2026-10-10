@@ -226,11 +226,16 @@ def read_page(
 def interpret(
     form: Form, template: PageTemplate, row: dict[str, str]
 ) -> tuple[ScannedAnswer, ...]:
-    """Turn OMRChecker's values (letters per field) into answers."""
+    """Turn OMRChecker's values (the marked bubbles' values, per field) into answers."""
     marked: dict[tuple[int, int | None, int | None], list[int]] = {}
+    unclear: set[tuple[int, int | None, int | None]] = set()
     for label, field in template.fields.items():
         key = (field.block_index, field.table_row, field.column)
-        marked.setdefault(key, []).extend(field.choices_marked(row.get(label, "")))
+        choices = field.choices_marked(row.get(label, ""))
+        if choices is None:
+            unclear.add(key)
+            choices = []
+        marked.setdefault(key, []).extend(choices)
     answers = []
     for (block_index, table_row, column), choices in marked.items():
         spec = _answer_spec(form, block_index, column)
@@ -244,7 +249,9 @@ def interpret(
             when_marked, when_empty = spec.choices
             values = ((when_marked if values else when_empty).output,)
         problem = ""
-        if spec.answer_type == ANSWER_TYPES.ONE_CHOICE and len(values) > 1:
+        if (block_index, table_row, column) in unclear:
+            problem = tr("Couldn't tell which bubbles are marked: check the sheet.")
+        elif spec.answer_type == ANSWER_TYPES.ONE_CHOICE and len(values) > 1:
             problem = tr("More than one bubble is marked, but only one is allowed.")
         answers.append(
             ScannedAnswer(

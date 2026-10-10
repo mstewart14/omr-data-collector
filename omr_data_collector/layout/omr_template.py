@@ -5,10 +5,10 @@ OMRChecker first finds the page (CropPage), then straightens it on the four
 corner markers (CropOnMarkers), so the marker centres become the template's
 corners. Everything else is placed from the same layout the page was drawn from.
 
-Each bubble's value in the template is a letter, A for a field's first choice, B
-for its second and so on (questions have at most 20 choices). OMRChecker joins
-the letters of every bubble marked in a field, so "AC" always means the first and
-third choices, whatever their saved values; ``TemplateField`` maps them back.
+Each bubble's value in the template is the saved value of the choice it stands
+for ("yes", "food"...), so OMRChecker reads, reports and draws the sheet's real
+data. OMRChecker joins the values of every bubble marked in a field
+("foodclothing"); ``TemplateField`` splits them back into choices.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         PageLayout,
         PlacedBlock,
     )
+    from omr_data_collector.models.AnswerSpec import AnswerSpec
 
 # How finely the template measures the straightened page.
 TEMPLATE_PX_PER_MM = 6.0
@@ -43,20 +44,20 @@ TEMPLATE_PX_PER_MM = 6.0
 PROCESSING_PX_PER_MM = 4.0
 MARKER_FILE_NAME = "marker.png"
 MARKER_IMAGE_PX = 120
-CHOICE_LETTERS = string.ascii_uppercase
 
 
 @dataclass(frozen=True)
 class TemplateField:
     """What one template field reads: a question's row of choices, or a table cell.
 
-    ``first_choice`` is the choice index of the field's letter A; the letter in
-    position n of OMRChecker's value is choice ``first_choice + n``.
+    ``values`` are the field's bubbles' values, left to right: the saved values
+    of the choices they stand for, so OMRChecker reads, reports and draws the
+    sheet's real data. ``first_choice`` is the choice index of the first.
     """
 
     block_index: int
     first_choice: int
-    choice_count: int
+    values: tuple[str, ...]
     table_row: int | None = None
     column: int | None = None
 
@@ -64,29 +65,56 @@ class TemplateField:
         return {
             "blockIndex": self.block_index,
             "firstChoice": self.first_choice,
-            "choiceCount": self.choice_count,
+            "values": list(self.values),
             "tableRow": self.table_row,
             "column": self.column,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TemplateField:
+        first = data["firstChoice"]
+        values = data.get("values")
+        if values is None:
+            # Stored before bubbles had their real values: they were letters.
+            values = list(string.ascii_uppercase[first : first + data["choiceCount"]])
         return cls(
             block_index=data["blockIndex"],
-            first_choice=data["firstChoice"],
-            choice_count=data["choiceCount"],
+            first_choice=first,
+            values=tuple(values),
             table_row=data["tableRow"],
             column=data["column"],
         )
 
-    def choices_marked(self, value: str) -> list[int]:
-        """The choice indices for the letters OMRChecker read in this field."""
-        return [
-            CHOICE_LETTERS.index(letter)
-            for letter in value
-            if letter
-            in CHOICE_LETTERS[self.first_choice : self.first_choice + self.choice_count]
-        ]
+    def choices_marked(self, value: str) -> list[int] | None:
+        """The choice indices marked, from OMRChecker's value for this field.
+
+        OMRChecker joins the values of every bubble marked in a field, in
+        order, with nothing between them ("foodclothing"); this splits them
+        back. None if the value can't be split one way only (values so alike
+        that their joins look the same), for a person to check.
+        """
+        splits = _splits(value, self.values, 0)
+        if len(splits) != 1:
+            return None
+        return [self.first_choice + index for index in splits[0]]
+
+
+def _splits(value: str, values: tuple[str, ...], start: int) -> list[list[int]]:
+    """Every way ``value`` is some of ``values`` from ``start`` on, joined in order.
+
+    At most two are found: enough to tell one way from several.
+    """
+    if not value:
+        return [[]]
+    found: list[list[int]] = []
+    for index in range(start, len(values)):
+        piece = values[index]
+        if piece and value.startswith(piece):
+            for rest in _splits(value[len(piece) :], values, index + 1):
+                found.append([index, *rest])
+                if len(found) > 1:
+                    return found
+    return found
 
 
 @dataclass(frozen=True)
@@ -103,6 +131,8 @@ class AnswerRegion:
     rect: tuple[int, int, int, int]
     table_row: int | None = None
     column: int | None = None
+    # Each printed choice's bubble, in choice order, for answers with bubbles.
+    bubbles: tuple[tuple[int, int, int, int], ...] = ()
 
     @property
     def key(self) -> tuple[int, int | None, int | None]:
@@ -114,6 +144,7 @@ class AnswerRegion:
             "rect": list(self.rect),
             "tableRow": self.table_row,
             "column": self.column,
+            "bubbles": [list(bubble) for bubble in self.bubbles],
         }
 
     @classmethod
@@ -124,6 +155,9 @@ class AnswerRegion:
             rect=(x, y, width, height),
             table_row=data["tableRow"],
             column=data["column"],
+            bubbles=tuple(
+                (bx, by, bw, bh) for bx, by, bw, bh in data.get("bubbles", [])
+            ),
         )
 
 
@@ -183,14 +217,15 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
         name: str,
         centre_x_mm: float,
         centre_y_mm: float,
-        letters: str,
+        values: list[str],
         pitch_mm: float,
         labels: list[str],
         row_pitch_mm: float = 0,
     ) -> None:
-        type_name = f"CUSTOM_{letters}"
+        # Each block has its own bubble type, holding its answer's real values.
+        type_name = f"CUSTOM_{name}"
         bubble_types[type_name] = {
-            "bubbleValues": list(letters),
+            "bubbleValues": values,
             "direction": "horizontal",
         }
         blocks[name] = {
@@ -212,6 +247,17 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
         x, y = px(x_mm, left), px(y_mm, top)
         return x, y, px(x_mm + width_mm, left) - x, px(y_mm + height_mm, top) - y
 
+    def bubble_rect(
+        centre_x_mm: float, centre_y_mm: float
+    ) -> tuple[int, int, int, int]:
+        radius = BUBBLE_DIAMETER_MM / 2
+        return rect(
+            centre_x_mm - radius,
+            centre_y_mm - radius,
+            BUBBLE_DIAMETER_MM,
+            BUBBLE_DIAMETER_MM,
+        )
+
     regions: list[AnswerRegion] = []
     for placed in page.blocks:
         content = placed.block.content
@@ -221,13 +267,19 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
                 AnswerRegion(
                     placed.index,
                     rect(0, placed.y_mm, layout.width_mm, placed.height_mm),
+                    bubbles=tuple(
+                        bubble_rect(b.centre_x_mm, placed.y_mm + b.centre_y_mm)
+                        for b in placed.question.bubbles
+                    ),
                 )
             )
         elif isinstance(content, TableBlock) and placed.table_part is not None:
             _add_table_part(placed, content, add_block, fields)
-            regions += _table_regions(placed, rect)
+            regions += _table_regions(placed, content, rect, bubble_rect)
         elif isinstance(content, SheetDetails) and placed.details is not None:
-            regions += _add_details(placed, add_block, fields, rect)
+            regions += _add_details(
+                placed, content, add_block, fields, rect, bubble_rect
+            )
 
     template = {
         "templateDimensions": [px(right, left), px(bottom, top)],
@@ -288,18 +340,21 @@ def _add_question(placed: PlacedBlock, question: Question, add_block, fields) ->
     for row, bubbles in rows.items():
         label = f"q{placed.index}r{row}"
         first = bubbles[0].choice_index
+        values = _outputs(question.answer)[first : first + len(bubbles)]
         add_block(
             label,
             bubbles[0].centre_x_mm,
             placed.y_mm + bubbles[0].centre_y_mm,
-            CHOICE_LETTERS[first : first + len(bubbles)],
+            values,
             geometry.choice_pitch_mm,
             [label],
         )
-        fields[label] = TemplateField(placed.index, first, len(bubbles))
+        fields[label] = TemplateField(placed.index, first, tuple(values))
 
 
-def _add_details(placed: PlacedBlock, add_block, fields, rect) -> list[AnswerRegion]:
+def _add_details(  # noqa: PLR0913 (the template's parts being filled in)
+    placed: PlacedBlock, details: SheetDetails, add_block, fields, rect, bubble_rect
+) -> list[AnswerRegion]:
     """A field block for each field answered with bubbles; a region for every field."""
     geometry = placed.details
     if geometry is None:
@@ -309,16 +364,17 @@ def _add_details(placed: PlacedBlock, add_block, fields, rect) -> list[AnswerReg
         if detail.bubbles:
             label = f"d{placed.index}f{detail.field_index}"
             first = detail.bubbles[0]
+            values = _outputs(details.fields[detail.field_index].answer)
             add_block(
                 label,
                 first.centre_x_mm,
                 placed.y_mm + first.centre_y_mm,
-                CHOICE_LETTERS[: len(detail.bubbles)],
+                values,
                 detail.choice_pitch_mm,
                 [label],
             )
             fields[label] = TemplateField(
-                placed.index, 0, len(detail.bubbles), column=detail.field_index
+                placed.index, 0, tuple(values), column=detail.field_index
             )
         regions.append(
             AnswerRegion(
@@ -330,13 +386,19 @@ def _add_details(placed: PlacedBlock, add_block, fields, rect) -> list[AnswerReg
                     geometry.row_height_mm,
                 ),
                 column=detail.field_index,
+                bubbles=tuple(
+                    bubble_rect(bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm)
+                    for bubble in detail.bubbles
+                ),
             )
         )
     return regions
 
 
-def _table_regions(placed: PlacedBlock, rect) -> list[AnswerRegion]:
-    """Each cell of a table part, row by row."""
+def _table_regions(
+    placed: PlacedBlock, table: TableBlock, rect, bubble_rect
+) -> list[AnswerRegion]:
+    """Each cell of a table part, row by row, with its bubbles if it has any."""
     part = placed.table_part
     if part is None:
         return []
@@ -345,22 +407,28 @@ def _table_regions(placed: PlacedBlock, rect) -> list[AnswerRegion]:
     regions = []
     for offset in range(part.row_count):
         x = 0.0
+        row_top = top + offset * layout.row_height_mm
+        middle = row_top + layout.row_height_mm / 2
         for column, column_layout in enumerate(layout.columns):
+            centres = cell_bubble_centres_mm(table.columns[column], column_layout)
             regions.append(
                 AnswerRegion(
                     placed.index,
-                    rect(
-                        x,
-                        top + offset * layout.row_height_mm,
-                        column_layout.width_mm,
-                        layout.row_height_mm,
-                    ),
+                    rect(x, row_top, column_layout.width_mm, layout.row_height_mm),
                     table_row=part.first_row + offset,
                     column=column,
+                    bubbles=tuple(
+                        bubble_rect(x + centre, middle) for centre in centres
+                    ),
                 )
             )
             x += column_layout.width_mm
     return regions
+
+
+def _outputs(answer: AnswerSpec) -> list[str]:
+    """The saved values of an answer's printed choices: its bubbles' values."""
+    return [choice.output for choice in answer.printed_choices()]
 
 
 def _add_table_part(placed: PlacedBlock, table: TableBlock, add_block, fields) -> None:
@@ -374,6 +442,7 @@ def _add_table_part(placed: PlacedBlock, table: TableBlock, add_block, fields) -
     ):
         centres = cell_bubble_centres_mm(column, column_layout)
         if centres:
+            values = _outputs(column.answer)
             rows = range(part.first_row, part.first_row + part.row_count)
             labels = [f"t{placed.index}c{column_index}r{row}" for row in rows]
             pitch = centres[1] - centres[0] if len(centres) > 1 else 0
@@ -384,13 +453,13 @@ def _add_table_part(placed: PlacedBlock, table: TableBlock, add_block, fields) -
                 + part.grid_top_mm
                 + layout.header_height_mm
                 + layout.row_height_mm / 2,
-                CHOICE_LETTERS[: len(centres)],
+                values,
                 pitch,
                 labels,
                 row_pitch_mm=layout.row_height_mm,
             )
             for row, label in zip(rows, labels, strict=True):
                 fields[label] = TemplateField(
-                    placed.index, 0, len(centres), table_row=row, column=column_index
+                    placed.index, 0, tuple(values), table_row=row, column=column_index
                 )
         x += column_layout.width_mm
