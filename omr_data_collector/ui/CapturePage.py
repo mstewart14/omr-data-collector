@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QEvent, QLocale, Qt, Signal
+from PySide6.QtCore import QEvent, QLocale, QObject, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from omr_data_collector.constants import CAPTURE_STATUSES, PAPER_SIZES
+from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES, PAPER_SIZES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     collect,
@@ -40,7 +41,7 @@ from omr_data_collector.export.data_export import (
     write_json,
 )
 from omr_data_collector.i18n import tr
-from omr_data_collector.layout.omr_template import PageTemplate
+from omr_data_collector.layout.omr_template import AnswerRegion, PageTemplate
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -63,7 +64,11 @@ from omr_data_collector.storage.form_store import (
     load_printed_layout,
 )
 from omr_data_collector.storage.organization_store import load_organization
-from omr_data_collector.ui.accessibility import set_field_error, style_error_label
+from omr_data_collector.ui.accessibility import (
+    announce,
+    set_field_error,
+    style_error_label,
+)
 from omr_data_collector.ui.AnswerEditor import AnswerEditor
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, ExportDialog
 from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
@@ -73,7 +78,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_save_discard_cancel,
     confirm_destructive,
 )
-from omr_data_collector.ui.PageImageView import PageImageView
+from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas
 
 if TYPE_CHECKING:
     import sqlite3
@@ -198,12 +203,14 @@ class CapturePage(QWidget):
         # The row of the answer the editor is showing.
         self._editing_row: int | None = None
 
+        # Set while the canvas and the answers list follow each other.
+        self._syncing = False
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_sheets_box())
-        self.page_view = PageImageView()
-        splitter.addWidget(self.page_view)
+        splitter.addWidget(self._build_sheet_view())
         splitter.addWidget(self._build_check_box())
-        splitter.setStretchFactor(1, 1)
+        # The sheet gets most of the room: it's where answers are typed in.
+        splitter.setStretchFactor(1, 3)
         splitter.setStretchFactor(2, 1)
         layout = QVBoxLayout(self)
         layout.addWidget(splitter)
@@ -215,7 +222,8 @@ class CapturePage(QWidget):
             (self.add_button, self.read_button),
             (self.read_button, self.remove_button),
             (self.remove_button, self.export_button),
-            (self.export_button, self.answers_table),
+            (self.export_button, self.sheet_canvas),
+            (self.sheet_canvas, self.answers_table),
             (self.answers_table, self.answer_editor.choice_combo),
             (self.answer_editor.choice_combo, self.answer_editor.choices_list),
             (self.answer_editor.choices_list, self.answer_editor.text_edit),
@@ -644,10 +652,10 @@ class CapturePage(QWidget):
         self._form = None
         self._template = None
         if capture is None:
-            self.page_view.show_image(None, "")
+            self.sheet_canvas.show_image(None, "")
             self.sheet_note.setText("")
         elif capture.status in {CAPTURE_STATUSES.WAITING, CAPTURE_STATUSES.UNREADABLE}:
-            self.page_view.show_image(
+            self.sheet_canvas.show_image(
                 image_path(self._connection, capture),
                 tr("The image as added: {file}.").format(file=capture.original_name),
             )
@@ -658,6 +666,8 @@ class CapturePage(QWidget):
             )
         else:
             self._load_page(capture)
+        self.sheet_canvas.set_current(None)
+        self.sheet_canvas.set_answers(self._canvas_answers())
         self._fill_answers_table()
         if self._answers:
             self.answers_table.selectRow(0)
@@ -679,13 +689,14 @@ class CapturePage(QWidget):
                     self._template = PageTemplate.from_dict(pages[capture.page - 1])
         page_image = page_image_path(self._connection, capture)
         form_name = self._form.name if self._form else ""
-        self.page_view.show_image(
+        self.sheet_canvas.show_image(
             page_image
             if page_image.exists()
             else image_path(self._connection, capture),
             tr(
-                "Page {page} of {form}, straightened, with the marks read shown and "
-                "the answer being checked outlined."
+                "Page {page} of {form}, straightened. Tab goes from answer to "
+                "answer; type in handwritten ones, and press 1 to 9 to choose a "
+                "bubble."
             ).format(page=capture.page, form=form_name),
         )
         notes = {
@@ -738,7 +749,7 @@ class CapturePage(QWidget):
         spec = self._spec(answer) if answer is not None else None
         self.answer_editor.setEnabled(spec is not None)
         if answer is None or spec is None:
-            self.page_view.highlight(None)
+            self._follow_on_canvas(None)
             self.close_up.clear()
             set_field_error(self.editor_form, self.answer_editor, self.value_error, "")
             return
@@ -748,8 +759,8 @@ class CapturePage(QWidget):
         self.answer_editor.set_answer(spec, answer.values)
         self.value_label.setBuddy(self.answer_editor.current_editor)
         region = self._region(answer)
-        self.page_view.highlight(region)
-        close_up = self.page_view.close_up(region) if region else QPixmap()
+        self._follow_on_canvas(row)
+        close_up = self.sheet_canvas.close_up(region) if region else QPixmap()
         if close_up.isNull():
             self.close_up.clear()
         else:
@@ -796,6 +807,124 @@ class CapturePage(QWidget):
         answer = self._answers[row]
         if values != answer.values:
             self._answers[row] = replace(answer, values=values, problem="")
+            self.sheet_canvas.update_answer(row, self._canvas_answer(row))
+
+    # --- The sheet: typing and marking on it -------------------------------------
+
+    def _build_sheet_view(self) -> QScrollArea:
+        self.sheet_canvas = SheetCanvas()
+        self.sheet_canvas.current_changed.connect(self._on_canvas_current)
+        self.sheet_canvas.values_edited.connect(self._on_canvas_values)
+        self.sheet_scroll = QScrollArea()
+        self.sheet_scroll.setWidget(self.sheet_canvas)
+        self.sheet_scroll.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        # Not a Tab stop of its own: Tab goes to the sheet's answers inside it.
+        self.sheet_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.sheet_scroll.viewport().installEventFilter(self)
+        return self.sheet_scroll
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 (Qt override)
+        # The page fits the width it's shown in, so it reads well at any size.
+        if (
+            watched is self.sheet_scroll.viewport()
+            and event.type() == QEvent.Type.Resize
+        ):
+            self.sheet_canvas.set_fit_width(self.sheet_scroll.viewport().width())
+        return super().eventFilter(watched, event)
+
+    def _canvas_answers(self) -> list[CanvasAnswer]:
+        return [self._canvas_answer(row) for row in range(len(self._answers))]
+
+    def _canvas_answer(self, row: int) -> CanvasAnswer:
+        """One answer as the sheet draws it, with its place and bubbles."""
+        answer = self._answers[row]
+        spec = self._spec(answer)
+        region = self._region_of(answer)
+        if spec is None:
+            return CanvasAnswer(
+                name=self._answer_name(answer),
+                answer_type=ANSWER_TYPES.WRITTEN,
+                rect=region.rect if region else (0, 0, 0, 0),
+            )
+        printed = spec.printed_choices()
+        return CanvasAnswer(
+            name=self._answer_name(answer),
+            answer_type=spec.answer_type,
+            rect=region.rect if region else (0, 0, 0, 0),
+            bubbles=region.bubbles if region else (),
+            choices=tuple((choice.output, choice.label) for choice in printed),
+            empty_value=(
+                spec.choices[1].output
+                if spec.answer_type == ANSWER_TYPES.YES_NO and len(spec.choices) > 1
+                else ""
+            ),
+            values=answer.values,
+            problem=self._entry_error(answer) or answer.problem,
+        )
+
+    def _follow_on_canvas(self, row: int | None) -> None:
+        """Show the list's current answer on the sheet, scrolled into view."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            self.sheet_canvas.set_current(row)
+        finally:
+            self._syncing = False
+        if row is not None:
+            area = self.sheet_canvas.answer_rect_in_view(row)
+            self.sheet_scroll.ensureVisible(
+                area.center().x(), area.center().y(), area.width() // 2 + 20, 60
+            )
+
+    def _on_canvas_current(self, row: int) -> None:
+        """An answer chosen on the sheet: the list, close-up and editor follow."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            self.answers_table.selectRow(row)
+        finally:
+            self._syncing = False
+        area = self.sheet_canvas.answer_rect_in_view(row)
+        self.sheet_scroll.ensureVisible(
+            area.center().x(), area.center().y(), area.width() // 2 + 20, 60
+        )
+        answer = self._answers[row]
+        values = ", ".join(self._value_labels(answer)) or tr("nothing")
+        canvas_answer = self.sheet_canvas.answer(row)
+        hint = (
+            ""
+            if canvas_answer.written
+            else tr("Press 1 to %n to choose.", None, len(canvas_answer.choices))
+        )
+        message = tr("{answer}: {value}.").format(
+            answer=self._answer_name(answer), value=values
+        )
+        self.sheet_canvas.setAccessibleDescription(f"{message} {hint}".strip())
+        announce(self.sheet_canvas, f"{message} {hint}".strip())
+
+    def _on_canvas_values(self, row: int, values: tuple[str, ...]) -> None:
+        """Typed or marked on the sheet: store it, and show it everywhere."""
+        if not 0 <= row < len(self._answers):
+            return
+        answer = self._answers[row]
+        if values == answer.values:
+            return
+        self._answers[row] = replace(answer, values=values, problem="")
+        self.sheet_canvas.update_answer(row, self._canvas_answer(row))
+        self._fill_answers_table()
+        if row == self._editing_row:
+            spec = self._spec(self._answers[row])
+            if spec is not None:
+                self.answer_editor.set_answer(spec, values)
+            set_field_error(
+                self.editor_form,
+                self.answer_editor.current_editor,
+                self.value_error,
+                self._entry_error(self._answers[row]),
+            )
+        self._update_buttons()
 
     def _update_buttons(self) -> None:
         checkable = self._current is not None and self._current.status in {
@@ -871,14 +1000,14 @@ class CapturePage(QWidget):
         return [labels.get(value, value) for value in answer.values]
 
     def _region(self, answer: CapturedAnswer) -> tuple[int, int, int, int] | None:
+        region = self._region_of(answer)
+        return region.rect if region is not None else None
+
+    def _region_of(self, answer: CapturedAnswer) -> AnswerRegion | None:
         if self._template is None:
             return None
         return next(
-            (
-                region.rect
-                for region in self._template.regions
-                if region.key == answer.key
-            ),
+            (region for region in self._template.regions if region.key == answer.key),
             None,
         )
 

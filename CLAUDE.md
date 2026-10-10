@@ -111,6 +111,11 @@ engine bridge.
   answer's place on that page comes from `PageTemplate.regions`, so the
   outline and close-up need no geometry of their own. Saved data is a capture
   with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
+  Answers are filled in on the sheet itself (`ui/SheetCanvas.py`): click and
+  type over handwriting, click bubbles or press 1-9, Tab and arrows between
+  answers; it draws the current values over the page, and the side list and
+  editor follow it (and it them). Template bubbles carry the choices' saved
+  values, so OMRChecker's own drawing shows the real data too.
 - **Export** (`export/data_export.py`, Capture > Export data): a form's saved
   captures, from every version, as a sheets CSV (sheet columns, sheet details,
   questions) plus a CSV per table (one row per filled row, repeating the sheet

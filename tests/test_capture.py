@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QMessageBox
 
 from omr_data_collector.constants import CAPTURE_STATUSES
@@ -242,7 +243,7 @@ def test_reading_shows_the_sheets_answers_to_check(
     assert cell_text(page, services, 1) == "Food, Other"
     time = row_of(page, "Log, row 1, time")
     assert cell_text(page, time, 2) == "Handwritten: type it in"
-    assert page.page_view.has_image()
+    assert page.sheet_canvas.has_image()
 
     page.sheet_list.setCurrentRow(1)
 
@@ -259,7 +260,7 @@ def test_choosing_an_answer_outlines_it_and_shows_a_close_up(
 
     page.answers_table.selectRow(row_of(page, "services"))
 
-    assert page.page_view._highlight is not None  # noqa: SLF001 (what is drawn)
+    assert page.sheet_canvas.current() == row_of(page, "services")
     assert not page.close_up.pixmap().isNull()
     assert page.value_label.text() == "Va&lue of services"
     assert page.value_label.buddy() is page.answer_editor.choices_list
@@ -392,3 +393,142 @@ def test_leaving_a_sheet_with_changes_asks_about_them(
     page.revert()
 
     assert not page.has_unsaved_changes()
+
+
+# --- Working on the sheet itself ---------------------------------------------------
+
+
+@pytest.fixture
+def checking(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture, photo: Path
+) -> CapturePage:
+    """The capture page, shown, with the photo read and ready to check."""
+    page = make_page(qtbot, connection)
+    page.show()
+    add_through_page(page, mocker, photo)
+    page.read_waiting()
+    qtbot.waitExposed(page)
+    # Keyboard focus only goes to widgets in the active window.
+    page.activateWindow()
+    qtbot.waitActive(page)
+    return page
+
+
+def click_answer(qtbot: QtBot, page: CapturePage, name: str) -> int:
+    row = row_of(page, name)
+    canvas = page.sheet_canvas
+    page.sheet_scroll.ensureWidgetVisible(canvas)
+    qtbot.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, pos=canvas.answer_rect_in_view(row).center()
+    )
+    return row
+
+
+def test_clicking_a_handwritten_answer_lets_you_type_at_once(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    canvas = checking.sheet_canvas
+    row = click_answer(qtbot, checking, "Log, row 1, time")
+
+    assert canvas.current() == row
+    assert canvas.editor.isVisible()
+    assert canvas.editor.hasFocus()
+    qtbot.keyClicks(canvas.editor, "09:30")
+
+    assert canvas.answer(row).values == ("09:30",)  # drawn over the sheet
+    assert cell_text(checking, row, 1) == "09:30"
+    assert checking.answers_table.currentRow() == row
+    assert checking.save_data()
+
+
+def test_tab_and_arrows_go_from_answer_to_answer(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    canvas = checking.sheet_canvas
+    start = click_answer(qtbot, checking, "Log, row 1, time")
+
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Tab)
+
+    assert canvas.current() == row_of(checking, "Log, row 1, first")
+    assert canvas.hasFocus()  # a bubble answer: the keys choose
+
+    qtbot.keyClick(canvas, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+    assert canvas.current() == start
+
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Down)
+    assert canvas.current() == row_of(checking, "Log, row 2, time")
+
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Right)  # at the end of empty text
+    assert canvas.current() == row_of(checking, "Log, row 2, first")
+
+
+def test_clicking_a_bubble_marks_it(qtbot: QtBot, checking: CapturePage) -> None:
+    canvas = checking.sheet_canvas
+    row = row_of(checking, "services")
+    bubble = canvas.answer(row).bubbles[1]  # Clothing
+    x, y, width, height = bubble
+    scale = canvas.width() / canvas._pixmap.width()  # noqa: SLF001 (drawn size)
+    point = QPoint(round((x + width / 2) * scale), round((y + height / 2) * scale))
+
+    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=point)
+
+    assert canvas.answer(row).values == ("food", "clothing", "other")
+    assert cell_text(checking, row, 1) == "Food, Clothing, Other"
+
+    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=point)
+
+    assert canvas.answer(row).values == ("food", "other")
+
+
+def test_number_keys_choose_and_delete_clears(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    canvas = checking.sheet_canvas
+    row = row_of(checking, "Log, row 1, service")  # Clothing marked on the photo
+    canvas.set_current(row, focus=True)
+
+    qtbot.keyClick(canvas, Qt.Key.Key_3)
+
+    assert canvas.answer(row).values == ("referral",)
+
+    qtbot.keyClick(canvas, Qt.Key.Key_3)  # pressed again, like re-marking: clears
+
+    assert canvas.answer(row).values == ()
+
+    qtbot.keyClick(canvas, Qt.Key.Key_1)
+
+    assert canvas.answer(row).values == ("food",)
+
+    qtbot.keyClick(canvas, Qt.Key.Key_Delete)
+
+    assert canvas.answer(row).values == ()
+
+
+def test_space_marks_or_clears_a_yes_no_bubble(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    canvas = checking.sheet_canvas
+    row = row_of(checking, "visit")
+    canvas.set_current(row, focus=True)
+    assert canvas.answer(row).values == ("no",)
+
+    qtbot.keyClick(canvas, Qt.Key.Key_Space)
+
+    assert canvas.answer(row).values == ("yes",)
+    assert cell_text(checking, row, 1) == "Yes"
+
+    qtbot.keyClick(canvas, Qt.Key.Key_Space)
+
+    assert canvas.answer(row).values == ("no",)
+
+
+def test_the_side_editor_and_the_sheet_show_the_same_value(
+    checking: CapturePage,
+) -> None:
+    row = row_of(checking, "Log, row 2, time")
+    checking.answers_table.selectRow(row)
+    checking.answer_editor.text_edit.setText("10:15")
+    checking.answer_editor.text_edit.textEdited.emit("10:15")
+
+    assert checking.sheet_canvas.answer(row).values == ("10:15",)
+    assert checking.sheet_canvas.current() == row

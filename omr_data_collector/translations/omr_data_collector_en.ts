@@ -178,6 +178,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Press 1 to %n to choose.</source>
+            <translation>
+                <numerusform>Press 1 to %n to choose.</numerusform>
+                <numerusform>Press 1 to %n to choose.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Use at most %n field(s).</source>
             <translation>
                 <numerusform>Use at most %n field.</numerusform>
