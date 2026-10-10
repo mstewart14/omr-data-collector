@@ -9,6 +9,7 @@ import pytest
 from pyzbar.pyzbar import decode
 
 from omr_data_collector.identity.qr_code import (
+    build_form_payload,
     build_organization_payload,
     make_qr_code,
     parse_payload,
@@ -103,3 +104,42 @@ def test_saved_png_scans(tmp_path: Path) -> None:
 def test_refuses_unsupported_formats(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=r"\.gif"):
         save_qr_code(make_qr_code("x"), tmp_path / "qr.gif")
+
+
+def test_a_form_page_code_is_compact_and_reads_back() -> None:
+    organization_id, form_id = "0" * 31 + "1", "f" * 32
+
+    text = build_form_payload(organization_id, form_id, 3, 2)
+
+    assert text.startswith("OMR1/")
+    assert len(text) <= 60
+    # Alphanumeric mode and a version 3 symbol: big squares for its size.
+    code = make_qr_code(text)
+    assert code.mode == "alphanumeric"
+    assert code.version == 3
+    assert parse_payload(text) == {
+        "type": "form",
+        "version": 1,
+        "organizationId": organization_id,
+        "formId": form_id,
+        "formVersion": 3,
+        "page": 2,
+    }
+
+
+def test_form_codes_printed_as_json_still_read() -> None:
+    printed = (
+        '{"type":"form","version":1,"organizationId":"' + "a" * 32 + '",'
+        '"formId":"' + "b" * 32 + '","formVersion":1,"page":1}'
+    )
+
+    assert parse_payload(printed)["formId"] == "b" * 32
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["OMR1/ABC/DEF/1/1", "OMR1/" + "Z" * 25 + "/" + "Z" * 25 + "/1/1", "OMR1/x/y/z"],
+)
+def test_a_broken_compact_code_is_rejected(text: str) -> None:
+    with pytest.raises(ValueError, match="Not an OMR Data Collector QR code"):
+        parse_payload(text)

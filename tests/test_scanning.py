@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from omr_data_collector.models.Form import Form
     from omr_data_collector.models.Organization import Organization
 
+from tests import sheets
 from tests.sheets import LETTER, Sheet, intake_form
 
 pytestmark = pytest.mark.usefixtures("qapp")
@@ -212,3 +213,23 @@ def test_bubbles_carry_the_answers_real_values(
     assert types["CUSTOM_q0r0"]["bubbleValues"] == ["yes"]
     services = next(r for r in template.regions if r.key == (1, None, None))
     assert len(services.bubbles) == 4
+
+
+def test_a_low_resolution_photo_still_reads(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """About 1000 pixels across the page, as from an older phone."""
+    monkeypatch.setattr(sheets, "PIXELS_PER_MM", 4)
+    form, layout = printed_form
+    sheet = sheets.Sheet(form, organization, layout)
+    sheet.fill_question(1, 0, 3)
+    photo = sheet.photograph(tmp_path / "small.jpg", degrees=4)
+
+    page = scan_sheet(connection, photo, LETTER)
+
+    answers = {answer.block_index: answer.values for answer in page.answers}
+    assert answers[1] == ("food", "other")

@@ -57,6 +57,8 @@ OMR_CONFIG = {
 # Photos are often far bigger than a QR code needs; if zbar misses the code at
 # full size, it gets another try at these widths.
 QR_RETRY_WIDTHS = (2000, 1200)
+# Photos narrower than this also get a try at twice their size.
+QR_UPSCALE_BELOW_WIDTH = 2500
 
 
 class ScanError(Exception):
@@ -108,6 +110,12 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     candidates = [gray]
     height, width = gray.shape
+    if width < QR_UPSCALE_BELOW_WIDTH:
+        # zbar misses codes whose squares are only a few pixels wide; enlarged,
+        # a small or soft photo's code often reads.
+        candidates.append(
+            cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
+        )
     for target in QR_RETRY_WIDTHS:
         if width > target:
             scale = target / width

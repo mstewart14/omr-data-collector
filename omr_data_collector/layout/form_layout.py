@@ -48,9 +48,9 @@ if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.Form import Form, FormBlock
 
-HEADER_HEIGHT_MM = 24.0
+HEADER_HEIGHT_MM = 28.0
 # The QR code, quiet zone included, sits in the header's top-right corner.
-QR_SIZE_MM = 22.0
+QR_SIZE_MM = 26.0
 HEADER_GAP_MM = 4.0
 CONTENT_TOP_MM = HEADER_HEIGHT_MM + HEADER_GAP_MM
 BLOCK_GAP_MM = 5.0

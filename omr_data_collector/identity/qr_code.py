@@ -24,6 +24,12 @@ QR_BORDER_MODULES = 4
 
 SAVE_FILE_FORMATS = {".png", ".svg", ".pdf"}
 
+# A form page's compact code starts with this, and its format version.
+FORM_PAYLOAD_PREFIX = "OMR1"
+BASE36_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# A 128-bit ID takes 25 base 36 digits.
+BASE36_ID_LENGTH = 25
+
 
 def build_organization_payload(organization: Organization) -> str:
     payload: dict[str, Any] = {
@@ -46,26 +52,35 @@ def build_form_payload(
 ) -> str:
     """The QR code for one page of one printed version of a form.
 
-    The page number lets a scanned sheet be matched to its page of the template
-    even when the pages of a multi-page form come back shuffled.
+    Compact, to keep the code's squares big enough to read from an ordinary
+    phone photo: ``OMR1/<organization>/<form>/<version>/<page>``, the two IDs
+    in base 36. Upper-case letters, digits and "/" are QR's alphanumeric mode,
+    which packs them tightly: the whole code is a version 3 symbol, 29 squares
+    wide, where the same in JSON took 49. The page number lets a scanned sheet
+    be matched to its page even when the pages come back shuffled.
     """
-    payload = {
-        "type": QR_PAYLOAD_TYPES.FORM,
-        "version": QR_PAYLOAD_VERSION,
-        "organizationId": organization_id,
-        "formId": form_id,
-        "formVersion": form_version,
-        "page": page,
-    }
-    return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+    return "/".join(
+        (
+            FORM_PAYLOAD_PREFIX,
+            _base36(organization_id),
+            _base36(form_id),
+            str(form_version),
+            str(page),
+        )
+    )
 
 
 def parse_payload(text: str) -> dict[str, Any]:
     """Decode the text read from one of our QR codes.
 
+    A form page's compact code becomes the same dictionary as the JSON one
+    printed before it (which is still read), so callers needn't know which.
+
     Raises:
         ValueError: The text isn't a payload this app produces.
     """
+    if text.startswith(f"{FORM_PAYLOAD_PREFIX}/"):
+        return _parse_compact_form_payload(text)
     try:
         payload = json.loads(text)
         jsonschema.validate(instance=payload, schema=QR_PAYLOAD_SCHEMA)
@@ -73,6 +88,50 @@ def parse_payload(text: str) -> dict[str, Any]:
         msg = tr("Not an OMR Data Collector QR code")
         raise ValueError(msg) from error
     return payload
+
+
+def _parse_compact_form_payload(text: str) -> dict[str, Any]:
+    parts = text.split("/")
+    try:
+        _, organization, form, version, page = parts
+        payload = {
+            "type": QR_PAYLOAD_TYPES.FORM,
+            "version": QR_PAYLOAD_VERSION,
+            "organizationId": _hex_id(organization),
+            "formId": _hex_id(form),
+            "formVersion": int(version),
+            "page": int(page),
+        }
+        jsonschema.validate(instance=payload, schema=QR_PAYLOAD_SCHEMA)
+    except (ValueError, jsonschema.ValidationError) as error:
+        msg = tr("Not an OMR Data Collector QR code")
+        raise ValueError(msg) from error
+    return payload
+
+
+def _base36(hex_id: str) -> str:
+    """A 32-hex-digit ID in base 36: 25 upper-case letters and digits."""
+    number = int(hex_id, 16)
+    digits = ""
+    while number:
+        number, digit = divmod(number, 36)
+        digits = BASE36_DIGITS[digit] + digits
+    return digits.rjust(BASE36_ID_LENGTH, "0")
+
+
+def _hex_id(base36: str) -> str:
+    """Back from base 36 to the ID's 32 hex digits.
+
+    Raises:
+        ValueError: Not a base 36 ID of the right length.
+    """
+    # Only ever caught, by parse_payload: these errors need no message.
+    if len(base36) != BASE36_ID_LENGTH or any(c not in BASE36_DIGITS for c in base36):
+        raise ValueError
+    number = int(base36, 36)
+    if number >= 16**32:
+        raise ValueError
+    return f"{number:032x}"
 
 
 def make_qr_code(payload: str) -> segno.QRCode:
