@@ -299,6 +299,7 @@ INTERNAL_CALLS = {
     "add_shortcut",
     "getattr",
     "setObjectName",
+    "setStyleSheet",
 }
 # Prose-looking strings that aren't for people to read, by file.
 NOT_FOR_PEOPLE = {

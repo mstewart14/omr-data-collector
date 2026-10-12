@@ -648,3 +648,32 @@ def test_the_photo_tip_is_shown_and_read_out_with_add_images(
 
     assert "all four corner dots" in page.photo_tip.text()
     assert page.add_button.accessibleDescription() == page.photo_tip.text()
+
+
+def test_the_box_typed_into_shows_the_handwriting_behind_it(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    click_answer(qtbot, checking, "Log, row 1, time")
+    editor = checking.sheet_canvas.editor
+    behind = checking.sheet_canvas.grab(editor.geometry()).toImage()
+    editor.hide()
+    without = checking.sheet_canvas.grab(editor.geometry()).toImage()
+    editor.show()
+
+    # Mostly see-through: inside its outline, wherever the page under it is
+    # darker than paper (the printed boxes), it still shows nearly as dark.
+    inset = 6
+    marked = [
+        (x, y)
+        for x in range(inset, without.width() - inset)
+        for y in range(inset, without.height() - inset)
+        if without.pixelColor(x, y).lightness() < 200
+    ]
+    assert len(marked) > 10
+    still_shown = [
+        (x, y)
+        for x, y in marked
+        if behind.pixelColor(x, y).lightness()
+        < without.pixelColor(x, y).lightness() + 60
+    ]
+    assert len(still_shown) > len(marked) * 0.8

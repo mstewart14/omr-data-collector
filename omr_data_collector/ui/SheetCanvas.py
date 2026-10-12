@@ -40,6 +40,9 @@ CURRENT_COLOR = QColor("#0b57d0")
 VALUE_COLOR = QColor("#0b57d0")
 PROBLEM_COLOR = QColor("#b3261e")
 VALUE_BACKGROUND = QColor(255, 255, 255, 215)
+# The box typed into over handwriting: mostly see-through, so the writing it's
+# copied from still shows, with just enough white behind the typing to read it.
+EDITOR_BACKGROUND = QColor(255, 255, 255, 51)
 CURRENT_PEN_PX = 3
 RING_PEN_PX = 3
 # Room round a close-up so the writing isn't cut off at the edges of its box.
@@ -95,6 +98,18 @@ class SheetCanvas(QWidget):
         self.editor = QLineEdit(self)
         self.editor.hide()
         self.editor.setFrame(True)
+        # Fixed colours, like the rest of what's drawn over the page: they sit
+        # on the paper, not on the desktop theme. Selected text stays solid.
+        back = EDITOR_BACKGROUND
+        background = (
+            f"rgba({back.red()}, {back.green()}, {back.blue()}, {back.alpha()})"
+        )
+        text = VALUE_COLOR.name()
+        self.editor.setStyleSheet(
+            f"QLineEdit {{ background: {background}; color: {text};"
+            f" border: {CURRENT_PEN_PX}px solid {text}; font-weight: bold;"
+            f" selection-background-color: {text}; selection-color: white; }}"
+        )
         self.editor.textEdited.connect(self._on_text_edited)
         self.editor.installEventFilter(self)
 
