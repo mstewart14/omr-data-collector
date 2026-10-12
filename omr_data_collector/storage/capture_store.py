@@ -101,6 +101,13 @@ def list_captures(connection: sqlite3.Connection) -> list[Capture]:
     return [_capture(row) for row in rows]
 
 
+def likely_duplicates(
+    connection: sqlite3.Connection, capture: Capture
+) -> list[Capture]:
+    """Other captures that look like pictures of the same filled-in sheet."""
+    return [other for other in list_captures(connection) if capture.looks_like(other)]
+
+
 def load_capture(connection: sqlite3.Connection, capture_id: str) -> Capture | None:
     row = connection.execute(
         f"SELECT {CAPTURE_COLUMNS} FROM capture WHERE capture_id = ?",  # noqa: S608 (fixed column list)

@@ -117,10 +117,17 @@ engine bridge.
   answers; it draws the current values over the page, and the side list and
   editor follow it (and it them). Template bubbles carry the choices' saved
   values, so OMRChecker's own drawing shows the real data too.
+  `CapturedAnswer.changed_by_hand` (bubbles changed from what was read; typing
+  in handwriting isn't a change) shows in the Note column and is counted in the
+  export. `Capture.looks_like` warns when two pictures seem to be one sheet
+  (same page, every bubble alike, no typed value different): only a warning,
+  since people can mark a short form alike.
 - **Export** (`export/data_export.py`, Capture > Export data): a form's saved
   captures, from every version, as a sheets CSV (sheet columns, sheet details,
   questions) plus a CSV per table (one row per filled row, repeating the sheet
-  and its details), or one JSON file nesting the same. The columns describing
+  and its details), or one JSON file nesting the same. Each sheet and table row
+  counts its answers changed by hand (`corrected_answers`,
+  `row_corrected_answers`); the JSON names them. The columns describing
   the sheet (`SHEET_COLUMNS`) have fixed, untranslated names for analysis
   scripts; question, field and column names are the export names, so a
   question may not share a sheet details field's name. Chosen sheets can be

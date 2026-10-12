@@ -50,6 +50,7 @@ from omr_data_collector.storage.capture_store import (
     add_capture,
     delete_capture,
     image_path,
+    likely_duplicates,
     list_captures,
     page_image_path,
     save_capture,
@@ -105,6 +106,21 @@ def status_text(capture: Capture) -> str:
     if capture.status == CAPTURE_STATUSES.SAVED:
         return tr("{file}: saved").format(file=capture.original_name)
     return tr("{file}: rejected").format(file=capture.original_name)
+
+
+def duplicate_warning(alike: list[Capture]) -> str:
+    """Say which sheets ``alike`` look like the same filled-in sheet, if any."""
+    if not alike:
+        return ""
+    files = QLocale().createSeparatedList(
+        [f'"{capture.original_name}"' for capture in alike]
+    )
+    return tr(
+        "This may be the same sheet as %n other picture(s), {files}: every "
+        "bubble is marked the same. If it is, reject all but one.",
+        None,
+        len(alike),
+    ).format(files=files)
 
 
 def choose_export(
@@ -343,6 +359,16 @@ class CapturePage(QWidget):
         self.reload(select=first_to_check)
         unreadable = len(results) - len(read)
         message = tr("Read %n sheet(s).", None, len(read))
+        alike = sum(
+            1 for capture in read if likely_duplicates(self._connection, capture)
+        )
+        if alike:
+            message += " " + tr(
+                "%n may show the same sheet as another picture; choose one to "
+                "see which.",
+                None,
+                alike,
+            )
         if unreadable:
             message += " " + tr(
                 "%n couldn't be read; choose one to see why.", None, unreadable
@@ -544,16 +570,23 @@ class CapturePage(QWidget):
             tr("Save a form's checked sheets as CSV files or a JSON file")
         )
         self.export_button.clicked.connect(self.export_data)
+        # Missed corner markers are the usual reason a photo can't be read.
+        self.photo_tip = QLabel(
+            tr(
+                "Tip: lay the sheet flat with all four corner dots in the picture. "
+                "In dim light, turn on the camera's flash, or better, move "
+                "somewhere brighter."
+            )
+        )
+        self.photo_tip.setWordWrap(True)
+        self.add_button.setAccessibleDescription(self.photo_tip.text())
         layout = QVBoxLayout(box)
         layout.addWidget(list_label)
         layout.addWidget(self.sheet_list)
         layout.addWidget(self.empty_note)
-        for button in (
-            self.add_button,
-            self.read_button,
-            self.remove_button,
-            self.export_button,
-        ):
+        layout.addWidget(self.add_button)
+        layout.addWidget(self.photo_tip)
+        for button in (self.read_button, self.remove_button, self.export_button):
             layout.addWidget(button)
         return box
 
@@ -713,11 +746,11 @@ class CapturePage(QWidget):
                 "aren't used. Save data to use them after all."
             ),
         }
-        self.sheet_note.setText(
-            notes[capture.status].format(
-                page=capture.page, form=form_name, version=capture.form_version
-            )
+        note = notes[capture.status].format(
+            page=capture.page, form=form_name, version=capture.form_version
         )
+        warning = duplicate_warning(likely_duplicates(self._connection, capture))
+        self.sheet_note.setText(note + " " + warning if warning else note)
 
     def _fill_answers_table(self) -> None:
         row = self.answers_table.currentRow()
@@ -728,6 +761,12 @@ class CapturePage(QWidget):
             note = error or answer.problem
             if not note and self._is_written(answer) and not answer.values:
                 note = tr("Handwritten: type it in")
+            spec = self._spec(answer)
+            if not note and spec is not None and answer.changed_by_hand(spec):
+                read = ", ".join(self._labels(answer, answer.scanned)) or tr("nothing")
+                note = tr("Changed by hand; the sheet read: {values}").format(
+                    values=read
+                )
             for column, text in (
                 (NAME_COLUMN, self._answer_name(answer)),
                 (VALUE_COLUMN, ", ".join(self._value_labels(answer))),
@@ -993,11 +1032,14 @@ class CapturePage(QWidget):
 
     def _value_labels(self, answer: CapturedAnswer) -> list[str]:
         """The answer's values as printed on the sheet (choice labels)."""
+        return self._labels(answer, answer.values)
+
+    def _labels(self, answer: CapturedAnswer, values: tuple[str, ...]) -> list[str]:
         spec = self._spec(answer)
         if spec is None or not spec.choices:
-            return list(answer.values)
+            return list(values)
         labels = {choice.output: choice.label for choice in spec.choices}
-        return [labels.get(value, value) for value in answer.values]
+        return [labels.get(value, value) for value in values]
 
     def _region(self, answer: CapturedAnswer) -> tuple[int, int, int, int] | None:
         region = self._region_of(answer)

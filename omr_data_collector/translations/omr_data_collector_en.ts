@@ -136,6 +136,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>This may be the same sheet as %n other picture(s), {files}: every bubble is marked the same. If it is, reject all but one.</source>
+            <translation>
+                <numerusform>This may be the same sheet as %n other picture, {files}: every bubble is marked the same. If it is, reject all but one.</numerusform>
+                <numerusform>This may be the same sheet as %n other pictures, {files}: every bubble is marked the same. If it is, reject all but one.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Added %n image(s). Read waiting sheets reads them.</source>
             <translation>
                 <numerusform>Added %n image. Read waiting sheets reads them.</numerusform>
@@ -147,6 +154,13 @@
             <translation>
                 <numerusform>Read %n sheet.</numerusform>
                 <numerusform>Read %n sheets.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>%n may show the same sheet as another picture; choose one to see which.</source>
+            <translation>
+                <numerusform>%n may show the same sheet as another picture; choose one to see which.</numerusform>
+                <numerusform>%n may show the same sheet as another picture; choose one to see which.</numerusform>
             </translation>
         </message>
         <message numerus="yes">

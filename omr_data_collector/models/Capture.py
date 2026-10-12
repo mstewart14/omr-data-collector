@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from omr_data_collector.constants import CAPTURE_STATUSES
+
+if TYPE_CHECKING:
+    from omr_data_collector.models.AnswerSpec import AnswerSpec
+
+# Captures whose answers have been read, so can be compared.
+READ_STATUSES = {CAPTURE_STATUSES.READ, CAPTURE_STATUSES.SAVED}
 
 
 @dataclass(frozen=True)
@@ -27,6 +33,13 @@ class CapturedAnswer:
     @property
     def key(self) -> tuple[int, int | None, int | None]:
         return self.block_index, self.table_row, self.column
+
+    def changed_by_hand(self, spec: AnswerSpec) -> bool:
+        """Whether the person checking it changed what its bubbles read as.
+
+        Typing in a handwritten answer isn't a change: nothing was read there.
+        """
+        return bool(spec.choices) and set(self.values) != set(self.scanned)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,3 +92,37 @@ class Capture:
 
     def answer(self, key: tuple[int, int | None, int | None]) -> CapturedAnswer | None:
         return next((answer for answer in self.answers if answer.key == key), None)
+
+    def looks_like(self, other: Capture) -> bool:
+        """Whether ``other`` looks like another picture of this same filled-in sheet.
+
+        Both are the same page of the same form version, with every bubble
+        read the same and at least one marked, and no answer typed in
+        differently on each (two different dates, say). Different people can
+        mark a short form alike, so this is only ever a warning.
+        """
+        if (
+            other.capture_id == self.capture_id
+            or self.status not in READ_STATUSES
+            or other.status not in READ_STATUSES
+            or (self.form_id, self.form_version, self.page)
+            != (other.form_id, other.form_version, other.page)
+        ):
+            return False
+        mine = {answer.key: answer for answer in self.answers}
+        theirs = {answer.key: answer for answer in other.answers}
+        if mine.keys() != theirs.keys() or not any(a.scanned for a in self.answers):
+            return False
+        for key, answer in mine.items():
+            match = theirs[key]
+            if answer.scanned != match.scanned:
+                return False
+            typed_differently = (
+                not answer.scanned
+                and answer.values
+                and match.values
+                and answer.values != match.values
+            )
+            if typed_differently:
+                return False
+        return True

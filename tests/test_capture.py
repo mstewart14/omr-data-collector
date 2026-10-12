@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QMessageBox
 from omr_data_collector.constants import CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.layout.omr_template import page_template
+from omr_data_collector.models.Capture import Capture, CapturedAnswer
 from omr_data_collector.storage.capture_store import (
     DuplicateCaptureError,
     add_capture,
@@ -161,6 +162,58 @@ def test_every_answer_has_a_region_on_the_page(
         x, y, region_width, region_height = region.rect
         assert 0 <= x < x + region_width <= width
         assert 0 <= y < y + region_height <= height
+
+
+# --- The same sheet twice ------------------------------------------------------------
+
+
+def read_capture_of(
+    capture_id: str, answers: dict[tuple, tuple[tuple[str, ...], tuple[str, ...]]]
+) -> Capture:
+    """A read capture of page 1 of a form, from {key: (scanned, values)}."""
+    return Capture(
+        capture_id=capture_id,
+        file_name=f"{capture_id}.jpg",
+        original_name=f"{capture_id}.jpg",
+        content_hash=capture_id,
+        status=CAPTURE_STATUSES.READ,
+        form_id="form",
+        form_version=1,
+        page=1,
+        answers=tuple(
+            CapturedAnswer(*key, scanned=scanned, values=values)
+            for key, (scanned, values) in answers.items()
+        ),
+    )
+
+
+MARKED = {(0, None, None): (("yes",), ("yes",)), (1, None, 0): ((), ())}
+
+
+def test_pictures_with_every_bubble_alike_look_like_one_sheet() -> None:
+    first = read_capture_of("a", MARKED)
+
+    assert first.looks_like(read_capture_of("b", MARKED))
+    assert not first.looks_like(first)
+    other_page = read_capture_of("b", MARKED)
+    assert not first.looks_like(Capture(**{**other_page.__dict__, "page": 2}))
+
+
+def test_a_different_mark_or_typed_value_tells_sheets_apart() -> None:
+    first = read_capture_of("a", MARKED)
+    other_mark = {**MARKED, (0, None, None): ((), ())}
+    typed = {**MARKED, (1, None, 0): ((), ("2026/10/08",))}
+    other_date = {**MARKED, (1, None, 0): ((), ("2026/10/09",))}
+
+    assert not first.looks_like(read_capture_of("b", other_mark))
+    assert first.looks_like(read_capture_of("b", typed))  # one side typed only
+    assert not read_capture_of("a", typed).looks_like(read_capture_of("b", other_date))
+
+
+def test_blank_sheets_dont_look_alike() -> None:
+    blank = {(0, None, None): ((), ())}
+
+    assert not read_capture_of("a", blank).looks_like(read_capture_of("b", blank))
 
 
 # --- Checking (wiki 60004) -----------------------------------------------------------
@@ -532,3 +585,66 @@ def test_the_side_editor_and_the_sheet_show_the_same_value(
 
     assert checking.sheet_canvas.answer(row).values == ("10:15",)
     assert checking.sheet_canvas.current() == row
+
+
+def test_a_bubble_changed_by_hand_says_what_the_sheet_read(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    row = row_of(checking, "services")
+    canvas = checking.sheet_canvas
+    canvas.set_current(row, focus=True)
+
+    qtbot.keyClick(canvas, Qt.Key.Key_2)  # adds Clothing
+
+    assert cell_text(checking, row, 2) == "Changed by hand; the sheet read: Food, Other"
+
+
+def test_typing_in_handwriting_isnt_a_change(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    row = click_answer(qtbot, checking, "Log, row 1, time")
+
+    qtbot.keyClicks(checking.sheet_canvas.editor, "09:30")
+
+    assert cell_text(checking, row, 2) == ""
+
+
+def test_a_second_picture_of_the_same_sheet_is_pointed_out(  # noqa: PLR0913 (fixtures)
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    photo: Path,
+    tmp_path: Path,
+) -> None:
+    form, layout = printed_form
+    again = Sheet(form, organization, layout)
+    again.fill_question(1, 0, 3)
+    again.fill_cell(2, row=0, column=2, choice=1)
+    second = again.photograph(tmp_path / "upload" / "again.jpg", degrees=-1)
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, photo, second)
+    messages: list[str] = []
+    page.status_message.connect(messages.append)
+
+    page.read_waiting()
+
+    assert messages == [
+        "Read 2 sheets. 2 may show the same sheet as another picture; choose one "
+        "to see which."
+    ]
+    page.sheet_list.setCurrentRow(1)
+    assert (
+        'This may be the same sheet as 1 other picture, "photo.jpg": every bubble '
+        "is marked the same. If it is, reject all but one."
+    ) in page.sheet_note.text()
+
+
+def test_the_photo_tip_is_shown_and_read_out_with_add_images(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_page(qtbot, connection)
+
+    assert "all four corner dots" in page.photo_tip.text()
+    assert page.add_button.accessibleDescription() == page.photo_tip.text()

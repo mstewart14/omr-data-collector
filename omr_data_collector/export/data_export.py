@@ -10,6 +10,11 @@ those versions has, in the latest version's order.
 - Tables: one row per table row with anything filled in, repeating the sheet it
   came from and the sheet's details, so each row can be analysed on its own.
 
+Each sheet and table row says how many of its answers the person checking it
+changed from what the bubbles read as (CORRECTED_COLUMN, ROW_CORRECTED_COLUMN),
+and the JSON names them: a measure of how often reading needed help, and of
+which answers people fill in badly.
+
 Answers with several choices marked are joined with MULTIPLE_SEPARATOR in CSV,
 and are lists in JSON. Column names are the names given in the editors; the
 columns describing the sheet itself have fixed names, the same in every
@@ -42,8 +47,18 @@ if TYPE_CHECKING:
 
 MULTIPLE_SEPARATOR = ";"
 # The columns describing each sheet, before its answers.
-SHEET_COLUMNS = ("sheet_id", "sheet_file", "form_version", "page", "captured_at")
+CORRECTED_COLUMN = "corrected_answers"
+SHEET_COLUMNS = (
+    "sheet_id",
+    "sheet_file",
+    "form_version",
+    "page",
+    "captured_at",
+    CORRECTED_COLUMN,
+)
 ROW_COLUMN = "row"
+# How many of a table row's answers were changed by hand.
+ROW_CORRECTED_COLUMN = "row_corrected_answers"
 # When chosen sheets are combined: each table row's place in the combined rows.
 COMBINED_ROW_COLUMN = "combined_row"
 # Excel only reads a CSV file as UTF-8 when it starts with a byte order mark.
@@ -173,6 +188,7 @@ def collect(
     detail_columns, question_columns, table_columns = _columns(ordered)
     combined = chosen is not None
     row_columns = [ROW_COLUMN, COMBINED_ROW_COLUMN] if combined else [ROW_COLUMN]
+    row_columns.append(ROW_CORRECTED_COLUMN)
 
     sheets: list[dict[str, str]] = []
     tables = {
@@ -194,10 +210,11 @@ def collect(
         )
         for name, rows in sheet["tables"].items():
             table = tables[name]
-            for number, values in rows:
+            for number, values, corrected in rows:
                 row = {
                     **sheet["meta"],
                     ROW_COLUMN: str(number),
+                    ROW_CORRECTED_COLUMN: str(len(corrected)),
                     **_flat(sheet["details"]),
                     **_flat(values),
                 }
@@ -231,6 +248,9 @@ def _merged(rows: list[dict[str, str]], columns: list[str]) -> dict[str, str]:
     """
     merged = {}
     for column in columns:
+        if column == CORRECTED_COLUMN:
+            merged[column] = str(sum(int(row.get(column) or 0) for row in rows))
+            continue
         values: list[str] = []
         for row in rows:
             value = row.get(column, "")
@@ -270,12 +290,19 @@ def _combined_document(documents: list[dict[str, Any]]) -> dict[str, Any]:
                         "row": row["row"],
                         "combinedRow": len(combined_rows) + 1,
                         "values": row["values"],
+                        "correctedColumns": row["correctedColumns"],
                     }
                 )
+    corrected: list[str] = []
+    for document in documents:
+        corrected.extend(
+            name for name in document["correctedAnswers"] if name not in corrected
+        )
     return {
         "sheetIds": [document["sheetId"] for document in documents],
         "details": merge("details"),
         "answers": merge("answers"),
+        "correctedAnswers": corrected,
         "tables": tables,
     }
 
@@ -328,8 +355,21 @@ def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str,
             **entry,
             "details": rename(entry["details"], SHEETS_FILE),
             "answers": rename(entry["answers"], SHEETS_FILE),
+            "correctedAnswers": [
+                names.column(SHEETS_FILE, name) for name in entry["correctedAnswers"]
+            ],
             "tables": {
-                table: [{**row, "values": rename(row["values"], table)} for row in rows]
+                table: [
+                    {
+                        **row,
+                        "values": rename(row["values"], table),
+                        "correctedColumns": [
+                            names.column(table, name)
+                            for name in row["correctedColumns"]
+                        ],
+                    }
+                    for row in rows
+                ]
                 for table, rows in entry["tables"].items()
             },
         }
@@ -388,16 +428,13 @@ def _columns(
 
 def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]]:
     """One sheet's data, grouped (for CSV rows) and as a JSON object."""
-    meta = {
-        "sheet_id": capture.capture_id,
-        "sheet_file": capture.original_name,
-        "form_version": str(capture.form_version),
-        "page": str(capture.page),
-        "captured_at": capture.added_at,
-    }
     details: dict[str, Any] = {}
     answers: dict[str, Any] = {}
+    # Sheet details fields and questions changed by hand.
+    corrected: list[str] = []
     tables: dict[str, dict[int, dict[str, Any]]] = {}
+    # Each table row's columns changed by hand.
+    corrected_cells: dict[str, dict[int, list[str]]] = {}
     for answer in capture.answers:
         if not 0 <= answer.block_index < len(form.blocks):
             continue
@@ -405,8 +442,12 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         if isinstance(content, SheetDetails) and answer.column is not None:
             column = content.fields[answer.column]
             details[column.name] = _value(column.answer, answer.values)
+            if answer.changed_by_hand(column.answer):
+                corrected.append(column.name)
         elif isinstance(content, Question):
             answers[content.name] = _value(content.answer, answer.values)
+            if answer.changed_by_hand(content.answer):
+                corrected.append(content.name)
         elif (
             isinstance(content, TableBlock)
             and answer.column is not None
@@ -415,9 +456,25 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
             column = content.columns[answer.column]
             row = tables.setdefault(content.name, {}).setdefault(answer.table_row, {})
             row[column.name] = _value(column.answer, answer.values)
+            cells = corrected_cells.setdefault(content.name, {})
+            changed = cells.setdefault(answer.table_row, [])
+            if answer.changed_by_hand(column.answer):
+                changed.append(column.name)
+    # A row emptied by hand drops out, but still counts as corrected.
+    corrected_count = len(corrected) + sum(
+        len(columns) for cells in corrected_cells.values() for columns in cells.values()
+    )
+    meta = {
+        "sheet_id": capture.capture_id,
+        "sheet_file": capture.original_name,
+        "form_version": str(capture.form_version),
+        "page": str(capture.page),
+        "captured_at": capture.added_at,
+        CORRECTED_COLUMN: str(corrected_count),
+    }
     filled = {
         name: [
-            (number + 1, values)
+            (number + 1, values, corrected_cells.get(name, {}).get(number, []))
             for number, values in sorted(rows.items())
             if any(values.values())
         ]
@@ -432,8 +489,12 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         "capturedAt": capture.added_at,
         "details": details,
         "answers": answers,
+        "correctedAnswers": corrected,
         "tables": {
-            name: [{"row": number, "values": values} for number, values in rows]
+            name: [
+                {"row": number, "values": values, "correctedColumns": changed}
+                for number, values, changed in rows
+            ]
             for name, rows in filled.items()
         },
     }

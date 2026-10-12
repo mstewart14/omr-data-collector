@@ -112,7 +112,10 @@ def add_sheet(  # noqa: PLR0913 (a sheet's whole contents)
     name: str,
     answers: dict[tuple[int, int | None, int | None], tuple[str, ...]],
     status: str = CAPTURE_STATUSES.SAVED,
+    scanned: dict[tuple[int, int | None, int | None], tuple[str, ...]] | None = None,
 ) -> None:
+    """Add a checked sheet; its bubbles read as ``answers`` unless ``scanned`` says."""
+    scanned = {**answers, **(scanned or {})}
     image = tmp_path / "images" / name
     image.parent.mkdir(parents=True, exist_ok=True)
     image.write_bytes(name.encode())  # distinct content for each sheet
@@ -126,7 +129,13 @@ def add_sheet(  # noqa: PLR0913 (a sheet's whole contents)
             form_version=form.version,
             page=1,
             answers=tuple(
-                CapturedAnswer(block, row, column, values=values)
+                CapturedAnswer(
+                    block,
+                    row,
+                    column,
+                    scanned=scanned[block, row, column],
+                    values=values,
+                )
                 for (block, row, column), values in answers.items()
             ),
         ),
@@ -197,7 +206,15 @@ def test_table_rows_repeat_the_sheet_and_skip_empty_rows(
 ) -> None:
     (visits,) = collect(connection, form).tables
 
-    assert visits.columns == [*SHEET_COLUMNS, "row", "Date", "Shift", "time", "first"]
+    assert visits.columns == [
+        *SHEET_COLUMNS,
+        "row",
+        "row_corrected_answers",
+        "Date",
+        "Shift",
+        "time",
+        "first",
+    ]
     assert [(row["row"], row["time"], row["first"]) for row in visits.rows] == [
         ("1", "09:30", "yes"),
         ("2", "", "no"),
@@ -233,10 +250,72 @@ def test_json_nests_each_sheets_data(
     (sheet,) = document["sheets"]
     assert sheet["details"] == {"Date": "2026/10/08", "Shift": "night"}
     assert sheet["answers"] == {"services": ["food", "clothing"]}
+    assert sheet["correctedAnswers"] == []
     assert sheet["tables"]["Visits"] == [
-        {"row": 1, "values": {"time": "09:30", "first": "yes"}},
-        {"row": 2, "values": {"time": "", "first": "no"}},
+        {"row": 1, "values": {"time": "09:30", "first": "yes"}, "correctedColumns": []},
+        {"row": 2, "values": {"time": "", "first": "no"}, "correctedColumns": []},
     ]
+
+
+# The person checking added "clothing" and changed row 1's "first" from no to
+# yes; typing in row 1's handwritten time isn't a change.
+CORRECTED_SCAN = {
+    (1, None, None): ("food",),
+    (2, 0, 1): ("no",),
+    (2, 0, 0): (),
+}
+
+
+def test_answers_changed_by_hand_are_counted(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = saved_form(connection)
+    add_sheet(connection, tmp_path, form, "one.jpg", SHEET_ONE, scanned=CORRECTED_SCAN)
+
+    data = collect(connection, form)
+
+    assert data.sheets[0]["corrected_answers"] == "2"
+    (visits,) = data.tables
+    assert [row["row_corrected_answers"] for row in visits.rows] == ["1", "0"]
+    assert {row["corrected_answers"] for row in visits.rows} == {"2"}
+
+
+def test_json_names_the_answers_changed_by_hand(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = saved_form(connection)
+    add_sheet(connection, tmp_path, form, "one.jpg", SHEET_ONE, scanned=CORRECTED_SCAN)
+    path = tmp_path / "data.json"
+
+    write_json(collect(connection, form), path, RENAMED)
+
+    (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
+    assert sheet["correctedAnswers"] == ["Services used"]
+    assert [row["correctedColumns"] for row in sheet["tables"]["Visits"]] == [
+        ["first"],
+        [],
+    ]
+
+
+def test_combined_sheets_add_up_their_changes(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = saved_form(connection)
+    add_sheet(connection, tmp_path, form, "one.jpg", SHEET_ONE, scanned=CORRECTED_SCAN)
+    add_sheet(
+        connection,
+        tmp_path,
+        form,
+        "two.jpg",
+        SHEET_TWO,
+        scanned={(1, None, None): ("food",)},  # unmarked by hand
+    )
+    ids = ids_by_file(connection)
+
+    data = collect(connection, form, [ids["one.jpg"], ids["two.jpg"]])
+
+    assert data.sheets[0]["corrected_answers"] == "3"
+    assert data.document["combined"]["correctedAnswers"] == ["services"]
 
 
 def test_sheets_from_every_version_share_the_columns(
@@ -475,7 +554,12 @@ def test_the_outputs_and_their_default_names(
         (JSON_FILE, "Shift log"),
     ]
     assert files[0].columns[-3:] == ("Date", "Shift", "services")
-    assert files[1].columns[5:7] == ("row", "combined_row")
+    first_row_column = len(SHEET_COLUMNS)
+    assert files[1].columns[first_row_column : first_row_column + 3] == (
+        "row",
+        "combined_row",
+        "row_corrected_answers",
+    )
 
 
 RENAMED = ExportNames(
