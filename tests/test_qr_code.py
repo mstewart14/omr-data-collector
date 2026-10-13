@@ -21,7 +21,11 @@ from omr_data_collector.models.Organization import Organization
 if TYPE_CHECKING:
     from pathlib import Path
 
+# A fixed ID: OpenCV's reader misses about 1 in 200 perfectly sharp codes at
+# exactly 10 pixels a module (the same codes read at any other size, or blurred
+# a little, as photos are), so a random one made this test fail now and then.
 ORGANIZATION = Organization(
+    organization_id="0f3c5a7e9b1d4f60a2c4e6f8b0d2e4f6",
     name="Banque alimentaire d'Orléans",
     phone="613-555-0123",
     address="1 Main St",
