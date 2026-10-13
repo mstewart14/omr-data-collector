@@ -101,14 +101,21 @@ def measure_page(input_dir: Path, image_path: Path, output_dir: Path) -> Measure
     )
     template = Template(input_dir / TEMPLATE_FILE_NAME, config)
     template.reset_and_setup_for_directory(output_dir)
-    template.save_image_ops.reset_all_save_img()
-    gray, colored = ImageUtils.read_image_util(image_path, config)
-    gray, colored, template = template.apply_preprocessors(image_path, gray, colored)
-    if gray is None:
-        msg = "page or markers not found"
-        raise ValueError(msg)
-    template.read_omr_response(gray, colored, image_path)
-    _, interpretations = template.get_omr_metrics_for_file(str(image_path))
+    try:
+        template.save_image_ops.reset_all_save_img()
+        gray, colored = ImageUtils.read_image_util(image_path, config)
+        gray, colored, template = template.apply_preprocessors(
+            image_path, gray, colored
+        )
+        if gray is None:
+            msg = "page or markers not found"
+            raise ValueError(msg)
+        template.read_omr_response(gray, colored, image_path)
+        _, interpretations = template.get_omr_metrics_for_file(str(image_path))
+    finally:
+        # Closes the CSV files it opened in output_dir, which Windows won't
+        # delete while they're open.
+        template.finish_processing_directory()
     bubbles = []
     for interpretation in interpretations.values():
         for index, measured in enumerate(interpretation.field_bubble_means):

@@ -203,8 +203,8 @@ def read_page(
             too many bubbles were neither clearly marked nor clearly empty.
     """
     if work_dir is None:
-        # OMRChecker leaves files open after a sheet it can't read, which
-        # Windows won't delete; the operating system clears them up later.
+        # Should a file still be open (Windows won't delete one), the
+        # operating system clears it up later.
         with tempfile.TemporaryDirectory(
             prefix="omr-scan-", ignore_cleanup_errors=True
         ) as temporary:
