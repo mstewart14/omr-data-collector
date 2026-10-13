@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.i18n import tr
-from omr_data_collector.ui.accessibility import set_field_error, style_error_label
+from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import add_field_row
 from omr_data_collector.ui.TableBlocksPage import column_summary
@@ -175,13 +175,8 @@ class SheetDetailsDialog(QDialog):
             fields=tuple(self._fields),
         ).normalized()
         errors = details.validation_errors(set())
-        for key, label in self.error_labels.items():
-            set_field_error(
-                self.form, self.field_widgets[key], label, errors.get(key, "")
-            )
-        if errors:
-            first = next(key for key in self.field_widgets if key in errors)
-            self.field_widgets[first].setFocus(Qt.FocusReason.OtherFocusReason)
+        # Stays open, on the first problem.
+        if show_field_errors(self.form, self.field_widgets, self.error_labels, errors):
             return
         self._accepted = details
         super().accept()

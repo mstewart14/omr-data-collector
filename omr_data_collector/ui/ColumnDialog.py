@@ -17,7 +17,7 @@ from omr_data_collector.constants import ANSWER_TYPES
 from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.TableBlock import Column
-from omr_data_collector.ui.accessibility import set_field_error, style_error_label
+from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
 from omr_data_collector.ui.form_helpers import add_field_row
 
@@ -143,15 +143,8 @@ class ColumnDialog(QDialog):
             errors["name"] = tr(
                 'These sheet details already have a field called "{name}".'
             ).format(name=column.name)
-        for key, label in self.error_labels.items():
-            set_field_error(
-                self.form, self.field_widgets[key], label, errors.get(key, "")
-            )
-        if errors:
-            # Stay open, focused on the first problem, which screen readers then
-            # read with its error.
-            first = next(key for key in self.field_widgets if key in errors)
-            self.field_widgets[first].setFocus(Qt.FocusReason.OtherFocusReason)
+        # Stays open, on the first problem.
+        if show_field_errors(self.form, self.field_widgets, self.error_labels, errors):
             return
         self._column = column
         super().accept()

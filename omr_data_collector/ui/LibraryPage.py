@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from omr_data_collector.i18n import tr
 from omr_data_collector.models.naming import copy_name
-from omr_data_collector.ui.accessibility import set_field_error, style_error_label
+from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
@@ -188,10 +188,7 @@ class LibraryPage(QWidget):
             except sqlite3.IntegrityError:
                 # Another window or process took the name since the list loaded.
                 errors = {"name": self.texts().name_taken.format(name=item.name)}
-        self.show_errors(errors)
-        if errors:
-            first_invalid = next(key for key in self.field_widgets if key in errors)
-            self.field_widgets[first_invalid].setFocus(Qt.FocusReason.OtherFocusReason)
+        if self.show_errors(errors):
             count = len(errors)
             self.status_message.emit(
                 tr("%n field(s) to fix before saving.", None, count)
@@ -289,11 +286,11 @@ class LibraryPage(QWidget):
             self._edit(None)
         self.status_message.emit(self.texts().deleted.format(name=doomed.name))
 
-    def show_errors(self, errors: dict[str, str]) -> None:
-        for key, label in self.error_labels.items():
-            set_field_error(
-                self.form, self.field_widgets[key], label, errors.get(key, "")
-            )
+    def show_errors(self, errors: dict[str, str]) -> bool:
+        """Show ``errors`` by their fields, focusing the first; whether there were any."""
+        return show_field_errors(
+            self.form, self.field_widgets, self.error_labels, errors
+        )
 
     def update_state(self) -> None:
         unsaved = self.has_unsaved_changes()

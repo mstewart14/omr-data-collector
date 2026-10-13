@@ -15,19 +15,15 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPointF
-from PySide6.QtGui import QColor, QImage, QPainter
-
 from omr_data_collector.constants import ANSWER_TYPES, PAPER_SIZES
 from omr_data_collector.engine.scanning import scan_sheet
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.omr_template import printed_layout
-from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.models.Question import Question
-from omr_data_collector.rendering.page_painter import paint_page
+from omr_data_collector.rendering.page_photo import begin_page_photo, fill_bubble
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.storage.organization_store import save_organization
@@ -38,7 +34,6 @@ if TYPE_CHECKING:
 PIXELS_PER_MM = 6
 # Grey showing around the sheet, as in a photo.
 BORDER_MM = 15
-FILL_RADIUS_MM = 1.6
 CHOICES = ("red", "green", "blue")
 MARKED = 1
 
@@ -75,32 +70,11 @@ def _draw_filled_in(
         msg = "the form's first block isn't a question"
         raise SelfCheckError(msg)
     bubble = placed.question.bubbles[MARKED]
-    image = QImage(
-        round((layout.paper_width_mm + 2 * BORDER_MM) * PIXELS_PER_MM),
-        round((layout.paper_height_mm + 2 * BORDER_MM) * PIXELS_PER_MM),
-        QImage.Format.Format_RGB32,
+    image, painter = begin_page_photo(
+        form, organization, layout, page, PIXELS_PER_MM, BORDER_MM
     )
-    image.fill(QColor("#707070"))
-    painter = QPainter(image)
-    # A painter left open on an image that is then freed crashes Qt.
     try:
-        painter.scale(PIXELS_PER_MM, PIXELS_PER_MM)
-        painter.translate(BORDER_MM, BORDER_MM)
-        painter.fillRect(
-            0,
-            0,
-            round(layout.paper_width_mm),
-            round(layout.paper_height_mm),
-            QColor("white"),
-        )
-        painter.translate(PAGE_MARGIN_MM, PAGE_MARGIN_MM)
-        paint_page(painter, form, organization, layout, page)
-        painter.setBrush(QColor("black"))
-        painter.drawEllipse(
-            QPointF(bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm),
-            FILL_RADIUS_MM,
-            FILL_RADIUS_MM,
-        )
+        fill_bubble(painter, bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm)
     finally:
         painter.end()
     if not image.save(str(image_path)):

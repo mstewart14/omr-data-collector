@@ -5,18 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import cv2
-from PySide6.QtCore import QPointF
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtGui import QColor
 
 from omr_data_collector.constants import ANSWER_TYPES, PAPER_SIZES, WRITTEN_DATA_TYPES
 from omr_data_collector.layout.markers import marker_centres_mm
-from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
 from omr_data_collector.layout.table_layout import cell_bubble_centres_mm
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TableBlock import Column, TableBlock
-from omr_data_collector.rendering.page_painter import paint_page
+from omr_data_collector.rendering.page_photo import begin_page_photo, fill_bubble
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -32,8 +30,6 @@ LETTER = PAPER_SIZES.LETTER
 PIXELS_PER_MM = 8
 # Grey "table" showing around the sheet, as in a photo.
 BORDER_MM = 20
-# A pen mark filling a 3 mm bubble, and a little over its edge.
-FILL_RADIUS_MM = 1.6
 
 
 def intake_form() -> Form:
@@ -110,25 +106,9 @@ class Sheet:
         self.form = form
         self.layout = layout
         self.page: PageLayout = layout.pages[0]
-        self.image = QImage(
-            round((layout.paper_width_mm + 2 * BORDER_MM) * PIXELS_PER_MM),
-            round((layout.paper_height_mm + 2 * BORDER_MM) * PIXELS_PER_MM),
-            QImage.Format.Format_RGB32,
+        self.image, self.painter = begin_page_photo(
+            form, organization, layout, self.page, PIXELS_PER_MM, BORDER_MM
         )
-        self.image.fill(QColor("#707070"))
-        self.painter = QPainter(self.image)
-        self.painter.scale(PIXELS_PER_MM, PIXELS_PER_MM)
-        self.painter.translate(BORDER_MM, BORDER_MM)
-        self.painter.fillRect(
-            0,
-            0,
-            round(layout.paper_width_mm),
-            round(layout.paper_height_mm),
-            QColor("white"),
-        )
-        self.painter.translate(PAGE_MARGIN_MM, PAGE_MARGIN_MM)
-        paint_page(self.painter, form, organization, layout, self.page)
-        self.painter.setBrush(QColor("black"))
 
     def _placed(self, index: int) -> PlacedBlock:
         return next(block for block in self.page.blocks if block.index == index)
@@ -171,7 +151,7 @@ class Sheet:
         self.painter.fillRect(round(x - 5), round(y - 5), 10, 10, QColor("white"))
 
     def _fill(self, x: float, y: float) -> None:
-        self.painter.drawEllipse(QPointF(x, y), FILL_RADIUS_MM, FILL_RADIUS_MM)
+        fill_bubble(self.painter, x, y)
 
     def photograph(self, path: Path, degrees: float = 2.0) -> Path:
         """Save as a slightly turned JPEG, as if taken by hand."""

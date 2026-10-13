@@ -109,7 +109,7 @@ def read_sheet_identity(image: np.ndarray) -> SheetIdentity:
         ScanError: No form QR code from this app could be read.
     """
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    height, width = gray.shape
+    width = gray.shape[1]
     candidates = [_resized_to_width(gray, min(width, QR_MAX_WIDTH))]
     if width > QR_RETRY_WIDTH:
         candidates.append(_resized_to_width(gray, QR_RETRY_WIDTH))

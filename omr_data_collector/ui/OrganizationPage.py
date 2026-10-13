@@ -40,7 +40,7 @@ from omr_data_collector.storage.organization_store import (
     save_organization,
 )
 from omr_data_collector.ui.accessibility import (
-    set_field_error,
+    show_field_errors,
     style_error_label,
 )
 from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
@@ -131,12 +131,7 @@ class OrganizationPage(QWidget):
     def save(self) -> None:
         organization = self.form_organization().normalized()
         errors = organization.validation_errors()
-        self._show_errors(errors)
-        if errors:
-            # Focus lands on the first problem; screen readers then read the field's
-            # name and, from its accessible description, the error.
-            first_invalid = next(name for name, _, _ in form_fields() if name in errors)
-            self.field_widgets[first_invalid].setFocus(Qt.FocusReason.OtherFocusReason)
+        if self._show_errors(errors):
             count = len(errors)
             self.status_message.emit(
                 tr("%n field(s) to fix before saving.", None, count)
@@ -334,14 +329,11 @@ class OrganizationPage(QWidget):
         self._refresh_qr_preview()
         self._update_state()
 
-    def _show_errors(self, errors: dict[str, str]) -> None:
-        for field_name, label in self.error_labels.items():
-            set_field_error(
-                self.form,
-                self.field_widgets[field_name],
-                label,
-                errors.get(field_name, ""),
-            )
+    def _show_errors(self, errors: dict[str, str]) -> bool:
+        """Show ``errors`` by their fields, focusing the first; whether there were any."""
+        return show_field_errors(
+            self.form, self.field_widgets, self.error_labels, errors
+        )
 
     def _update_state(self) -> None:
         unsaved = self.has_unsaved_changes()

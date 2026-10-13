@@ -3,7 +3,7 @@
 Every string a person sees goes through ``tr`` (or ``tr_printed`` for words
 printed on the forms). ``pyside6-lupdate`` finds those calls and collects their
 strings into ``translations/omr_data_collector_<language>.ts`` for translators
-(Qt Linguist, or any tool that reads .ts files); ``tools/update_translations.py``
+(Qt Linguist, or any tool that reads .ts files); ``scripts/update_translations.py``
 runs it and compiles the .qm files the app loads.
 
 Rules that keep text translatable (the README's Translations section has more):

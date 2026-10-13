@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAccessible, QAccessibleAnnouncementEvent, QColor, QPalette
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from PySide6.QtCore import QObject
     from PySide6.QtWidgets import QFormLayout, QLabel, QWidget
 
@@ -81,6 +84,29 @@ def set_field_error(
     error_label.setText(message)
     form.setRowVisible(error_label, bool(message))
     field.setAccessibleDescription(message)
+
+
+def show_field_errors(
+    form: QFormLayout,
+    fields: Mapping[str, QWidget],
+    error_labels: Mapping[str, QLabel],
+    errors: Mapping[str, str],
+) -> bool:
+    """Show each field's error from ``errors``, clearing the others' (``set_field_error``).
+
+    When there are errors, focus moves to the first field in ``fields`` order that
+    has one; screen readers then read its name and, from its accessible
+    description, the error.
+
+    Returns:
+        Whether there were any errors.
+    """
+    for key, label in error_labels.items():
+        set_field_error(form, fields[key], label, errors.get(key, ""))
+    first = next((key for key in fields if key in errors), None)
+    if first is not None:
+        fields[first].setFocus(Qt.FocusReason.OtherFocusReason)
+    return bool(errors)
 
 
 def announce(source: QObject, message: str, *, assertive: bool = False) -> None:

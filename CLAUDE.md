@@ -30,9 +30,9 @@ engine bridge.
     "Move up/down/left/right" buttons have none. `tests/test_menus_and_mnemonics.py`
     checks every page and dialog, so a clash fails the build;
   - say "(required)" in the label, never only in a placeholder;
-  - show errors as text in a hidden-until-needed form row
-    (`accessibility.set_field_error`), set them as the field's accessible
-    description, and move focus to the first invalid field;
+  - show errors as text in a hidden-until-needed form row, set them as the
+    field's accessible description, and move focus to the first invalid field:
+    `accessibility.show_field_errors` does all three;
   - send status messages through the page's `status_message` signal, which
     `MainWindow.show_status` shows and announces to screen readers;
   - ask before anything that can't be undone with `form_helpers.confirm_destructive`
@@ -138,6 +138,9 @@ engine bridge.
   Files and columns can be renamed per form (Export data > Names; `ExportNames`,
   stored by `storage/export_store.py`), keyed by their default names; blank
   keeps the default, and JSON renames only answer keys, not its structure.
+  CSV cells go through `spreadsheet_safe` (an apostrophe before anything a
+  spreadsheet would run as a formula: values come from handwriting and file
+  names), and `write_csv` never writes two files to one name.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.
@@ -152,9 +155,11 @@ engine bridge.
   PyInstaller recipe (`omr-data-collector.spec`) for all three systems, wrapped
   in Inno Setup, a `.dmg` and an AppImage. Each installer is installed on a fresh
   runner that runs `omr-data-collector --self-check` (`self_check.py`: print and
-  scan a sheet), so a new dependency or data file that the bundle misses fails
+  scan a sheet, drawn by `rendering/page_photo.py` as the tests' sheets are), so a new dependency or data file that the bundle misses fails
   there. Data files the app reads must be added to the spec's `datas`; find them
-  from `__file__`, as `i18n.py` does, so they work in both.
+  from `__file__`, as `i18n.py` does, so they work in both. Workflows pin
+  actions to commit hashes and pass values to scripts through `env`, never
+  `${{ }}` inside `run:`.
 - **Style:** PEP 8 plus OMRChecker v2's conventions and tooling (ruff, pyright, uv,
   pre-commit, Conventional Commits). `ruff.toml` and `pyrightconfig.json` are copied
   from upstream; don't loosen them per file without a reason in a comment.
