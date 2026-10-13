@@ -19,7 +19,9 @@ from omr_data_collector.export.data_export import (
     collect,
     json_file_name,
     output_files,
+    safe_file_name,
     saved_sheet_counts,
+    spreadsheet_safe,
     write_csv,
     write_json,
 )
@@ -236,6 +238,76 @@ def test_csv_files_open_in_excel_as_utf8(
     with written[0].open(encoding="utf-8-sig", newline="") as file:
         (row,) = list(csv.DictReader(file))
     assert row["services"] == "food;clothing"
+
+
+def test_a_typed_formula_is_kept_as_text_in_csv_but_not_json(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = saved_form(connection)
+    typed = {**SHEET_ONE, (0, None, 0): ('=HYPERLINK("http://x")',)}
+    add_sheet(connection, tmp_path, form, "=1+1.jpg", typed)
+    data = collect(connection, form)
+
+    sheets, _ = write_csv(data, tmp_path / "out")
+    write_json(data, tmp_path / "out" / "data.json")
+
+    with sheets.open(encoding="utf-8-sig", newline="") as file:
+        (row,) = list(csv.DictReader(file))
+    assert row["Date"] == '\'=HYPERLINK("http://x")'
+    assert row["sheet_file"] == "'=1+1.jpg"
+    document = json.loads((tmp_path / "out" / "data.json").read_text())
+    assert document["sheets"][0]["details"]["Date"] == '=HYPERLINK("http://x")'
+
+
+@pytest.mark.parametrize(
+    ("value", "written"),
+    [
+        ("-5", "-5"),
+        ("+3.5", "+3.5"),
+        ("-1e3", "-1e3"),
+        ("09:30", "09:30"),
+        ("-", "'-"),
+        ("@SUM(A1)", "'@SUM(A1)"),
+        ("+1 555 0100", "'+1 555 0100"),
+        ("\tx", "'\tx"),
+    ],
+)
+def test_only_cells_a_spreadsheet_would_run_are_changed(
+    value: str, written: str
+) -> None:
+    assert spreadsheet_safe(value) == written
+
+
+def test_a_table_called_sheets_doesnt_overwrite_the_sheets_file(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = save_form(
+        connection,
+        Form(name="Log", blocks=(FormBlock(replace(VISITS, name="sheets")),)),
+    )
+    mark_printed(connection, form.form_id, form.version)
+
+    written = write_csv(collect(connection, form), tmp_path)
+
+    assert [path.name for path in written] == [
+        "Log - sheets.csv",
+        "Log - sheets (2).csv",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name", "safe"),
+    [
+        ("Intake: 2026/10", "Intake- 2026-10"),
+        ("tab\there", "tab-here"),
+        ("CON", "_CON"),
+        ("nul.txt", "_nul.txt"),
+        ("CON - sheets", "CON - sheets"),
+        ("...", "data"),
+    ],
+)
+def test_file_names_are_safe_on_every_system(name: str, safe: str) -> None:
+    assert safe_file_name(name) == safe
 
 
 def test_json_nests_each_sheets_data(

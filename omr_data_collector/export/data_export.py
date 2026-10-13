@@ -15,6 +15,11 @@ changed from what the bubbles read as (CORRECTED_COLUMN, ROW_CORRECTED_COLUMN),
 and the JSON names them: a measure of how often reading needed help, and of
 which answers people fill in badly.
 
+CSV cells a spreadsheet would run as a formula (starting "=", "+", "-" or "@",
+other than plain numbers) start with an apostrophe, which spreadsheets show
+as text: the values come from handwriting and file names, and a formula in
+one could run when the file is opened. JSON keeps the values as they are.
+
 Answers with several choices marked are joined with MULTIPLE_SEPARATOR in CSV,
 and are lists in JSON. Column names are the names given in the editors; the
 columns describing the sheet itself have fixed names, the same in every
@@ -63,6 +68,16 @@ ROW_CORRECTED_COLUMN = "row_corrected_answers"
 COMBINED_ROW_COLUMN = "combined_row"
 # Excel only reads a CSV file as UTF-8 when it starts with a byte order mark.
 CSV_ENCODING = "utf-8-sig"
+# A spreadsheet runs a cell starting with one of these as a formula, so a value
+# typed in from a sheet, or an image's file name, could run one ("CSV
+# injection"). Such cells get a leading apostrophe, which spreadsheets show as
+# text; plain numbers like -5 are left alone.
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+NUMBER = re.compile(r"[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?")
+# Names Windows reserves for devices, whatever the extension.
+WINDOWS_RESERVED_NAMES = re.compile(
+    r"(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?", re.IGNORECASE
+)
 
 
 # The keys of a form's outputs, for naming them: the sheets file, the JSON file,
@@ -317,13 +332,36 @@ def write_csv(
     names = names or ExportNames()
     folder.mkdir(parents=True, exist_ok=True)
     base = data.form.name
-    sheets = names.file_name(SHEETS_FILE, f"{base} - sheets")
-    written = [folder / f"{safe_file_name(sheets)}.csv"]
-    _write_rows(written[0], data.sheet_columns, data.sheets, names, SHEETS_FILE)
-    for table in data.tables:
-        name = names.file_name(table.name, f"{base} - {table.name}")
-        path = folder / f"{safe_file_name(name)}.csv"
-        _write_rows(path, table.columns, table.rows, names, table.name)
+    outputs = [
+        (
+            names.file_name(SHEETS_FILE, f"{base} - sheets"),
+            data.sheet_columns,
+            data.sheets,
+            SHEETS_FILE,
+        ),
+        *(
+            (
+                names.file_name(table.name, f"{base} - {table.name}"),
+                table.columns,
+                table.rows,
+                table.name,
+            )
+            for table in data.tables
+        ),
+    ]
+    written: list[Path] = []
+    used: set[str] = set()
+    for name, columns, rows, key in outputs:
+        # Never one file over another: a table called "sheets" would otherwise
+        # be written over the sheets file. Compared ignoring case, as Windows
+        # and macOS name files.
+        stem = safe_file_name(name)
+        unique, number = stem, 2
+        while unique.casefold() in used:
+            unique, number = f"{stem} ({number})", number + 1
+        used.add(unique.casefold())
+        path = folder / f"{unique}.csv"
+        _write_rows(path, columns, rows, names, key)
         written.append(path)
     return written
 
@@ -382,7 +420,15 @@ def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str,
 
 def safe_file_name(name: str) -> str:
     """A name made safe to use in a file name on any system."""
-    return re.sub(r'[\\/:*?"<>|]+', "-", name).strip(" .-") or "data"
+    safe = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "-", name).strip(" .-") or "data"
+    return f"_{safe}" if WINDOWS_RESERVED_NAMES.fullmatch(safe) else safe
+
+
+def spreadsheet_safe(value: str) -> str:
+    """``value`` as a CSV cell no spreadsheet will run as a formula."""
+    if value.startswith(FORMULA_STARTS) and not NUMBER.fullmatch(value):
+        return f"'{value}"
+    return value
 
 
 def _write_rows(
@@ -392,11 +438,14 @@ def _write_rows(
     names: ExportNames,
     key: str,
 ) -> None:
-    headers = [names.column(key, column) for column in columns]
+    headers = [spreadsheet_safe(names.column(key, column)) for column in columns]
     with path.open("w", newline="", encoding=CSV_ENCODING) as file:
         writer = csv.writer(file)
         writer.writerow(headers)
-        writer.writerows([row.get(column, "") for column in columns] for row in rows)
+        writer.writerows(
+            [spreadsheet_safe(row.get(column, "")) for column in columns]
+            for row in rows
+        )
 
 
 def _columns(
