@@ -17,9 +17,11 @@ pytestmark = pytest.mark.usefixtures("qapp")
 def test_the_self_check_reads_back_its_sheet(tmp_path: Path) -> None:
     report = tmp_path / "report.txt"
 
-    assert self_check.run(report) == 0
+    status = self_check.run(report)
 
-    assert report.read_text(encoding="utf-8").startswith("ok: read ('green',)")
+    outcome = report.read_text(encoding="utf-8")
+    assert status == 0, outcome
+    assert outcome.startswith("ok: read ('green',)")
 
 
 def test_a_failing_self_check_reports_why(
