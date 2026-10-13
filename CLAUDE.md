@@ -148,6 +148,13 @@ engine bridge.
 - **Tests never show a real dialog**: an autouse fixture in `tests/conftest.py` makes
   unpatched message boxes fail, because offscreen they would wait forever. Patch the
   helper the code calls (e.g. `ask_save_discard_cancel`) in the test.
+- **Installers** (`packaging/`, `.github/workflows/installers.yml`): one
+  PyInstaller recipe (`omr-data-collector.spec`) for all three systems, wrapped
+  in Inno Setup, a `.dmg` and an AppImage. Each installer is installed on a fresh
+  runner that runs `omr-data-collector --self-check` (`self_check.py`: print and
+  scan a sheet), so a new dependency or data file that the bundle misses fails
+  there. Data files the app reads must be added to the spec's `datas`; find them
+  from `__file__`, as `i18n.py` does, so they work in both.
 - **Style:** PEP 8 plus OMRChecker v2's conventions and tooling (ruff, pyright, uv,
   pre-commit, Conventional Commits). `ruff.toml` and `pyrightconfig.json` are copied
   from upstream; don't loosen them per file without a reason in a comment.

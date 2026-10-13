@@ -307,6 +307,13 @@ NOT_FOR_PEOPLE = {
     "rendering/print_form.py": {"OMR Data Collector"},
     # Named after their inventors.
     "ui/AnswerFields.py": {"Damm", "Verhoeff"},
+    # The installer builds' check: its report and its throwaway sheet.
+    "self_check.py": {
+        "Self check",
+        "read {} from form {}",
+        "read {} where {} was marked",
+        "the form's first block isn't a question",
+    },
 }
 PROSE = re.compile(r"[A-Za-z]{2,}[,.:;?!]? [A-Za-z]{2,}|^[A-Z][a-z]+$")
 # SQL statements, and lists of column names.

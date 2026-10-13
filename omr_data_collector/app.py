@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
-from omr_data_collector import APP_NAME
+from omr_data_collector import APP_NAME, self_check
 from omr_data_collector.constants import DATABASE_FILENAME
 from omr_data_collector.i18n import install_translators
 from omr_data_collector.storage.database import open_database
@@ -25,12 +25,18 @@ def default_database_path() -> Path:
     return Path(data_dir) / DATABASE_FILENAME
 
 
+SELF_CHECK_FLAG = "--self-check"
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(app_icon())
     app.setDesktopFileName(DESKTOP_FILE_NAME)
     install_translators(app)
+    if SELF_CHECK_FLAG in sys.argv[1:2]:
+        report = sys.argv[2:3]
+        return self_check.run(Path(report[0]) if report else None)
 
     connection = open_database(default_database_path())
     try:

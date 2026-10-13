@@ -1,0 +1,194 @@
+name: Installers
+
+# Builds the Windows, macOS and Linux installers (packaging/README.md), then
+# installs each on a fresh machine and runs the app's self-check there, so a
+# library left out fails here instead of on someone's computer. A version tag
+# (v0.1.0, matching pyproject.toml) also drafts a GitHub release with them.
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    # What can change what gets bundled.
+    paths:
+      - "packaging/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/installers.yml"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/installers.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "Build (${{ matrix.name }})"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, os: windows-latest }
+          # Apple Silicon only; Intel Macs would need a second build.
+          - { name: macOS, os: macos-latest }
+          # The oldest supported Ubuntu, so the AppImage runs on older systems too.
+          - { name: Linux, os: ubuntu-22.04 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME doesn't match pyproject.toml's version $version"
+              exit 1
+            fi
+          else
+            version="$version-dev.${GITHUB_SHA::7}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Bundled into the AppImage: Qt's X11 plugin needs it, and desktops
+      # without it would otherwise fail to open a window.
+      - name: Install libraries to bundle (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-cursor0
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install the app and PyInstaller
+        run: uv sync --frozen --no-dev --group packaging
+
+      - name: Build the app
+        run: uv run --no-sync pyinstaller --noconfirm packaging/omr-data-collector.spec
+
+      - name: Build the installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Inno Setup 6.7.3, pinned and checked.
+          $setup = "$env:RUNNER_TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe -OutFile $setup
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
+          if ($hash -ne "9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732") {
+            throw "Inno Setup download doesn't match its checksum: $hash"
+          }
+          Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=$env:RUNNER_TEMP\inno" -Wait
+          & "$env:RUNNER_TEMP\inno\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" packaging\windows\omr-data-collector.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build the disk image (macOS)
+        if: runner.os == 'macOS'
+        run: packaging/macos/build_dmg.sh "${{ steps.version.outputs.version }}"
+
+      - name: Build the AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: packaging/linux/build_appimage.sh "${{ steps.version.outputs.version }}"
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.name }}
+          path: |
+            dist/*-Setup.exe
+            dist/*.dmg
+            dist/*.AppImage
+          if-no-files-found: error
+
+  check:
+    name: "Install and check (${{ matrix.name }})"
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, os: windows-latest }
+          - { name: macOS, os: macos-latest }
+          # A newer Ubuntu than the build's, with no Python or project files.
+          - { name: Linux, os: ubuntu-24.04 }
+
+    steps:
+      - name: Fetch the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-${{ matrix.name }}
+
+      - name: Install and run the self-check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem *-Setup.exe).FullName
+          $app = "$env:RUNNER_TEMP\omr"
+          Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/CURRENTUSER", "/DIR=$app" -Wait
+          $run = Start-Process "$app\omr-data-collector.exe" -ArgumentList "--self-check", "$env:RUNNER_TEMP\report.txt" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\report.txt"
+          exit $run.ExitCode
+
+      - name: Install and run the self-check (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil attach *.dmg -nobrowse -mountpoint "$RUNNER_TEMP/dmg"
+          cp -R "$RUNNER_TEMP/dmg/OMR Data Collector.app" "$RUNNER_TEMP/"
+          hdiutil detach "$RUNNER_TEMP/dmg"
+          status=0
+          "$RUNNER_TEMP/OMR Data Collector.app/Contents/MacOS/omr-data-collector" \
+            --self-check "$RUNNER_TEMP/report.txt" || status=$?
+          cat "$RUNNER_TEMP/report.txt"
+          exit $status
+
+      # What a desktop has and a bare runner doesn't; there's no display, so
+      # Qt draws offscreen.
+      - name: Install and run the self-check (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          chmod +x ./*.AppImage
+          status=0
+          ./*.AppImage --self-check "$RUNNER_TEMP/report.txt" || status=$?
+          cat "$RUNNER_TEMP/report.txt"
+          exit $status
+
+  release:
+    name: Draft the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch the installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: Draft a release with them
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --draft --generate-notes --title "OMR Data Collector ${GITHUB_REF_NAME#v}" \
+            ./*-Setup.exe ./*.dmg ./*.AppImage

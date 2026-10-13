@@ -14,6 +14,13 @@ A separate, capture-only mobile app may come later.
 Product epics and user stories live on the team wiki:
 <https://docs.stewartclan.ca/OMR%20Data%20Collector>.
 
+## Installing
+
+Installers for Windows, macOS (Apple Silicon) and Linux go on the
+[Releases](https://github.com/mstewart14/omr-data-collector/releases) page. They
+aren't signed yet, so the first run needs one extra step:
+[packaging/README.md](packaging/README.md#unsigned-for-now) says what.
+
 ## Getting started
 
 Needs [uv](https://docs.astral.sh/uv/). QR codes are read with OpenCV's WeChat reader,
@@ -115,7 +122,10 @@ scripts/build_icons.py` builds `packaging/icons/` from them: PNGs at the usual
 sizes, a multi-size Windows `.ico` and macOS `.icns`. On Linux,
 `packaging/linux/omr-data-collector.desktop` is the menu entry; install it with
 the PNGs (as `omr-data-collector.png` in the hicolor theme) so desktops show the
-icon in the task bar.
+icon in the task bar; the AppImage does.
+
+The installers, how they're built and how to make a release are in
+[packaging/README.md](packaging/README.md).
 
 ## The vendored OMR engine
 
