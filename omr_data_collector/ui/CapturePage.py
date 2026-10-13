@@ -359,8 +359,12 @@ class CapturePage(QWidget):
         self.reload(select=first_to_check)
         unreadable = len(results) - len(read)
         message = tr("Read %n sheet(s).", None, len(read))
+        # Against the list reload just loaded, rather than loading it again for
+        # every sheet read.
         alike = sum(
-            1 for capture in read if likely_duplicates(self._connection, capture)
+            1
+            for capture in read
+            if any(capture.looks_like(other) for other in self._captures)
         )
         if alike:
             message += " " + tr(
@@ -593,6 +597,8 @@ class CapturePage(QWidget):
     def _build_check_box(self) -> QGroupBox:
         self.check_box = QGroupBox(tr("Check the data"))
         self.sheet_note = QLabel()
+        # It shows file and form names, which mustn't be read as HTML.
+        self.sheet_note.setTextFormat(Qt.TextFormat.PlainText)
         self.sheet_note.setWordWrap(True)
         self.close_up = QLabel()
         self.close_up.setAlignment(Qt.AlignmentFlag.AlignCenter)

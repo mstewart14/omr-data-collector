@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QLocale, Qt
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtCore import QLocale, QSize, Qt
+from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QMainWindow,
@@ -53,6 +53,21 @@ def choose_language(parent: QWidget, current: str) -> str | None:
     return dialog.chosen_language()
 
 
+# Room for the form editor's pages beside its palette and details.
+PREFERRED_SIZE = QSize(1400, 900)
+# The share of a smaller screen to take instead, leaving the taskbar and edges.
+SCREEN_SHARE = 0.9
+
+
+def _initial_size() -> QSize:
+    """PREFERRED_SIZE, or as much of the screen as fits on a smaller one."""
+    screen = QGuiApplication.primaryScreen()
+    if screen is None:
+        return PREFERRED_SIZE
+    available = screen.availableGeometry().size() * SCREEN_SHARE
+    return PREFERRED_SIZE.boundedTo(available)
+
+
 class MainWindow(QMainWindow):
     """The app window: the menu bar, and one section's page filling the rest.
 
@@ -68,8 +83,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
-        # Room for the form editor's pages beside its palette and details.
-        self.resize(1400, 900)
+        self.resize(_initial_size())
 
         self.forms_page = FormsPage(connection)
         self.text_blocks_page = TextBlocksPage(connection)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QTableWidgetItem
 from omr_data_collector.constants import (
     ANSWER_TYPES,
     BLOCK_KINDS,
+    CAPTURE_STATUSES,
     PAGE_ORIENTATIONS,
     TABLE_BREAKS,
 )
@@ -18,6 +20,7 @@ from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
+from omr_data_collector.storage.capture_store import add_capture, save_capture
 from omr_data_collector.storage.form_store import list_forms, mark_printed, save_form
 from omr_data_collector.storage.question_store import save_question
 from omr_data_collector.storage.table_block_store import save_table_block
@@ -27,6 +30,7 @@ from omr_data_collector.ui.FormsPage import FormsPage, block_summary
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
@@ -330,6 +334,38 @@ def test_deleting_a_printed_form_warns_its_sheets_cant_be_scanned(
     page.delete_item()
 
     assert "can no longer be scanned" in confirm.call_args.args[2]
+
+
+def test_deleting_a_form_with_captured_sheets_says_their_data_is_lost(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    form = saved_intake(connection, printed=True)
+    image = tmp_path / "sheet.jpg"
+    image.write_bytes(b"a sheet")
+    save_capture(
+        connection,
+        replace(
+            add_capture(connection, image),
+            status=CAPTURE_STATUSES.SAVED,
+            form_id=form.form_id,
+            form_version=form.version,
+            page=1,
+        ),
+    )
+    page = make_page(qtbot, connection)
+    confirm = mocker.patch(
+        "omr_data_collector.ui.LibraryPage.confirm_destructive", return_value=False
+    )
+
+    page.delete_item()
+
+    question = confirm.call_args.args[2]
+    assert "1 sheet captured from it" in question
+    assert "no longer be checked or exported" in question
+    assert list_forms(connection) != []
 
 
 def test_block_summaries() -> None:

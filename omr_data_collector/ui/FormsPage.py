@@ -43,6 +43,7 @@ from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_tit
 from omr_data_collector.models.ordering import move_by, move_to
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.rendering.print_form import render_form, save_pdf
+from omr_data_collector.storage.capture_store import list_captures
 from omr_data_collector.storage.form_store import (
     delete_form,
     is_printed,
@@ -442,6 +443,20 @@ class FormsPage(LibraryPage):
         return item.form_id
 
     def delete_question(self, item: Form) -> str:
+        captured = sum(
+            1
+            for capture in list_captures(self._connection)
+            if capture.form_id == item.form_id
+        )
+        if captured:
+            return tr(
+                'Delete the form "{name}"? %n sheet(s) captured from it would '
+                "lose their form, so their data could no longer be checked or "
+                "exported, and sheets printed from it could no longer be scanned. "
+                "This can't be undone.",
+                None,
+                captured,
+            ).format(name=item.name)
         if any(
             is_printed(self._connection, item.form_id, version)
             for version in range(1, item.version + 1)

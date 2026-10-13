@@ -45,6 +45,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Delete the form "{name}"? %n sheet(s) captured from it would lose their form, so their data could no longer be checked or exported, and sheets printed from it could no longer be scanned. This can't be undone.</source>
+            <translation>
+                <numerusform>Delete the form "{name}"? %n sheet captured from it would lose their form, so their data could no longer be checked or exported, and sheets printed from it could no longer be scanned. This can't be undone.</numerusform>
+                <numerusform>Delete the form "{name}"? %n sheets captured from it would lose their form, so their data could no longer be checked or exported, and sheets printed from it could no longer be scanned. This can't be undone.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>removed %n block(s)</source>
             <translation>
                 <numerusform>removed %n block</numerusform>

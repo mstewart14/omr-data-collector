@@ -1,23 +1,25 @@
 from __future__ import annotations
 
+import sqlite3
 from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QMessageBox
 
 from omr_data_collector import APP_NAME
+from omr_data_collector.app import open_app_database
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.organization_store import (
     load_organization,
     save_organization,
 )
 from omr_data_collector.storage.text_block_store import list_text_blocks
-from omr_data_collector.ui.MainWindow import MainWindow
+from omr_data_collector.ui.MainWindow import PREFERRED_SIZE, SCREEN_SHARE, MainWindow
 
 if TYPE_CHECKING:
-    import sqlite3
+    from pathlib import Path
 
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
@@ -208,3 +210,29 @@ def test_close_stays_on_the_page_whose_save_failed(
 
     assert not event.isAccepted()
     assert window.stack.currentWidget() is window.text_blocks_page
+
+
+def test_the_window_fits_a_small_screen(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    screen = QGuiApplication.primaryScreen()
+    assert screen is not None
+    available = screen.availableGeometry().size()
+
+    window = make_window(qtbot, connection)
+
+    assert window.size() == PREFERRED_SIZE.boundedTo(available * SCREEN_SHARE)
+
+
+def test_a_database_that_cant_be_opened_is_explained(
+    tmp_path: Path, mocker: MockerFixture
+) -> None:
+    critical = mocker.patch.object(QMessageBox, "critical")
+    newer = tmp_path / "newer.sqlite3"
+    sqlite3.connect(newer).execute("PRAGMA user_version = 999").connection.close()
+
+    assert open_app_database(newer) is None
+
+    (_, title, message), _ = critical.call_args
+    assert title == "Couldn't open the app's data"
+    assert "newer version of the app" in message
