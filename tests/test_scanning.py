@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 import pytest
+from PySide6.QtGui import QColor
 
 from omr_data_collector.engine.scanning import (
     ScanError,
@@ -18,9 +19,9 @@ from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.markers import marker_centres_mm
 from omr_data_collector.layout.omr_template import (
     PageTemplate,
-    TemplateField,
     page_template,
 )
+from omr_data_collector.rendering.page_photo import FILL_RADIUS_MM
 from omr_data_collector.storage.form_store import (
     load_printed_layout,
 )
@@ -102,6 +103,98 @@ def test_two_marks_where_one_is_allowed_are_flagged(
     assert "More than one" in service.problem
 
 
+def test_light_marks_in_uneven_light_read_and_blank_answers_stay_blank(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+) -> None:
+    # Light pencil on a page lit from the left: page-wide, its empty bubbles on
+    # the right are as dark as its marks on the left.
+    form, layout = printed_form
+    sheet = Sheet(form, organization, layout)
+    sheet.use_mark(QColor("#6a6a6a"))
+    sheet.fill_question(1, 1)
+    sheet.fill_cell(2, row=0, column=2, choice=0)
+    sheet.fill_cell(2, row=3, column=1, choice=0)
+    photo = sheet.photograph(tmp_path / "photo.jpg", dim_right=0.4)
+
+    page = scan_sheet(connection, photo, LETTER)
+
+    answers = answers_by_place(page)
+    assert answers[0, None, None] == ("no",)
+    assert answers[1, None, None] == ("clothing",)
+    assert answers[2, 0, 2] == ("food",)
+    assert answers[2, 3, 1] == ("y",)
+    for row in (1, 2, 4, 5):
+        assert answers[2, row, 1] == ("n",)
+        assert answers[2, row, 2] == ()
+    assert all(not answer.problem for answer in page.answers)
+
+
+def test_a_half_filled_bubble_reads_as_marked(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+) -> None:
+    form, layout = printed_form
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_cell(2, row=1, column=2, choice=1, radius_mm=1.1)
+    photo = sheet.photograph(tmp_path / "photo.jpg")
+
+    page = scan_sheet(connection, photo, LETTER)
+
+    assert answers_by_place(page)[2, 1, 2] == ("clothing",)
+
+
+@pytest.mark.parametrize(
+    ("radius_mm", "colour"),
+    [(0.6, "black"), (FILL_RADIUS_MM, "#969696")],
+    ids=["small dot", "faint pencil"],
+)
+def test_a_mark_that_cant_be_told_is_left_for_a_person(  # noqa: PLR0913 (fixtures)
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+    radius_mm: float,
+    colour: str,
+) -> None:
+    form, layout = printed_form
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_cell(2, row=0, column=2, choice=0)
+    sheet.use_mark(QColor(colour))
+    sheet.fill_cell(2, row=4, column=2, choice=2, radius_mm=radius_mm)
+    photo = sheet.photograph(tmp_path / "photo.jpg")
+
+    page = scan_sheet(connection, photo, LETTER)
+
+    answers = {(a.block_index, a.table_row, a.column): a for a in page.answers}
+    unclear = answers[2, 4, 2]
+    assert unclear.values == ()
+    assert "Couldn't tell" in unclear.problem
+    assert answers[2, 0, 2].values == ("food",)
+    assert not answers[2, 0, 2].problem
+
+
+def test_a_page_of_marks_that_cant_be_told_isnt_read(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    tmp_path: Path,
+) -> None:
+    form, layout = printed_form
+    sheet = Sheet(form, organization, layout)
+    sheet.use_mark(QColor("#969696"))
+    for row in range(6):
+        sheet.fill_cell(2, row=row, column=2, choice=row % 3)
+    photo = sheet.photograph(tmp_path / "photo.jpg")
+
+    with pytest.raises(ScanError, match="marked bubbles from the empty ones"):
+        scan_sheet(connection, photo, LETTER)
+
+
 def test_a_missing_corner_marker_is_reported(
     connection: sqlite3.Connection,
     organization: Organization,
@@ -170,32 +263,6 @@ def test_the_template_has_a_field_per_question_row_and_table_cell() -> None:
         round((right - left) * 6),
         round((bottom - top) * 6),
     ]
-
-
-@pytest.mark.parametrize(
-    ("value", "marked"),
-    [
-        ("", []),
-        ("food", [0]),
-        ("foodother", [0, 3]),
-        ("clothingreferral", [1, 2]),
-        ("nonsense", None),
-    ],
-)
-def test_joined_bubble_values_split_back_into_choices(
-    value: str, marked: list[int] | None
-) -> None:
-    field = TemplateField(0, 0, ("food", "clothing", "referral", "other"))
-
-    assert field.choices_marked(value) == marked
-
-
-def test_values_that_join_alike_are_left_for_a_person() -> None:
-    # "ab" could be the one choice "ab", or "a" then "b".
-    field = TemplateField(0, 0, ("a", "b", "ab"))
-
-    assert field.choices_marked("ab") is None
-    assert field.choices_marked("b") == [1]
 
 
 def test_bubbles_carry_the_answers_real_values(

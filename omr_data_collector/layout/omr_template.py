@@ -6,9 +6,8 @@ corner markers (CropOnMarkers), so the marker centres become the template's
 corners. Everything else is placed from the same layout the page was drawn from.
 
 Each bubble's value in the template is the saved value of the choice it stands
-for ("yes", "food"...), so OMRChecker reads, reports and draws the sheet's real
-data. OMRChecker joins the values of every bubble marked in a field
-("foodclothing"); ``TemplateField`` splits them back into choices.
+for ("yes", "food"...), so OMRChecker's own files show the sheet's real data.
+``TemplateField`` says which answer and choices each field's bubbles are.
 """
 
 from __future__ import annotations
@@ -55,8 +54,8 @@ class TemplateField:
     """What one template field reads: a question's row of choices, or a table cell.
 
     ``values`` are the field's bubbles' values, left to right: the saved values
-    of the choices they stand for, so OMRChecker reads, reports and draws the
-    sheet's real data. ``first_choice`` is the choice index of the first.
+    of the choices they stand for. ``first_choice`` is the choice index of the
+    first.
     """
 
     block_index: int
@@ -88,37 +87,6 @@ class TemplateField:
             table_row=data["tableRow"],
             column=data["column"],
         )
-
-    def choices_marked(self, value: str) -> list[int] | None:
-        """The choice indices marked, from OMRChecker's value for this field.
-
-        OMRChecker joins the values of every bubble marked in a field, in
-        order, with nothing between them ("foodclothing"); this splits them
-        back. None if the value can't be split one way only (values so alike
-        that their joins look the same), for a person to check.
-        """
-        splits = _splits(value, self.values, 0)
-        if len(splits) != 1:
-            return None
-        return [self.first_choice + index for index in splits[0]]
-
-
-def _splits(value: str, values: tuple[str, ...], start: int) -> list[list[int]]:
-    """Every way ``value`` is some of ``values`` from ``start`` on, joined in order.
-
-    At most two are found: enough to tell one way from several.
-    """
-    if not value:
-        return [[]]
-    found: list[list[int]] = []
-    for index in range(start, len(values)):
-        piece = values[index]
-        if piece and value.startswith(piece):
-            for rest in _splits(value[len(piece) :], values, index + 1):
-                found.append([index, *rest])
-                if len(found) > 1:
-                    return found
-    return found
 
 
 @dataclass(frozen=True)

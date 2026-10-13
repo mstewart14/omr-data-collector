@@ -314,6 +314,9 @@ NOT_FOR_PEOPLE = {
         "read {} where {} was marked",
         "the form's first block isn't a question",
     },
+    # Exception details for logs; the scanner shows its own message instead.
+    "engine/marks.py": {"{} of {} bubbles unclear"},
+    "engine/runner.py": {"page or markers not found"},
 }
 PROSE = re.compile(r"[A-Za-z]{2,}[,.:;?!]? [A-Za-z]{2,}|^[A-Z][a-z]+$")
 # SQL statements, and lists of column names.

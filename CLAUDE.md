@@ -89,12 +89,19 @@ engine bridge.
   (`layout/markers.py`), so prints are drawn full-page. `layout/omr_template.py`
   builds each page's OMRChecker template from the layout (one field per row of
   question choices, which is why choices are evenly spaced, and one per table
-  cell); bubble values are letters, mapped back to choices by `TemplateField`.
+  cell); `TemplateField` maps each field's bubbles back to choices.
   Printing stores those templates with the version (`printed_layout`), and
   `engine/scanning.scan_sheet` reads the QR code (`qr_code.read_qr_codes`,
-  OpenCV's WeChat reader: no zbar, so installers needn't bundle it), runs
-  OMRChecker on a copy of the image with the stored template, and returns answers, flagging double marks.
-  `tests/test_scanning.py` is the round-trip test.
+  OpenCV's WeChat reader: no zbar, so installers needn't bundle it), has
+  OMRChecker straighten a copy of the image on the stored template and measure
+  every bubble (`runner.measure_page`), and returns answers, flagging double
+  marks. **OMRChecker doesn't decide what's marked:** its page-wide rule read
+  every empty bubble as marked on an unevenly lit photo of light pencil.
+  `engine/marks.py` judges each bubble against the paper around it, leaves
+  ones in between for a person ("Couldn't tell…"), and refuses a page with
+  many. Its limits are from real phone photos; retune them only against real
+  photos. `tests/test_scanning.py` is the round-trip test (`Sheet.use_mark`
+  and `radius_mm` draw pale and part-filled marks).
 - **Sheet details** (`models/SheetDetails.py`): labelled answers (Date, Shift,
   Manager...), each field a table `Column`, written on the form (added from the form details,
   starting from a usual set) rather than kept in a library. By default
@@ -108,15 +115,14 @@ engine bridge.
 - **Capture** (`ui/CapturePage.py`, wiki 60001-60004): images are copied into
   `captures/` beside the database (`storage/capture_store.py`, which refuses an
   image already added), read with `engine/reading.read_capture`, then checked
-  answer by answer against the straightened page OMRChecker saves. Each
+  answer by answer against the straightened page the scan saves. Each
   answer's place on that page comes from `PageTemplate.regions`, so the
   outline and close-up need no geometry of their own. Saved data is a capture
   with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
   Answers are filled in on the sheet itself (`ui/SheetCanvas.py`): click and
   type over handwriting, click bubbles or press 1-9, Tab and arrows between
   answers; it draws the current values over the page, and the side list and
-  editor follow it (and it them). Template bubbles carry the choices' saved
-  values, so OMRChecker's own drawing shows the real data too.
+  editor follow it (and it them).
   `CapturedAnswer.changed_by_hand` (bubbles changed from what was read; typing
   in handwriting isn't a change) shows in the Note column and is counted in the
   export. `Capture.looks_like` warns when two pictures seem to be one sheet

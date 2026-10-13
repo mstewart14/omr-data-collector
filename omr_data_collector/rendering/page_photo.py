@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
@@ -63,10 +63,19 @@ def begin_page_photo(  # noqa: PLR0913 (what to draw, and how big)
     except BaseException:
         painter.end()
         raise
+    # Marks are the brush alone: an outline would darken every mark, however
+    # small or pale.
+    painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor("black"))
     return image, painter
 
 
-def fill_bubble(painter: QPainter, x_mm: float, y_mm: float) -> None:
-    """Fill in the bubble centred at (``x_mm``, ``y_mm``) on the page."""
-    painter.drawEllipse(QPointF(x_mm, y_mm), FILL_RADIUS_MM, FILL_RADIUS_MM)
+def fill_bubble(
+    painter: QPainter, x_mm: float, y_mm: float, radius_mm: float = FILL_RADIUS_MM
+) -> None:
+    """Fill in the bubble centred at (``x_mm``, ``y_mm``) on the page.
+
+    A ``radius_mm`` under the bubble's own 1.5 mm fills only its middle, as a
+    mark begun but not finished does.
+    """
+    painter.drawEllipse(QPointF(x_mm, y_mm), radius_mm, radius_mm)

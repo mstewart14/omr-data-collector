@@ -2,8 +2,9 @@
 
 The page's QR code names the form, version and page; that version's stored page
 template (saved when it was printed) tells OMRChecker where every bubble is, and
-says which answer each OMRChecker field belongs to. OMRChecker works on a copy of
-the image in a working directory, since it moves sheets it can't read.
+says which answer each OMRChecker field belongs to. OMRChecker straightens the
+page and measures the bubbles, working on a copy of the image in a working
+directory; ``engine.marks`` decides which are marked.
 """
 
 from __future__ import annotations
@@ -18,7 +19,12 @@ from typing import TYPE_CHECKING
 import cv2
 
 from omr_data_collector.constants import ANSWER_TYPES, QR_PAYLOAD_TYPES
-from omr_data_collector.engine.runner import run_omr
+from omr_data_collector.engine.marks import FieldMarks, MarksUnclearError, read_marks
+from omr_data_collector.engine.runner import (
+    CONFIG_FILE_NAME,
+    TEMPLATE_FILE_NAME,
+    measure_page,
+)
 from omr_data_collector.i18n import tr
 from omr_data_collector.identity.qr_code import parse_payload, read_qr_codes
 from omr_data_collector.layout.form_layout import layout_form
@@ -44,15 +50,8 @@ if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.Form import Form
 
-# Settings for OMRChecker: no windows or debug images, and sheets with several
-# bubbles marked in a field are still read (this app flags them itself).
-OMR_CONFIG = {
-    "outputs": {
-        "show_image_level": 0,
-        "save_image_level": 0,
-        "filter_out_multimarked_files": False,
-    }
-}
+# Settings for OMRChecker: no windows or debug images.
+OMR_CONFIG = {"outputs": {"show_image_level": 0, "save_image_level": 0}}
 # The QR reader only ever sees pictures at most this wide. It reads a page's
 # code well at this size, and wider pictures can take it minutes to give up on
 # when there's no code it can read: a blurred 4000-pixel photo ran for over ten
@@ -82,7 +81,8 @@ class ScannedAnswer:
 
     ``values`` are the marked choices' saved values, in choice order (a yes/no
     answer's one bubble saves its first value when marked, its second when
-    empty). A problem (two bubbles marked where only one is allowed) is for a
+    empty, and none when it can't be told). A problem (two bubbles marked where
+    only one is allowed, or a bubble neither clearly marked nor empty) is for a
     person to review.
     """
 
@@ -191,20 +191,20 @@ def read_page(
     work_dir: Path | None = None,
     page_image: Path | None = None,
 ) -> tuple[ScannedAnswer, ...]:
-    """Run OMRChecker on one page image with its template.
+    """Straighten one page image with OMRChecker and read its bubbles.
 
     ``work_dir`` keeps OMRChecker's files (for looking into a problem); by default
     a temporary directory is used and removed. ``page_image`` is where to save
-    the page straightened on its corner markers, with the marks OMRChecker found
-    drawn on it: at template scale, so ``PageTemplate.regions`` locate each
-    answer in it.
+    the page straightened on its corner markers: at template scale, so
+    ``PageTemplate.regions`` locate each answer in it.
 
     Raises:
-        ScanError: OMRChecker couldn't find the page or its corner markers.
+        ScanError: OMRChecker couldn't find the page or its corner markers, or
+            too many bubbles were neither clearly marked nor clearly empty.
     """
     if work_dir is None:
-        # OMRChecker leaves its ErrorFiles.csv open after a sheet it can't read,
-        # which Windows won't delete; the operating system clears it up later.
+        # OMRChecker leaves files open after a sheet it can't read, which
+        # Windows won't delete; the operating system clears them up later.
         with tempfile.TemporaryDirectory(
             prefix="omr-scan-", ignore_cleanup_errors=True
         ) as temporary:
@@ -214,51 +214,63 @@ def read_page(
     shutil.rmtree(input_dir, ignore_errors=True)
     shutil.rmtree(output_dir, ignore_errors=True)
     input_dir.mkdir(parents=True)
-    (input_dir / "template.json").write_text(json.dumps(template.template))
-    (input_dir / "config.json").write_text(json.dumps(OMR_CONFIG))
+    (input_dir / TEMPLATE_FILE_NAME).write_text(json.dumps(template.template))
+    (input_dir / CONFIG_FILE_NAME).write_text(json.dumps(OMR_CONFIG))
     cv2.imwrite(str(input_dir / MARKER_FILE_NAME), marker_image())
-    shutil.copyfile(image_path, input_dir / f"sheet{image_path.suffix.lower()}")
+    sheet = input_dir / f"sheet{image_path.suffix.lower()}"
+    shutil.copyfile(image_path, sheet)
     try:
-        rows = run_omr(input_dir, output_dir)
+        measured = measure_page(input_dir, sheet, output_dir)
     except Exception as error:  # OMRChecker raises bare Exceptions.
         raise ScanError(_unreadable_message()) from error
-    if not rows:
-        raise ScanError(_unreadable_message())
     if page_image is not None:
-        checked = next(output_dir.glob("**/CheckedOMRs/sheet.*"), None)
-        if checked is not None:
-            page_image.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(checked, page_image)
-    return interpret(form, template, rows[0])
+        page_image.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(page_image), measured.image)
+    try:
+        marks = read_marks(measured)
+    except MarksUnclearError as error:
+        msg = tr(
+            "Couldn't tell the marked bubbles from the empty ones on this page. "
+            "Take the picture again flat, in focus and in even light, and check "
+            "the bubbles are filled in firmly."
+        )
+        raise ScanError(msg) from error
+    return interpret(form, template, marks)
 
 
 def interpret(
-    form: Form, template: PageTemplate, row: dict[str, str]
+    form: Form, template: PageTemplate, marks: dict[str, FieldMarks]
 ) -> tuple[ScannedAnswer, ...]:
-    """Turn OMRChecker's values (the marked bubbles' values, per field) into answers."""
+    """Turn each field's marked bubbles into answers.
+
+    An answer with a bubble that couldn't be told marked or empty keeps only
+    the clearly marked ones and says so, for a person to check.
+    """
     marked: dict[tuple[int, int | None, int | None], list[int]] = {}
     unclear: set[tuple[int, int | None, int | None]] = set()
     for label, field in template.fields.items():
         key = (field.block_index, field.table_row, field.column)
-        choices = field.choices_marked(row.get(label, ""))
-        if choices is None:
+        found = marks.get(label, FieldMarks())
+        if found.unclear:
             unclear.add(key)
-            choices = []
-        marked.setdefault(key, []).extend(choices)
+        marked.setdefault(key, []).extend(
+            field.first_choice + index for index in found.marked
+        )
     answers = []
     for (block_index, table_row, column), choices in marked.items():
+        key = (block_index, table_row, column)
         spec = _answer_spec(form, block_index, column)
         values = tuple(
             spec.choices[index].output or spec.choices[index].label
             for index in sorted(set(choices))
             if index < len(spec.choices)
         )
-        if spec.answer_type == ANSWER_TYPES.YES_NO:
+        if spec.answer_type == ANSWER_TYPES.YES_NO and key not in unclear:
             # One bubble: marked saves the first choice, empty the second.
             when_marked, when_empty = spec.choices
             values = ((when_marked if values else when_empty).output,)
         problem = ""
-        if (block_index, table_row, column) in unclear:
+        if key in unclear:
             problem = tr("Couldn't tell which bubbles are marked: check the sheet.")
         elif spec.answer_type == ANSWER_TYPES.ONE_CHOICE and len(values) > 1:
             problem = tr("More than one bubble is marked, but only one is allowed.")
