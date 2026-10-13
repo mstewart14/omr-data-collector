@@ -131,7 +131,10 @@ git subtree pull --prefix=vendor/omrchecker --squash \
 OMRChecker's top-level package is named `src`, so it can't be installed as a normal
 dependency. `omr_data_collector/engine/` puts it on the import path; only that package
 imports from `src`. Its runtime dependencies are listed in our `pyproject.toml` at the
-versions OMRChecker pins (see the comment there for the two deliberate differences).
+versions OMRChecker pins (see the comment there for the three deliberate differences).
 
-OMRChecker is © Udayraj Deshmukh and contributors, MIT licensed
-(`vendor/omrchecker/LICENSE`).
+## License
+
+MIT (`LICENSE`), the same as OMRChecker. The vendored OMRChecker is © Udayraj
+Deshmukh and contributors, under its own MIT license (`vendor/omrchecker/LICENSE`).
+Qt for Python (PySide6) is used under the LGPL v3.

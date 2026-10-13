@@ -3,6 +3,8 @@ name = "omr-data-collector"
 version = "0.1.0"
 description = "Build paper data-collection forms and turn photos of filled-in forms into data."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "vendor/omrchecker/LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "pyside6==6.11.2",
