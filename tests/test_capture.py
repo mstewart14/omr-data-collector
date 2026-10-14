@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
-from omr_data_collector.constants import CAPTURE_STATUSES
+from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.layout.omr_template import page_template
 from omr_data_collector.models.Capture import Capture, CapturedAnswer
@@ -23,7 +24,9 @@ from omr_data_collector.storage.capture_store import (
     load_capture,
     page_image_path,
 )
+from omr_data_collector.ui.accessibility import band_color
 from omr_data_collector.ui.CapturePage import CapturePage
+from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas
 from tests.sheets import LETTER, Sheet
 
 if TYPE_CHECKING:
@@ -243,11 +246,17 @@ def cell_text(page: CapturePage, row: int, column: int) -> str:
     return item.text() if item is not None else ""
 
 
+def full_name(page: CapturePage, row: int) -> str:
+    """An answer's whole name, as screen readers hear it."""
+    item = page.answers_table.item(row, 0)
+    return item.data(Qt.ItemDataRole.AccessibleTextRole) if item is not None else ""
+
+
 def row_of(page: CapturePage, name: str) -> int:
     return next(
         row
         for row in range(page.answers_table.rowCount())
-        if cell_text(page, row, 0) == name
+        if full_name(page, row) == name
     )
 
 
@@ -677,3 +686,63 @@ def test_the_box_typed_into_shows_the_handwriting_behind_it(
         < without.pixelColor(x, y).lightness() + 60
     ]
     assert len(still_shown) > len(marked) * 0.8
+
+
+def test_typing_starts_where_the_answer_is_written(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # "Manager: ______": the field runs from x = 100, its line from x = 260.
+    page = tmp_path / "page.png"
+    image = QImage(800, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    image.save(str(page))
+    canvas = SheetCanvas()
+    qtbot.addWidget(canvas)
+    canvas.set_fit_width(800)
+    canvas.show_image(page, "page")
+    canvas.set_answers(
+        [
+            CanvasAnswer(
+                name="Manager",
+                answer_type=ANSWER_TYPES.WRITTEN,
+                rect=(100, 50, 400, 40),
+                entry=(260, 50, 240, 40),
+                values=("Karen",),
+            )
+        ]
+    )
+
+    canvas.set_current(0)
+
+    assert not canvas.editor.isHidden()
+    assert canvas.editor.geometry().left() == 260
+    assert canvas.editor.geometry().bottom() < 90
+
+
+def test_table_answers_are_listed_by_their_column_and_banded_by_row(
+    checking: CapturePage,
+) -> None:
+    table = checking.answers_table
+    row = row_of(checking, "Log, row 2, service")
+
+    # The list shows the column; the whole name is read out and in the tooltip.
+    assert cell_text(checking, row, 0) == "service"
+    assert table.item(row, 0).toolTip() == "Log, row 2, service"
+    question = row_of(checking, "services")
+    assert cell_text(checking, question, 0) == "services"
+
+    band = band_color(table.palette())
+    shaded = {
+        full_name(checking, index)
+        for index in range(table.rowCount())
+        if table.item(index, 0).background().color() == band
+    }
+    assert "Log, row 2, time" in shaded
+    assert "Log, row 2, service" in shaded
+    assert "Log, row 1, time" not in shaded
+    assert "Log, row 3, service" not in shaded
+    assert "services" not in shaded
+    # A whole row's answers, in every column of the list.
+    assert all(
+        table.item(row, column).background().color() == band for column in range(3)
+    )

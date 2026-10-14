@@ -170,7 +170,12 @@ class AnswerFields:
 
         self.characters_spin = QSpinBox()
         self.characters_spin.setRange(1, MAX_WRITTEN_CHARACTERS)
-        self.characters_spin.setToolTip(tr("How many boxes are printed for the answer"))
+        self.characters_spin.setToolTip(
+            tr(
+                "How much room is printed for the answer: a box for each character, "
+                "or for free text a line that long, which people can write past"
+            )
+        )
         self.data_type_combo = _combo(data_type_labels())
         self.minimum_spin = _limit_spin(tr("No minimum"))
         self.maximum_spin = _limit_spin(tr("No maximum"))

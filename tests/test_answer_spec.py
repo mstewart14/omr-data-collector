@@ -277,9 +277,17 @@ def test_dash_date_formats_saved_earlier_read_as_slashes(
             "",
         ),
         (
-            AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=3),
+            AnswerSpec(
+                ANSWER_TYPES.WRITTEN, data_type=WRITTEN_DATA_TYPES.ID, max_characters=3
+            ),
             ("abcd",),
             "Use at most 3 characters.",
+        ),
+        # Free text's size is the printed line's; people write past it.
+        (
+            AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=3),
+            ("written well past the line",),
+            "",
         ),
     ],
 )

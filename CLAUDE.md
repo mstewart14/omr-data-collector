@@ -117,7 +117,11 @@ engine bridge.
   image already added), read with `engine/reading.read_capture`, then checked
   answer by answer against the straightened page the scan saves. Each
   answer's place on that page comes from `PageTemplate.regions`, so the
-  outline and close-up need no geometry of their own. Saved data is a capture
+  outline and close-up need no geometry of their own; typing goes in a
+  region's `writing` area (after a question's prompt or a field's label),
+  filled in by `with_writing_areas` for pages printed before it was kept. Free
+  text's size is only the printed line's length, so its typed length isn't
+  checked (an ID's is: one box per character). Saved data is a capture
   with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
   Answers are filled in on the sheet itself (`ui/SheetCanvas.py`): click and
   type over handwriting, click bubbles or press 1-9, Tab and arrows between

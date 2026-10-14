@@ -13,11 +13,12 @@ for ("yes", "food"...), so OMRChecker's own files show the sheet's real data.
 from __future__ import annotations
 
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from omr_data_collector.layout.form_layout import ANSWER_ROW_HEIGHT_MM
 from omr_data_collector.layout.markers import (
     MARKER_DIAMETER_MM,
     marker_centres_mm,
@@ -95,8 +96,10 @@ class AnswerRegion:
 
     A question's region is its whole block (prompt and answer), a table answer's
     is its cell. ``rect`` is x, y, width and height in template pixels, the same
-    as the straightened page image OMRChecker saves, so the region can be cut out
-    of it for a close-up.
+    as the straightened page image the scan saves, so the region can be cut out
+    of it for a close-up. ``writing`` is where a written question or sheet
+    details field is written: its answer's first row, after the prompt or
+    label (a table cell has none: it's all writing).
     """
 
     block_index: int
@@ -105,6 +108,12 @@ class AnswerRegion:
     column: int | None = None
     # Each printed choice's bubble, in choice order, for answers with bubbles.
     bubbles: tuple[tuple[int, int, int, int], ...] = ()
+    writing: tuple[int, int, int, int] | None = None
+
+    @property
+    def entry_rect(self) -> tuple[int, int, int, int]:
+        """Where typing over the handwriting goes: its writing area, or all of it."""
+        return self.writing or self.rect
 
     @property
     def key(self) -> tuple[int, int | None, int | None]:
@@ -117,11 +126,18 @@ class AnswerRegion:
             "tableRow": self.table_row,
             "column": self.column,
             "bubbles": [list(bubble) for bubble in self.bubbles],
+            "writing": list(self.writing) if self.writing else None,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AnswerRegion:
         x, y, width, height = data["rect"]
+        # Pages stored before typing went after the label have no writing area
+        # (see with_writing_areas).
+        writing = data.get("writing")
+        if writing:
+            wx, wy, wwidth, wheight = writing
+            writing = (wx, wy, wwidth, wheight)
         return cls(
             block_index=data["blockIndex"],
             rect=(x, y, width, height),
@@ -130,6 +146,7 @@ class AnswerRegion:
             bubbles=tuple(
                 (bx, by, bw, bh) for bx, by, bw, bh in data.get("bubbles", [])
             ),
+            writing=writing or None,
         )
 
 
@@ -235,14 +252,23 @@ def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:
         content = placed.block.content
         if isinstance(content, Question) and placed.question is not None:
             _add_question(placed, content, add_block, fields)
+            geometry = placed.question
             regions.append(
                 AnswerRegion(
                     placed.index,
                     rect(0, placed.y_mm, layout.width_mm, placed.height_mm),
                     bubbles=tuple(
                         bubble_rect(b.centre_x_mm, placed.y_mm + b.centre_y_mm)
-                        for b in placed.question.bubbles
+                        for b in geometry.bubbles
                     ),
+                    writing=rect(
+                        0,
+                        placed.y_mm + geometry.answer_top_mm,
+                        layout.width_mm,
+                        ANSWER_ROW_HEIGHT_MM,
+                    )
+                    if geometry.boxes or geometry.lines
+                    else None,
                 )
             )
         elif isinstance(content, TableBlock) and placed.table_part is not None:
@@ -366,6 +392,14 @@ def _add_details(  # noqa: PLR0913 (the template's parts being filled in)
                     bubble_rect(bubble.centre_x_mm, placed.y_mm + bubble.centre_y_mm)
                     for bubble in detail.bubbles
                 ),
+                writing=rect(
+                    detail.answer_x_mm,
+                    placed.y_mm + detail.y_mm,
+                    detail.x_mm + detail.width_mm - detail.answer_x_mm,
+                    geometry.row_height_mm,
+                )
+                if detail.boxes or detail.lines
+                else None,
             )
         )
     return regions
@@ -439,3 +473,21 @@ def _add_table_part(placed: PlacedBlock, table: TableBlock, add_block, fields) -
                     placed.index, 0, tuple(values), table_row=row, column=column_index
                 )
         x += column_layout.width_mm
+
+
+def with_writing_areas(stored: PageTemplate, fresh: PageTemplate) -> PageTemplate:
+    """``stored``, with writing areas taken from ``fresh`` where it has none.
+
+    Pages printed before writing areas were kept don't have them. ``fresh`` is
+    the same page laid out again; an answer gets its writing area only where
+    the two place the answer alike, so a layout that has changed since
+    printing gives nothing it doesn't match.
+    """
+    fresh_regions = {region.key: region for region in fresh.regions}
+    regions = []
+    for region in stored.regions:
+        match = fresh_regions.get(region.key)
+        if region.writing is None and match is not None and match.rect == region.rect:
+            region = replace(region, writing=match.writing)  # noqa: PLW2901
+        regions.append(region)
+    return replace(stored, regions=tuple(regions))

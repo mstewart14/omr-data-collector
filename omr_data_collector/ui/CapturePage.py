@@ -41,7 +41,13 @@ from omr_data_collector.export.data_export import (
     write_json,
 )
 from omr_data_collector.i18n import tr
-from omr_data_collector.layout.omr_template import AnswerRegion, PageTemplate
+from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.omr_template import (
+    AnswerRegion,
+    PageTemplate,
+    page_template,
+    with_writing_areas,
+)
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -67,6 +73,7 @@ from omr_data_collector.storage.form_store import (
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import (
     announce,
+    band_color,
     set_field_error,
     style_error_label,
 )
@@ -725,7 +732,9 @@ class CapturePage(QWidget):
             if stored is not None and capture.page is not None:
                 pages = stored["pages"]
                 if 1 <= capture.page <= len(pages):
-                    self._template = PageTemplate.from_dict(pages[capture.page - 1])
+                    self._template = self._with_writing_areas(
+                        PageTemplate.from_dict(pages[capture.page - 1]), capture.page
+                    )
         page_image = page_image_path(self._connection, capture)
         form_name = self._form.name if self._form else ""
         self.sheet_canvas.show_image(
@@ -762,6 +771,7 @@ class CapturePage(QWidget):
         row = self.answers_table.currentRow()
         self.answers_table.blockSignals(True)  # noqa: FBT003
         self.answers_table.setRowCount(len(self._answers))
+        band = band_color(self.answers_table.palette())
         for index, answer in enumerate(self._answers):
             error = self._entry_error(answer)
             note = error or answer.problem
@@ -773,12 +783,22 @@ class CapturePage(QWidget):
                 note = tr("Changed by hand; the sheet read: {values}").format(
                     values=read
                 )
+            # Every other table row's answers shaded, to tell rows apart.
+            banded = answer.table_row is not None and answer.table_row % 2 == 1
             for column, text in (
-                (NAME_COLUMN, self._answer_name(answer)),
+                (NAME_COLUMN, self._short_answer_name(answer)),
                 (VALUE_COLUMN, ", ".join(self._value_labels(answer))),
                 (NOTE_COLUMN, note),
             ):
-                self.answers_table.setItem(index, column, QTableWidgetItem(text))
+                item = QTableWidgetItem(text)
+                if column == NAME_COLUMN:
+                    # The short name shows; the whole one is read out.
+                    full_name = self._answer_name(answer)
+                    item.setData(Qt.ItemDataRole.AccessibleTextRole, full_name)
+                    item.setToolTip(full_name)
+                if banded:
+                    item.setBackground(band)
+                self.answers_table.setItem(index, column, item)
         self.answers_table.blockSignals(False)  # noqa: FBT003
         if 0 <= row < len(self._answers):
             self.answers_table.setCurrentCell(row, NAME_COLUMN)
@@ -890,6 +910,7 @@ class CapturePage(QWidget):
                 name=self._answer_name(answer),
                 answer_type=ANSWER_TYPES.WRITTEN,
                 rect=region.rect if region else (0, 0, 0, 0),
+                entry=region.writing if region else None,
             )
         printed = spec.printed_choices()
         return CanvasAnswer(
@@ -897,6 +918,7 @@ class CapturePage(QWidget):
             answer_type=spec.answer_type,
             rect=region.rect if region else (0, 0, 0, 0),
             bubbles=region.bubbles if region else (),
+            entry=region.writing if region else None,
             choices=tuple((choice.output, choice.label) for choice in printed),
             empty_value=(
                 spec.choices[1].output
@@ -1036,6 +1058,17 @@ class CapturePage(QWidget):
             return content.fields[answer.column].name
         return content.name
 
+    def _short_answer_name(self, answer: CapturedAnswer) -> str:
+        """A table answer by its column's name alone; others as ``_answer_name``.
+
+        The list shows its row by shading, and the sheet by its outline.
+        """
+        if self._form is not None and 0 <= answer.block_index < len(self._form.blocks):
+            content = self._form.blocks[answer.block_index].content
+            if isinstance(content, TableBlock) and answer.column is not None:
+                return content.columns[answer.column].name
+        return self._answer_name(answer)
+
     def _value_labels(self, answer: CapturedAnswer) -> list[str]:
         """The answer's values as printed on the sheet (choice labels)."""
         return self._labels(answer, answer.values)
@@ -1046,6 +1079,19 @@ class CapturePage(QWidget):
             return list(values)
         labels = {choice.output: choice.label for choice in spec.choices}
         return [labels.get(value, value) for value in values]
+
+    def _with_writing_areas(self, stored: PageTemplate, page: int) -> PageTemplate:
+        """``stored``, with where to type for pages printed before that was kept."""
+        if self._form is None or all(
+            region.writing is not None for region in stored.regions
+        ):
+            return stored
+        organization = load_organization(self._connection)
+        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        layout = layout_form(self._form, paper_size)
+        if not 1 <= page <= len(layout.pages):
+            return stored
+        return with_writing_areas(stored, page_template(layout, layout.pages[page - 1]))
 
     def _region(self, answer: CapturedAnswer) -> tuple[int, int, int, int] | None:
         region = self._region_of(answer)
@@ -1062,4 +1108,6 @@ class CapturePage(QWidget):
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt override)
         if event.type() == QEvent.Type.PaletteChange:
             style_error_label(self.value_error, self.palette())
+            # Re-shade the bands for the new theme.
+            self._fill_answers_table()
         super().changeEvent(event)

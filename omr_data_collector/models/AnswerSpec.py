@@ -124,7 +124,9 @@ class AnswerSpec:
         For checking what a person settled on when reviewing a captured sheet:
         choices must be this answer's saved values (one at most where only one is
         allowed); a written answer is one string, checked against its data type.
-        Nothing at all (an unanswered question) is always allowed.
+        Nothing at all (an unanswered question) is always allowed. Free text's
+        size only sets how long a line is printed, and people write past it, so
+        its length isn't checked; an ID's is, one character per printed box.
         """
         if not values or values == ("",):
             return ""
@@ -135,7 +137,7 @@ class AnswerSpec:
             return self._number_entry_error(text)
         if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
             return self._date_time_entry_error(text)
-        if len(text) > self.max_characters:
+        if self.data_type == WRITTEN_DATA_TYPES.ID and len(text) > self.max_characters:
             return tr("Use at most %n character(s).", None, self.max_characters)
         return ""
 

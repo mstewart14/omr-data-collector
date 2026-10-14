@@ -12,6 +12,7 @@ from omr_data_collector.storage.organization_store import save_organization
 from omr_data_collector.ui.accessibility import (
     MIN_TEXT_CONTRAST,
     announce,
+    band_color,
     contrast_ratio,
     error_text_color,
     set_field_error,
@@ -354,3 +355,19 @@ def test_details_panels_fit_their_fields_at_a_large_font_size(
         )
     finally:
         app.setFont(usual)
+
+
+@pytest.mark.parametrize(
+    ("base", "text"),
+    [("#ffffff", "#000000"), ("#1e1e1e", "#ffffff"), ("#000000", "#ffff00")],
+    ids=["light", "dark", "high contrast"],
+)
+def test_row_bands_stand_out_and_keep_text_readable(base: str, text: str) -> None:
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Base, QColor(base))
+    palette.setColor(QPalette.ColorRole.Text, QColor(text))
+
+    band = band_color(palette)
+
+    assert band != QColor(base)
+    assert contrast_ratio(band, QColor(text)) >= MIN_TEXT_CONTRAST

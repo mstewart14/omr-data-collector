@@ -27,6 +27,9 @@ MIN_TEXT_CONTRAST = 4.5
 # themes), errors fall back to the theme's own text color, and their wording alone
 # marks them as errors.
 ERROR_COLOR_CANDIDATES = ("#a50e0e", "#ffb4ab")
+# How far a band of rows is shaded from the background towards the text, tried
+# in order until the text on it stays readable.
+BAND_SHADES = (0.12, 0.08, 0.05)
 
 
 def relative_luminance(color: QColor) -> float:
@@ -60,6 +63,25 @@ def error_text_color(palette: QPalette) -> QColor:
         if contrast_ratio(color, background) >= MIN_TEXT_CONTRAST:
             return color
     return palette.color(QPalette.ColorRole.WindowText)
+
+
+def band_color(palette: QPalette) -> QColor:
+    """A background for every other group of rows: the list's own, tinted.
+
+    Shaded towards the text color just enough to tell bands apart, and never
+    so far that the text on it drops below MIN_TEXT_CONTRAST.
+    """
+    base = palette.color(QPalette.ColorRole.Base)
+    text = palette.color(QPalette.ColorRole.Text)
+    for share in BAND_SHADES:
+        band = QColor.fromRgbF(
+            base.redF() + (text.redF() - base.redF()) * share,
+            base.greenF() + (text.greenF() - base.greenF()) * share,
+            base.blueF() + (text.blueF() - base.blueF()) * share,
+        )
+        if contrast_ratio(band, text) >= MIN_TEXT_CONTRAST:
+            return band
+    return palette.color(QPalette.ColorRole.AlternateBase)
 
 
 def style_error_label(label: QLabel, palette: QPalette) -> None:

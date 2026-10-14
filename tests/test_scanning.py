@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from PySide6.QtGui import QColor
 
+from omr_data_collector.constants import ANSWER_TYPES
 from omr_data_collector.engine.scanning import (
     ScanError,
     read_sheet_identity,
@@ -20,7 +21,12 @@ from omr_data_collector.layout.markers import marker_centres_mm
 from omr_data_collector.layout.omr_template import (
     PageTemplate,
     page_template,
+    with_writing_areas,
 )
+from omr_data_collector.models.AnswerSpec import AnswerSpec
+from omr_data_collector.models.Form import Form, FormBlock
+from omr_data_collector.models.Question import Question
+from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.rendering.page_photo import FILL_RADIUS_MM
 from omr_data_collector.storage.form_store import (
     load_printed_layout,
@@ -33,7 +39,6 @@ if TYPE_CHECKING:
     from omr_data_collector.layout.form_layout import (
         FormLayout,
     )
-    from omr_data_collector.models.Form import Form
     from omr_data_collector.models.Organization import Organization
 
 from tests import sheets
@@ -397,3 +402,60 @@ def test_a_photo_taken_at_a_tilt_still_reads(
     assert answers[1, None, None] == ("food", "other")
     assert answers[2, 2, 2] == ("food",)
     assert all(not answer.problem for answer in page.answers)
+
+
+def written_form() -> Form:
+    return Form(
+        name="Shift log",
+        blocks=(
+            FormBlock(SheetDetails(name="Sheet details")),
+            FormBlock(
+                Question(
+                    "notes",
+                    "Anything to note about the shift?",
+                    answer=AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=30),
+                )
+            ),
+        ),
+    )
+
+
+def test_typing_goes_where_the_answer_is_written_not_on_its_label() -> None:
+    form = written_form()
+    layout = layout_form(form, LETTER)
+    template = page_template(layout, layout.pages[0])
+
+    manager = next(r for r in template.regions if r.key == (0, None, 2))
+    assert manager.writing is not None
+    x, y, width, height = manager.writing
+    # After the "Manager:" label, to the end of the field, on its line.
+    assert x > manager.rect[0]
+    assert x + width == pytest.approx(manager.rect[0] + manager.rect[2], abs=1)
+    assert (y, height) == (manager.rect[1], manager.rect[3])
+    assert manager.entry_rect == manager.writing
+
+    notes = next(r for r in template.regions if r.key == (1, None, None))
+    assert notes.writing is not None
+    # The answer's row, below the prompt.
+    assert notes.writing[1] > notes.rect[1]
+    assert notes.writing[1] + notes.writing[3] <= notes.rect[1] + notes.rect[3] + 1
+
+    # Kept with the printed page.
+    assert PageTemplate.from_dict(template.to_dict()).regions == template.regions
+
+
+def test_pages_printed_before_writing_areas_get_them_where_the_layout_matches() -> None:
+    form = written_form()
+    layout = layout_form(form, LETTER)
+    fresh = page_template(layout, layout.pages[0])
+    stored = fresh.to_dict()
+    for region in stored["regions"]:
+        del region["writing"]
+    stored["regions"][1]["rect"][0] += 5  # Laid out differently since printing.
+    old = PageTemplate.from_dict(stored)
+    assert all(region.writing is None for region in old.regions)
+
+    filled = with_writing_areas(old, fresh)
+
+    assert filled.regions[0].writing == fresh.regions[0].writing
+    assert filled.regions[1].writing is None

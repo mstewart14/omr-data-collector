@@ -58,13 +58,16 @@ class CanvasAnswer:
     """One answer as the sheet shows it: where it is, how it's answered, its value.
 
     ``choices`` are the printed choices as (saved value, label), in bubble order;
-    for yes/no, ``empty_value`` is what an unmarked bubble saves.
+    for yes/no, ``empty_value`` is what an unmarked bubble saves. ``entry`` is
+    where a written answer's typing goes, after its label (all of ``rect`` if
+    not given).
     """
 
     name: str
     answer_type: str
     rect: Rect
     bubbles: tuple[Rect, ...] = ()
+    entry: Rect | None = None
     choices: tuple[tuple[str, str], ...] = ()
     empty_value: str = ""
     values: tuple[str, ...] = ()
@@ -244,7 +247,8 @@ class SheetCanvas(QWidget):
             painter.drawRect(area)
         if answer.written:
             if answer.values and not (current and self.editor.isVisible()):
-                self._paint_value(painter, area, answer.values[0])
+                entry = self._to_view(answer.entry or answer.rect)
+                self._paint_value(painter, entry, answer.values[0])
             return
         painter.setPen(QPen(VALUE_COLOR, RING_PEN_PX))
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -283,7 +287,8 @@ class SheetCanvas(QWidget):
                 self.setFocus(Qt.FocusReason.OtherFocusReason)
             self.editor.hide()
             return
-        area = self._to_view(answer.rect).toAlignedRect()
+        # Where the answer is written, so the typing covers the handwriting.
+        area = self._to_view(answer.entry or answer.rect).toAlignedRect()
         font = QFont(self.font())
         font.setPixelSize(max(round(area.height() * 0.45), MIN_FONT_POINTS))
         self.editor.setFont(font)
