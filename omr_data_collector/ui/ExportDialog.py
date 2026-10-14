@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -86,12 +87,15 @@ class ExportDialog(QDialog):
                 lambda: edit_names(self.form_combo.currentData())
             )
 
+        self.latest_values_box = self._build_latest_values_box()
+
         moves = self._build_sheet_chooser()
 
         form_layout = QFormLayout()
         add_field_row(form_layout, tr("&Form"), self.form_combo)
         add_field_row(form_layout, tr("File &type"), self.format_combo)
         form_layout.addRow("", self.names_button)
+        form_layout.addRow("", self.latest_values_box)
         self.note = QLabel(
             tr(
                 "Only sheets saved on the Capture screen are exported: not ones "
@@ -138,6 +142,7 @@ class ExportDialog(QDialog):
                 self.form_combo,
                 self.format_combo,
                 self.names_button,
+                self.latest_values_box,
                 self.every_button,
                 self.chosen_button,
                 self.sheet_list,
@@ -149,6 +154,20 @@ class ExportDialog(QDialog):
             QWidget.setTabOrder(before, after)
         self._fill_sheets()
         self.form_combo.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    @staticmethod
+    def _build_latest_values_box() -> QCheckBox:
+        box = QCheckBox(tr("Export bubbles with the &latest version's Saved as values"))
+        box.setChecked(True)
+        box.setToolTip(
+            tr(
+                "Sheets printed from an earlier version of the form give the same "
+                "data as new ones, where an answer's choices are the same in both. "
+                "Untick to export what each sheet's own version saves."
+            )
+        )
+        box.setAccessibleDescription(box.toolTip())
+        return box
 
     def _build_sheet_chooser(self) -> QWidget:
         """The two ways to export, and the list of sheets to combine.
@@ -188,18 +207,18 @@ class ExportDialog(QDialog):
         moves_layout.addStretch()
         return moves
 
-    def chosen(self) -> tuple[str, str, list[str] | None]:
-        """The form's ID, the file format, and the sheets to combine.
+    def chosen(self) -> tuple[str, str, list[str] | None, bool]:
+        """The form's ID, the file format, the sheets to combine, latest values.
 
         The sheets are capture IDs in the order to combine them, or None to
-        export every checked sheet a row each.
+        export every checked sheet a row each. The last is whether bubbles are
+        exported with the latest version's saved values.
         """
-        if not self.chosen_button.isChecked():
-            return self.form_combo.currentData(), self.format_combo.currentData(), None
         return (
             self.form_combo.currentData(),
             self.format_combo.currentData(),
-            self._ticked(),
+            self._ticked() if self.chosen_button.isChecked() else None,
+            self.latest_values_box.isChecked(),
         )
 
     def move_sheet(self, offset: int) -> None:

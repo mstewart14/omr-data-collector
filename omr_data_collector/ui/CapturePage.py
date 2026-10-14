@@ -142,7 +142,7 @@ def choose_export(
     sheets: dict[str, list[tuple[str, str]]],
     edit_names: Callable[[str], object],
     layout_warning: Callable[[str, list[str] | None], str] | None = None,
-) -> tuple[str, str, list[str] | None] | None:
+) -> tuple[str, str, list[str] | None, bool] | None:
     """Ask which form's data to export, which sheets and as what; None if cancelled."""
     dialog = ExportDialog(parent, forms, sheets, edit_names, layout_warning)
     if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -473,10 +473,10 @@ class CapturePage(QWidget):
         )
         if chosen is None:
             return
-        form_id, file_format, combine = chosen
+        form_id, file_format, combine, latest_values = chosen
         form = by_id[form_id]
         names = load_export_names(self._connection, form.form_id)
-        data = collect(self._connection, form, combine)
+        data = collect(self._connection, form, combine, latest_values=latest_values)
         path = choose_export_path(
             self, file_format, self._export_folder / default_file_name(form)
         )

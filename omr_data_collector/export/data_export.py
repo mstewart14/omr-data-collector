@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
+from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -209,9 +210,17 @@ def saved_sheet_counts(connection: sqlite3.Connection) -> dict[str, int]:
 
 
 def collect(
-    connection: sqlite3.Connection, form: Form, chosen: list[str] | None = None
+    connection: sqlite3.Connection,
+    form: Form,
+    chosen: list[str] | None = None,
+    *,
+    latest_values: bool = False,
 ) -> FormData:
     """Gather the checked sheets of ``form`` (its latest version), all versions.
+
+    With ``latest_values``, bubbles on sheets from earlier versions are
+    exported with the latest version's saved values (``_translated``), so
+    sheets printed before a "Saved as" changed give the same data as new ones.
 
     With ``chosen`` (capture IDs, in order), only those sheets are gathered and
     they are combined into one: a single row of sheet details and answers, and
@@ -255,7 +264,9 @@ def collect(
         version_form = versions.get(capture.form_version or 0)
         if version_form is None:
             continue
-        sheet, document = _sheet(capture, version_form)
+        sheet, document = _sheet(
+            capture, version_form, _answer_specs(form) if latest_values else None
+        )
         sheets.append(
             {
                 **sheet["meta"],
@@ -540,8 +551,63 @@ def _columns(
     return details, questions, tables
 
 
-def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]]:
-    """One sheet's data, grouped (for CSV rows) and as a JSON object."""
+AnswerKey = tuple[str, str | None, str]
+
+
+def _answer_specs(form: Form) -> dict[AnswerKey, AnswerSpec]:
+    """Each of ``form``'s answers by what it's exported as: its kind and names."""
+    specs: dict[AnswerKey, AnswerSpec] = {}
+    for block in form.blocks:
+        content = block.content
+        if isinstance(content, SheetDetails):
+            for column in content.fields:
+                specs["details", None, column.name] = column.answer
+        elif isinstance(content, Question):
+            specs["question", None, content.name] = content.answer
+        elif isinstance(content, TableBlock):
+            for column in content.columns:
+                specs["table", content.name, column.name] = column.answer
+    return specs
+
+
+def _translated(
+    spec: AnswerSpec, latest: AnswerSpec | None, values: tuple[str, ...]
+) -> tuple[AnswerSpec, tuple[str, ...]]:
+    """An answer's spec and values as the latest version would save its bubbles.
+
+    Each bubble is matched by its place, so only answers of the same type and
+    number of choices are translated; anything else, and written answers, are
+    kept as they are.
+    """
+    if (
+        latest is None
+        or spec.answer_type not in CHOICE_ANSWER_TYPES
+        or latest.answer_type != spec.answer_type
+        or len(latest.choices) != len(spec.choices)
+    ):
+        return spec, values
+    outputs = [choice.output for choice in spec.choices]
+    if spec.answer_type == ANSWER_TYPES.YES_NO:
+        marked = values == (outputs[0],)
+        value = latest.choices[0 if marked else 1].output
+        return latest, (value,) if value else ()
+    return latest, tuple(
+        latest.choices[outputs.index(value)].output if value in outputs else value
+        for value in values
+    )
+
+
+def _sheet(
+    capture: Capture,
+    form: Form,
+    latest: dict[AnswerKey, AnswerSpec] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One sheet's data, grouped (for CSV rows) and as a JSON object.
+
+    ``latest`` (the latest version's answers) translates bubbles to its saved
+    values; changes by hand are still judged against the sheet's own version.
+    """
+    latest = latest or {}
     details: dict[str, Any] = {}
     answers: dict[str, Any] = {}
     # Sheet details fields and questions changed by hand.
@@ -557,11 +623,21 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         content = form.blocks[answer.block_index].content
         if isinstance(content, SheetDetails) and answer.column is not None:
             column = content.fields[answer.column]
-            details[column.name] = _value(column.answer, answer.values)
+            spec, values = _translated(
+                column.answer,
+                latest.get(("details", None, column.name)),
+                answer.values,
+            )
+            details[column.name] = _value(spec, values)
             if answer.changed_by_hand(column.answer):
                 corrected.append(column.name)
         elif isinstance(content, Question):
-            answers[content.name] = _value(content.answer, answer.values)
+            spec, values = _translated(
+                content.answer,
+                latest.get(("question", None, content.name)),
+                answer.values,
+            )
+            answers[content.name] = _value(spec, values)
             if answer.changed_by_hand(content.answer):
                 corrected.append(content.name)
         elif (
@@ -571,8 +647,13 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         ):
             column = content.columns[answer.column]
             row = tables.setdefault(content.name, {}).setdefault(answer.table_row, {})
-            row[column.name] = _value(column.answer, answer.values)
-            if _filled_in(column.answer, answer.values):
+            spec, values = _translated(
+                column.answer,
+                latest.get(("table", content.name, column.name)),
+                answer.values,
+            )
+            row[column.name] = _value(spec, values)
+            if _filled_in(spec, values):
                 filled_in.add((content.name, answer.table_row))
             cells = corrected_cells.setdefault(content.name, {})
             changed = cells.setdefault(answer.table_row, [])

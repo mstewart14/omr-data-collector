@@ -441,7 +441,7 @@ def test_exporting_csv_from_the_capture_screen(
     qtbot.addWidget(page)
     choose = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, CSV_FORMAT, None),
+        return_value=(form.form_id, CSV_FORMAT, None, True),
     )
     choose_path = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
@@ -477,7 +477,7 @@ def test_exporting_json_from_the_capture_screen(
     qtbot.addWidget(page)
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, JSON_FORMAT, None),
+        return_value=(form.form_id, JSON_FORMAT, None, True),
     )
     choose_path = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
@@ -586,11 +586,11 @@ def test_the_dialog_combines_the_ticked_sheets_in_list_order(qtbot: QtBot) -> No
     dialog.move_sheet(-1)
 
     assert dialog.ok_button.isEnabled()
-    assert dialog.chosen() == (form.form_id, CSV_FORMAT, ["c", "a"])
+    assert dialog.chosen() == (form.form_id, CSV_FORMAT, ["c", "a"], True)
 
     dialog.every_button.setChecked(True)
 
-    assert dialog.chosen() == (form.form_id, CSV_FORMAT, None)
+    assert dialog.chosen() == (form.form_id, CSV_FORMAT, None, True)
 
 
 def test_combining_from_the_capture_screen(
@@ -606,7 +606,7 @@ def test_combining_from_the_capture_screen(
     qtbot.addWidget(page)
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, CSV_FORMAT, [ids["one.jpg"], ids["two.jpg"]]),
+        return_value=(form.form_id, CSV_FORMAT, [ids["one.jpg"], ids["two.jpg"]], True),
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
@@ -883,7 +883,7 @@ def test_names_set_from_the_capture_screen_are_used_by_exports(
     assert load_export_names(connection, form.form_id) == RENAMED
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, CSV_FORMAT, None),
+        return_value=(form.form_id, CSV_FORMAT, None, True),
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
@@ -907,7 +907,7 @@ def test_table_files_beside_it_are_only_replaced_if_you_say(
     qtbot.addWidget(page)
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export",
-        return_value=(form.form_id, CSV_FORMAT, None),
+        return_value=(form.form_id, CSV_FORMAT, None, True),
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
@@ -993,3 +993,88 @@ def test_the_export_dialog_warns_about_mixed_versions(
 
     assert dialog.warning.isHidden()
     assert newer.name in dialog.form_combo.currentText()
+
+
+# --- Older sheets exported with the latest version's saved values ---------------
+
+
+@pytest.fixture
+def resaved(connection: sqlite3.Connection, form: Form) -> Form:
+    """Version 2 saves "first" as 1 or nothing, and services as letters."""
+    first = Column(
+        "first",
+        answer=AnswerSpec(
+            ANSWER_TYPES.YES_NO, choices=(Choice("Y", "1"), Choice("N", ""))
+        ),
+    )
+    visits = replace(VISITS, columns=(VISITS.columns[0], first))
+    services = replace(
+        SERVICES,
+        answer=replace(
+            SERVICES.answer,
+            choices=(
+                Choice("Food", "F"),
+                Choice("Clothing", "C"),
+                Choice("Referral", "R"),
+            ),
+        ),
+    )
+    return save_form(
+        connection,
+        replace(
+            form, blocks=(FormBlock(DETAILS), FormBlock(services), FormBlock(visits))
+        ),
+    )
+
+
+def test_older_sheets_can_take_the_latest_saved_values(
+    connection: sqlite3.Connection, resaved: Form
+) -> None:
+    data = collect(connection, resaved, latest_values=True)
+
+    (sheet,) = data.sheets
+    assert sheet["form_version"] == "1"
+    assert sheet["services"] == "F;C"
+    (visits,) = data.tables
+    assert [(row["row"], row["first"]) for row in visits.rows] == [("1", "1")]
+    (document,) = data.document["sheets"]
+    assert document["answers"]["services"] == ["F", "C"]
+    # An empty bubble saves nothing now: no "no" left in the export.
+    assert "no" not in json.dumps(data.document)
+
+
+def test_or_keep_what_their_own_version_saved(
+    connection: sqlite3.Connection, resaved: Form
+) -> None:
+    data = collect(connection, resaved)
+
+    assert data.sheets[0]["services"] == "food;clothing"
+    assert [row["first"] for row in data.tables[0].rows] == ["yes"]
+
+
+def test_answers_whose_choices_dont_line_up_keep_their_values(
+    connection: sqlite3.Connection, form: Form
+) -> None:
+    services = replace(
+        SERVICES,
+        answer=replace(SERVICES.answer, choices=(Choice("Food", "F"), Choice("Other"))),
+    )
+    blocks = (FormBlock(DETAILS), FormBlock(services), FormBlock(VISITS))
+    newer = save_form(connection, replace(form, blocks=blocks))
+
+    data = collect(connection, newer, latest_values=True)
+
+    assert data.sheets[0]["services"] == "food;clothing"
+
+
+def test_the_export_dialog_uses_the_latest_values_unless_unticked(
+    qtbot: QtBot,
+) -> None:
+    form = Form(name="Shift log")
+    dialog = ExportDialog(None, [(form, 1)])
+    qtbot.addWidget(dialog)
+    assert dialog.latest_values_box.isChecked()
+
+    dialog.latest_values_box.setChecked(False)
+
+    assert dialog.chosen() == (form.form_id, CSV_FORMAT, None, False)

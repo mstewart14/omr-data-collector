@@ -160,7 +160,11 @@ engine bridge.
   default, columns added later go after the chosen order, and JSON applies
   them only to answer and detail keys, not its structure. Sheets from versions
   with different columns are named in `FormData.missing`, and the Export
-  dialog warns of them (`mixed_layout_warning`).
+  dialog warns of them (`mixed_layout_warning`). By default (a tick box in
+  the dialog) bubbles from older versions export with the latest version's
+  saved values (`collect(latest_values=True)`, `_translated`: matched by
+  answer name and bubble position, only where type and choice count agree),
+  so old printed sheets give the same data as new ones.
   CSV cells go through `spreadsheet_safe` (an apostrophe before anything a
   spreadsheet would run as a formula: values come from handwriting and file
   names), and `write_csv` never writes two files to one name.
