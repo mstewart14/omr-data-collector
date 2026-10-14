@@ -82,64 +82,96 @@ WINDOWS_RESERVED_NAMES = re.compile(
 
 # The keys of a form's outputs, for naming them: the sheets file, the JSON file,
 # and each table's file under its table's name.
-SHEETS_FILE, JSON_FILE = "sheets", "json"
+SHEETS_FILE = "sheets"
 
 
 @dataclass
 class ExportNames:
-    """Names given to a form's outputs in place of the defaults.
+    """A form's exported columns: names in place of the defaults, ones left out.
 
-    ``files`` maps an output's key (SHEETS_FILE, JSON_FILE or a table's name)
-    to a file name, without its extension; ``columns`` maps an output's key to
-    {default column name: name to use}. Anything not named keeps its default.
+    ``columns`` maps an output's key (SHEETS_FILE or a table's name) to
+    {default column name: name to use}; anything not named keeps its default.
+    ``left_out`` maps a key to the default names of columns not exported, and
+    ``order`` to the default names in the order chosen for them (columns added
+    to the form since go after, in their own order). Files are named when
+    exporting, not here.
     """
 
-    files: dict[str, str] = field(default_factory=dict)
     columns: dict[str, dict[str, str]] = field(default_factory=dict)
-
-    def file_name(self, key: str, default: str) -> str:
-        return self.files.get(key) or default
+    left_out: dict[str, list[str]] = field(default_factory=dict)
+    order: dict[str, list[str]] = field(default_factory=dict)
 
     def column(self, key: str, default: str) -> str:
         return self.columns.get(key, {}).get(default) or default
 
+    def included(self, key: str, default: str) -> bool:
+        return default not in self.left_out.get(key, ())
+
+    def ordered(self, key: str, columns: list[str]) -> list[str]:
+        """``columns`` in the chosen order, all of them, left out or not."""
+        chosen = [column for column in self.order.get(key, ()) if column in columns]
+        return [*chosen, *(column for column in columns if column not in chosen)]
+
+    def exported(self, key: str, columns: list[str]) -> list[str]:
+        """The columns written, of ``columns``, in the chosen order."""
+        return [
+            column
+            for column in self.ordered(key, columns)
+            if self.included(key, column)
+        ]
+
     def to_dict(self) -> dict[str, Any]:
-        return {"files": self.files, "columns": self.columns}
+        return {"columns": self.columns, "leftOut": self.left_out, "order": self.order}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExportNames:
+        # File names once kept here ("files") are no longer used.
         return cls(
-            files=dict(data.get("files", {})),
             columns={
                 key: dict(names) for key, names in data.get("columns", {}).items()
             },
+            left_out={
+                key: list(names) for key, names in data.get("leftOut", {}).items()
+            },
+            order={key: list(names) for key, names in data.get("order", {}).items()},
         )
 
 
 @dataclass(frozen=True)
 class OutputFile:
-    """One output a form's data is exported to, and its default names."""
+    """One file a form's data is exported to as CSV, and its default columns.
+
+    ``key`` is SHEETS_FILE or the table's name.
+    """
 
     key: str
-    default_name: str
     columns: tuple[str, ...]
 
 
-def output_files(connection: sqlite3.Connection, form: Form) -> list[OutputFile]:
-    """Every file a form's data can be exported to, with its columns.
+@dataclass(frozen=True)
+class MissingColumn:
+    """A column some of the exported sheets' form versions don't have.
 
-    The CSV files first (the sheets file, then each table's), then the JSON
-    file, whose columns are the sheets file's; its structure is fixed.
+    ``table`` is None for a sheet details field or question.
+    """
+
+    table: str | None
+    column: str
+    versions: tuple[int, ...]
+
+
+def output_files(connection: sqlite3.Connection, form: Form) -> list[OutputFile]:
+    """Every CSV file a form's data is exported to, with its columns.
+
+    The sheets file, then each table's. JSON uses the same column names.
     """
     data = collect(connection, form)
-    base = form.name
-    files = [OutputFile(SHEETS_FILE, f"{base} - sheets", tuple(data.sheet_columns))]
+    files = [OutputFile(SHEETS_FILE, tuple(data.sheet_columns))]
     for table in data.tables:
         columns = list(table.columns)
         # combined_row is only there when chosen sheets are combined.
         columns.insert(columns.index(ROW_COLUMN) + 1, COMBINED_ROW_COLUMN)
-        files.append(OutputFile(table.name, f"{base} - {table.name}", tuple(columns)))
-    files.append(OutputFile(JSON_FILE, base, ()))
+        files.append(OutputFile(table.name, tuple(columns)))
     return files
 
 
@@ -162,6 +194,9 @@ class FormData:
     document: dict[str, Any]
     # How many captured sheets went in (combined ones make one row).
     sheet_count: int = 0
+    # Columns the form versions of some of these sheets don't have, left blank
+    # for those sheets: the sheets don't all share one layout.
+    missing: list[MissingColumn] = field(default_factory=list)
 
 
 def saved_sheet_counts(connection: sqlite3.Connection) -> dict[str, int]:
@@ -201,6 +236,11 @@ def collect(
                 versions[version] = loaded
     ordered = [versions[number] for number in sorted(versions, reverse=True)]
     detail_columns, question_columns, table_columns = _columns(ordered)
+    used = {capture.form_version for capture in captures}
+    missing = _missing_columns(
+        [versions[number] for number in sorted(versions) if number in used]
+    )
+
     combined = chosen is not None
     row_columns = [ROW_COLUMN, COMBINED_ROW_COLUMN] if combined else [ROW_COLUMN]
     row_columns.append(ROW_CORRECTED_COLUMN)
@@ -252,7 +292,34 @@ def collect(
         tables=list(tables.values()),
         document=document,
         sheet_count=len(documents),
+        missing=missing,
     )
+
+
+def _missing_columns(versions: list[Form]) -> list[MissingColumn]:
+    """The columns some of ``versions`` have and others don't, latest first."""
+    if len(versions) < 2:
+        return []
+    have: dict[int, set[tuple[str | None, str]]] = {}
+    for version in versions:
+        details, questions, tables = _columns([version])
+        have[version.version] = {
+            *((None, name) for name in (*details, *questions)),
+            *((table, name) for table, names in tables.items() for name in names),
+        }
+    details, questions, tables = _columns(versions[::-1])
+    every = [
+        *((None, name) for name in (*details, *questions)),
+        *((table, name) for table, names in tables.items() for name in names),
+    ]
+    missing = []
+    for table, column in every:
+        without = tuple(
+            number for number, columns in have.items() if (table, column) not in columns
+        )
+        if without:
+            missing.append(MissingColumn(table, column, without))
+    return missing
 
 
 def _merged(rows: list[dict[str, str]], columns: list[str]) -> dict[str, str]:
@@ -322,58 +389,49 @@ def _combined_document(documents: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def write_csv(
-    data: FormData, folder: Path, names: ExportNames | None = None
-) -> list[Path]:
-    """Write the sheets file and one file per table into ``folder``.
+def csv_paths(data: FormData, path: Path) -> list[Path]:
+    """Where ``write_csv`` writes: ``path`` for the sheets, then each table's file.
 
-    ``names`` renames files and columns from their defaults.
+    A table's file goes beside it, named "<its name> - <table>.csv".
+    """
+    stem = path.stem if path.suffix.casefold() == ".csv" else path.name
+    paths = [path]
+    used = {path.name.casefold()}
+    for table in data.tables:
+        # Never one file over another, as two tables' safe names could be
+        # alike. Compared ignoring case, as Windows and macOS name files.
+        base = safe_file_name(f"{stem} - {table.name}")
+        unique, number = base, 2
+        while f"{unique}.csv".casefold() in used:
+            unique, number = f"{base} ({number})", number + 1
+        used.add(f"{unique}.csv".casefold())
+        paths.append(path.with_name(f"{unique}.csv"))
+    return paths
+
+
+def write_csv(
+    data: FormData, path: Path, names: ExportNames | None = None
+) -> list[Path]:
+    """Write the sheets file to ``path`` and each table's file beside it.
+
+    ``names`` renames columns from their defaults. Returns ``csv_paths``.
     """
     names = names or ExportNames()
-    folder.mkdir(parents=True, exist_ok=True)
-    base = data.form.name
-    outputs = [
-        (
-            names.file_name(SHEETS_FILE, f"{base} - sheets"),
-            data.sheet_columns,
-            data.sheets,
-            SHEETS_FILE,
-        ),
-        *(
-            (
-                names.file_name(table.name, f"{base} - {table.name}"),
-                table.columns,
-                table.rows,
-                table.name,
-            )
-            for table in data.tables
-        ),
-    ]
-    written: list[Path] = []
-    used: set[str] = set()
-    for name, columns, rows, key in outputs:
-        # Never one file over another: a table called "sheets" would otherwise
-        # be written over the sheets file. Compared ignoring case, as Windows
-        # and macOS name files.
-        stem = safe_file_name(name)
-        unique, number = stem, 2
-        while unique.casefold() in used:
-            unique, number = f"{stem} ({number})", number + 1
-        used.add(unique.casefold())
-        path = folder / f"{unique}.csv"
-        _write_rows(path, columns, rows, names, key)
-        written.append(path)
-    return written
+    path.parent.mkdir(parents=True, exist_ok=True)
+    paths = csv_paths(data, path)
+    _write_rows(paths[0], data.sheet_columns, data.sheets, names, SHEETS_FILE)
+    for table, table_path in zip(data.tables, paths[1:], strict=True):
+        _write_rows(table_path, table.columns, table.rows, names, table.name)
+    return paths
 
 
-def json_file_name(form: Form, names: ExportNames | None = None) -> str:
-    """The JSON file's name, extension included."""
-    name = (names or ExportNames()).file_name(JSON_FILE, form.name)
-    return f"{safe_file_name(name)}.json"
+def default_file_name(form: Form) -> str:
+    """What an export of ``form`` is called unless named otherwise, no extension."""
+    return safe_file_name(form.name)
 
 
 def write_json(data: FormData, path: Path, names: ExportNames | None = None) -> None:
-    """Write the nested data; ``names`` renames the answers' keys."""
+    """Write the nested data; ``names`` renames the answers' keys (or leaves out)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     document = _renamed_document(data.document, names or ExportNames())
     path.write_text(
@@ -386,7 +444,10 @@ def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str,
     """The JSON document with question, field and table column keys renamed."""
 
     def rename(values: dict[str, Any], key: str) -> dict[str, Any]:
-        return {names.column(key, name): value for name, value in values.items()}
+        return {
+            names.column(key, name): values[name]
+            for name in names.exported(key, list(values))
+        }
 
     def sheet(entry: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -394,7 +455,9 @@ def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str,
             "details": rename(entry["details"], SHEETS_FILE),
             "answers": rename(entry["answers"], SHEETS_FILE),
             "correctedAnswers": [
-                names.column(SHEETS_FILE, name) for name in entry["correctedAnswers"]
+                names.column(SHEETS_FILE, name)
+                for name in entry["correctedAnswers"]
+                if names.included(SHEETS_FILE, name)
             ],
             "tables": {
                 table: [
@@ -404,6 +467,7 @@ def _renamed_document(document: dict[str, Any], names: ExportNames) -> dict[str,
                         "correctedColumns": [
                             names.column(table, name)
                             for name in row["correctedColumns"]
+                            if names.included(table, name)
                         ],
                     }
                     for row in rows
@@ -438,6 +502,7 @@ def _write_rows(
     names: ExportNames,
     key: str,
 ) -> None:
+    columns = names.exported(key, columns)
     headers = [spreadsheet_safe(names.column(key, column)) for column in columns]
     with path.open("w", newline="", encoding=CSV_ENCODING) as file:
         writer = csv.writer(file)

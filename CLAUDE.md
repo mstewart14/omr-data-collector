@@ -151,9 +151,15 @@ engine bridge.
   merged sheets row (differing values all kept, `;`-joined) and their table
   rows in turn, numbered on in `combined_row`. Pages aren't linked automatically:
   sheets may be photocopied, so nothing printed can tell copies apart.
-  Files and columns can be renamed per form (Export data > Names; `ExportNames`,
-  stored by `storage/export_store.py`), keyed by their default names; blank
-  keeps the default, and JSON renames only answer keys, not its structure.
+  The file is named in a save dialog when exporting (CSV: that's the sheets
+  file, each table's beside it as "<name> - <table>.csv", `csv_paths`; asks
+  before replacing those). Columns can be chosen, reordered and renamed per
+  form (Export data > Columns; `ExportNames.columns/left_out/order`, stored by
+  `storage/export_store.py`), keyed by their default names; blank keeps the
+  default, columns added later go after the chosen order, and JSON applies
+  them only to answer and detail keys, not its structure. Sheets from versions
+  with different columns are named in `FormData.missing`, and the Export
+  dialog warns of them (`mixed_layout_warning`).
   CSV cells go through `spreadsheet_safe` (an apostrophe before anything a
   spreadsheet would run as a formula: values come from handwriting and file
   names), and `write_csv` never writes two files to one name.

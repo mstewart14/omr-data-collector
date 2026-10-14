@@ -174,7 +174,7 @@ def test_every_page_and_menu_is_translatable(
         lambda: ExportDialog(None, []),
         lambda: ExportNamesDialog(
             None,
-            [OutputFile("sheets", "Intake - sheets", ("sheet_id", "visit"))],
+            [OutputFile("sheets", ("sheet_id", "visit"))],
             ExportNames(),
         ),
     ],

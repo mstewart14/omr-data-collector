@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QEvent, QLocale, QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QLocale, QObject, QStandardPaths, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -34,7 +34,8 @@ from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES, PAPER_S
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     collect,
-    json_file_name,
+    csv_paths,
+    default_file_name,
     output_files,
     saved_sheet_counts,
     write_csv,
@@ -93,7 +94,11 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Callable
 
-    from omr_data_collector.export.data_export import ExportNames, OutputFile
+    from omr_data_collector.export.data_export import (
+        ExportNames,
+        FormData,
+        OutputFile,
+    )
     from omr_data_collector.models.AnswerSpec import AnswerSpec
     from omr_data_collector.models.Capture import Capture, CapturedAnswer
     from omr_data_collector.models.Form import Form
@@ -136,9 +141,10 @@ def choose_export(
     forms: list[tuple[Form, int]],
     sheets: dict[str, list[tuple[str, str]]],
     edit_names: Callable[[str], object],
+    layout_warning: Callable[[str, list[str] | None], str] | None = None,
 ) -> tuple[str, str, list[str] | None] | None:
     """Ask which form's data to export, which sheets and as what; None if cancelled."""
-    dialog = ExportDialog(parent, forms, sheets, edit_names)
+    dialog = ExportDialog(parent, forms, sheets, edit_names, layout_warning)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen()
@@ -177,21 +183,72 @@ def choose_export_names(
     return dialog.names()
 
 
-def choose_export_folder(parent: QWidget) -> Path | None:
-    folder = QFileDialog.getExistingDirectory(
-        parent, tr("Choose a folder for the CSV files")
-    )
-    return Path(folder) if folder else None
+def mixed_layout_warning(data: FormData) -> str:
+    """A warning if the sheets in ``data`` don't all share one layout, else ""."""
+    if not data.missing:
+        return ""
+    columns = [
+        tr('"{column}" (not on version {versions})').format(
+            column=missing.column,
+            versions=QLocale().createSeparatedList([str(v) for v in missing.versions]),
+        )
+        if missing.table is None
+        else tr('"{column}" of the table "{table}" (not on version {versions})').format(
+            column=missing.column,
+            table=missing.table,
+            versions=QLocale().createSeparatedList([str(v) for v in missing.versions]),
+        )
+        for missing in data.missing
+    ]
+    return tr(
+        "Warning: these sheets were printed from versions of the form with "
+        "different columns, so they don't all line up. Columns a sheet's version "
+        "didn't have are left blank for it: {columns}."
+    ).format(columns=QLocale().createSeparatedList(columns))
 
 
-def choose_json_path(parent: QWidget, default_name: str) -> Path | None:
+def choose_export_path(
+    parent: QWidget, file_format: str, default_path: Path
+) -> Path | None:
+    """Ask what to call the exported file and where; None if cancelled.
+
+    For CSV it's the sheets file: each table's file goes beside it.
+    """
+    if file_format == CSV_FORMAT:
+        title, filter_, suffix = (
+            tr("Export data as CSV"),
+            tr("CSV file (*.csv)"),
+            ".csv",
+        )
+    else:
+        title, filter_, suffix = (
+            tr("Export data as JSON"),
+            tr("JSON file (*.json)"),
+            ".json",
+        )
     name, _ = QFileDialog.getSaveFileName(
-        parent, tr("Export data as JSON"), default_name, tr("JSON file (*.json)")
+        parent, title, str(default_path.with_suffix(suffix)), filter_
     )
     if not name:
         return None
     path = Path(name)
-    return path if path.suffix else path.with_suffix(".json")
+    return (
+        path if path.suffix.casefold() == suffix else path.with_name(path.name + suffix)
+    )
+
+
+def confirm_replacing(parent: QWidget, paths: list[Path]) -> bool:
+    """Ask before writing over table files beside the chosen one; True to go on."""
+    if not paths:
+        return True
+    return confirm_destructive(
+        parent,
+        tr("Replace files?"),
+        tr("The tables' files beside it are there already: {files}.").format(
+            files=QLocale().createSeparatedList([path.name for path in paths])
+        ),
+        tr("&Replace them"),
+    )
 
 
 def choose_images(parent: QWidget) -> list[Path]:
@@ -226,6 +283,12 @@ class CapturePage(QWidget):
         self._answers: list[CapturedAnswer] = []
         # The row of the answer the editor is showing.
         self._editing_row: int | None = None
+        # Where exports are saved: the documents folder, then the last used.
+        self._export_folder = Path(
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DocumentsLocation
+            )
+        )
 
         # Set while the canvas and the answers list follow each other.
         self._syncing = False
@@ -404,6 +467,9 @@ class CapturePage(QWidget):
             forms,
             self._sheet_choices(forms),
             lambda form_id: self.edit_export_names(by_id[form_id]),
+            lambda form_id, combine: mixed_layout_warning(
+                collect(self._connection, by_id[form_id], combine)
+            ),
         )
         if chosen is None:
             return
@@ -411,17 +477,23 @@ class CapturePage(QWidget):
         form = by_id[form_id]
         names = load_export_names(self._connection, form.form_id)
         data = collect(self._connection, form, combine)
+        path = choose_export_path(
+            self, file_format, self._export_folder / default_file_name(form)
+        )
+        if path is None:
+            return
+        self._export_folder = path.parent
         try:
             if file_format == CSV_FORMAT:
-                folder = choose_export_folder(self)
-                if folder is None:
+                # The save dialog asked about the file named; not the others.
+                beside = [
+                    other for other in csv_paths(data, path)[1:] if other.exists()
+                ]
+                if not confirm_replacing(self, beside):
                     return
-                files = len(write_csv(data, folder, names))
-                where = str(folder)
+                files = len(write_csv(data, path, names))
+                where = str(path.parent)
             else:
-                path = choose_json_path(self, json_file_name(form, names))
-                if path is None:
-                    return
                 write_json(data, path, names)
                 files, where = 1, str(path)
         except OSError as error:
@@ -437,7 +509,7 @@ class CapturePage(QWidget):
         )
 
     def edit_export_names(self, form: Form) -> None:
-        """Export data > Names: rename a form's exported files and columns."""
+        """Export data > Columns: choose and rename a form's exported columns."""
         names = choose_export_names(
             self,
             output_files(self._connection, form),
@@ -447,7 +519,7 @@ class CapturePage(QWidget):
             return
         save_export_names(self._connection, form.form_id, names)
         self.status_message.emit(
-            tr('Saved the export names for "{form}".').format(form=form.name)
+            tr('Saved the columns to export for "{form}".').format(form=form.name)
         )
 
     def _sheet_choices(

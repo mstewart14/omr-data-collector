@@ -184,7 +184,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: ExportDialog(None, []),
         lambda: ExportNamesDialog(
             None,
-            [OutputFile("sheets", "Intake - sheets", ("sheet_id", "visit"))],
+            [OutputFile("sheets", ("sheet_id", "visit"))],
             ExportNames(),
         ),
     ],

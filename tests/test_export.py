@@ -12,12 +12,11 @@ from PySide6.QtCore import Qt
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.export.data_export import (
-    JSON_FILE,
     SHEET_COLUMNS,
     SHEETS_FILE,
     ExportNames,
+    MissingColumn,
     collect,
-    json_file_name,
     output_files,
     safe_file_name,
     saved_sheet_counts,
@@ -37,7 +36,7 @@ from omr_data_collector.storage.export_store import (
     save_export_names,
 )
 from omr_data_collector.storage.form_store import mark_printed, save_form
-from omr_data_collector.ui.CapturePage import CapturePage
+from omr_data_collector.ui.CapturePage import CapturePage, mixed_layout_warning
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, JSON_FORMAT, ExportDialog
 from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 
@@ -227,12 +226,10 @@ def test_table_rows_repeat_the_sheet_and_skip_empty_rows(
 def test_csv_files_open_in_excel_as_utf8(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    written = write_csv(collect(connection, form), tmp_path / "out")
+    written = write_csv(collect(connection, form), tmp_path / "out" / "October.csv")
 
-    assert [path.name for path in written] == [
-        "Shift log - sheets.csv",
-        "Shift log - Visits.csv",
-    ]
+    # Each table's file beside the one named, after it.
+    assert [path.name for path in written] == ["October.csv", "October - Visits.csv"]
     raw = written[0].read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf")
     with written[0].open(encoding="utf-8-sig", newline="") as file:
@@ -248,7 +245,7 @@ def test_a_typed_formula_is_kept_as_text_in_csv_but_not_json(
     add_sheet(connection, tmp_path, form, "=1+1.jpg", typed)
     data = collect(connection, form)
 
-    sheets, _ = write_csv(data, tmp_path / "out")
+    sheets, _ = write_csv(data, tmp_path / "out" / "data.csv")
     write_json(data, tmp_path / "out" / "data.json")
 
     with sheets.open(encoding="utf-8-sig", newline="") as file:
@@ -278,20 +275,21 @@ def test_only_cells_a_spreadsheet_would_run_are_changed(
     assert spreadsheet_safe(value) == written
 
 
-def test_a_table_called_sheets_doesnt_overwrite_the_sheets_file(
+def test_two_tables_never_write_one_file(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
+    tables = (replace(VISITS, name="In/out"), replace(VISITS, name="in:out"))
     form = save_form(
-        connection,
-        Form(name="Log", blocks=(FormBlock(replace(VISITS, name="sheets")),)),
+        connection, Form(name="Log", blocks=tuple(FormBlock(t) for t in tables))
     )
     mark_printed(connection, form.form_id, form.version)
 
-    written = write_csv(collect(connection, form), tmp_path)
+    written = write_csv(collect(connection, form), tmp_path / "Log.csv")
 
     assert [path.name for path in written] == [
-        "Log - sheets.csv",
-        "Log - sheets (2).csv",
+        "Log.csv",
+        "Log - In-out.csv",
+        "Log - in-out (2).csv",
     ]
 
 
@@ -433,21 +431,24 @@ def test_exporting_csv_from_the_capture_screen(
         "omr_data_collector.ui.CapturePage.choose_export",
         return_value=(form.form_id, CSV_FORMAT, None),
     )
-    mocker.patch(
-        "omr_data_collector.ui.CapturePage.choose_export_folder",
-        return_value=tmp_path / "export",
+    choose_path = mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        return_value=tmp_path / "export" / "October.csv",
     )
     messages: list[str] = []
     page.status_message.connect(messages.append)
 
     page.export_data()
 
-    ((_, forms, sheets, _), _) = choose.call_args
+    ((_, file_format, suggested), _) = choose_path.call_args
+    assert (file_format, suggested.name) == (CSV_FORMAT, "Shift log")
+    ((_, forms, sheets, _, _), _) = choose.call_args
     assert [(f.name, count) for f, count in forms] == [("Shift log", 1)]
     ((_, description),) = sheets[form.form_id]
     assert description.startswith("one.jpg: page 1, captured ")
     assert description.endswith("Date 2026/10/08 and Shift night")
-    assert (tmp_path / "export" / "Shift log - sheets.csv").exists()
+    assert (tmp_path / "export" / "October.csv").exists()
+    assert (tmp_path / "export" / "October - Visits.csv").exists()
     assert messages == [
         f'Exported 1 sheet of "Shift log". Wrote 2 files to {tmp_path / "export"}.'
     ]
@@ -467,13 +468,14 @@ def test_exporting_json_from_the_capture_screen(
         return_value=(form.form_id, JSON_FORMAT, None),
     )
     choose_path = mocker.patch(
-        "omr_data_collector.ui.CapturePage.choose_json_path",
+        "omr_data_collector.ui.CapturePage.choose_export_path",
         return_value=tmp_path / "shift.json",
     )
 
     page.export_data()
 
-    choose_path.assert_called_once_with(page, "Shift log.json")
+    ((_, file_format, suggested), _) = choose_path.call_args
+    assert (file_format, suggested.name) == (JSON_FORMAT, "Shift log")
     assert json.loads((tmp_path / "shift.json").read_text())["sheets"]
 
 
@@ -596,15 +598,15 @@ def test_combining_from_the_capture_screen(
         return_value=(form.form_id, CSV_FORMAT, [ids["one.jpg"], ids["two.jpg"]]),
     )
     mocker.patch(
-        "omr_data_collector.ui.CapturePage.choose_export_folder",
-        return_value=tmp_path / "export",
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        return_value=tmp_path / "export" / "Shift log.csv",
     )
     messages: list[str] = []
     page.status_message.connect(messages.append)
 
     page.export_data()
 
-    with (tmp_path / "export" / "Shift log - sheets.csv").open(
+    with (tmp_path / "export" / "Shift log.csv").open(
         encoding="utf-8-sig", newline=""
     ) as file:
         (row,) = list(csv.DictReader(file))
@@ -612,19 +614,15 @@ def test_combining_from_the_capture_screen(
     assert messages[0].startswith('Exported 2 sheets of "Shift log".')
 
 
-# --- Export names ------------------------------------------------------------------
+# --- Export columns: chosen, ordered and renamed ----------------------------------
 
 
-def test_the_outputs_and_their_default_names(
+def test_the_files_and_their_columns(
     connection: sqlite3.Connection, form: Form
 ) -> None:
     files = output_files(connection, form)
 
-    assert [(f.key, f.default_name) for f in files] == [
-        (SHEETS_FILE, "Shift log - sheets"),
-        ("Visits", "Shift log - Visits"),
-        (JSON_FILE, "Shift log"),
-    ]
+    assert [f.key for f in files] == [SHEETS_FILE, "Visits"]
     assert files[0].columns[-3:] == ("Date", "Shift", "services")
     first_row_column = len(SHEET_COLUMNS)
     assert files[1].columns[first_row_column : first_row_column + 3] == (
@@ -635,7 +633,6 @@ def test_the_outputs_and_their_default_names(
 
 
 RENAMED = ExportNames(
-    files={SHEETS_FILE: "intake", "Visits": "visits", JSON_FILE: "intake data"},
     columns={
         SHEETS_FILE: {"sheet_id": "id", "services": "Services used"},
         "Visits": {"time": "Time of visit"},
@@ -643,12 +640,11 @@ RENAMED = ExportNames(
 )
 
 
-def test_csv_files_and_columns_take_their_export_names(
+def test_csv_columns_take_their_export_names(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    written = write_csv(collect(connection, form), tmp_path, RENAMED)
+    written = write_csv(collect(connection, form), tmp_path / "intake.csv", RENAMED)
 
-    assert [path.name for path in written] == ["intake.csv", "visits.csv"]
     with written[0].open(encoding="utf-8-sig", newline="") as file:
         (row,) = list(csv.DictReader(file))
     assert row["id"]
@@ -662,24 +658,68 @@ def test_csv_files_and_columns_take_their_export_names(
 def test_json_takes_the_export_names(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    path = tmp_path / json_file_name(form, RENAMED)
+    path = tmp_path / "intake data.json"
 
     write_json(collect(connection, form), path, RENAMED)
 
-    assert path.name == "intake data.json"
     (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
     assert sheet["answers"] == {"Services used": ["food", "clothing"]}
     assert sheet["tables"]["Visits"][0]["values"]["Time of visit"] == "09:30"
+
+
+CHOSEN = ExportNames(
+    left_out={SHEETS_FILE: ["sheet_file", "Shift"], "Visits": ["first"]},
+    order={SHEETS_FILE: ["services", "Date"]},
+)
+
+
+def test_csv_has_only_the_chosen_columns_in_the_chosen_order(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    sheets, visits = write_csv(collect(connection, form), tmp_path / "a.csv", CHOSEN)
+
+    with sheets.open(encoding="utf-8-sig", newline="") as file:
+        header = next(csv.reader(file))
+    # The columns ordered first, then the rest in their own order.
+    assert header[:3] == ["services", "Date", "sheet_id"]
+    assert "sheet_file" not in header
+    assert "Shift" not in header
+    with visits.open(encoding="utf-8-sig", newline="") as file:
+        assert "first" not in next(csv.reader(file))
+
+
+def test_json_has_only_the_chosen_answers_in_the_chosen_order(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> None:
+    path = tmp_path / "a.json"
+    names = replace(CHOSEN, order={SHEETS_FILE: ["Shift", "Date"]}, left_out={})
+
+    write_json(collect(connection, form), path, CHOSEN)
+    (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
+    assert list(sheet["details"]) == ["Date"]
+    assert "sheetFile" in sheet  # its structure is fixed
+    assert list(sheet["tables"]["Visits"][0]["values"]) == ["time"]
+
+    write_json(collect(connection, form), path, names)
+    (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
+    assert list(sheet["details"]) == ["Shift", "Date"]
 
 
 def test_export_names_are_kept_for_the_form(
     connection: sqlite3.Connection, form: Form
 ) -> None:
     assert load_export_names(connection, form.form_id) == ExportNames()
+    both = replace(CHOSEN, columns=RENAMED.columns)
 
-    save_export_names(connection, form.form_id, RENAMED)
+    save_export_names(connection, form.form_id, both)
 
-    assert load_export_names(connection, form.form_id) == RENAMED
+    assert load_export_names(connection, form.form_id) == both
+
+
+def test_file_names_kept_by_earlier_versions_are_ignored() -> None:
+    old = {"files": {SHEETS_FILE: "intake"}, "columns": {SHEETS_FILE: {"a": "b"}}}
+
+    assert ExportNames.from_dict(old) == ExportNames(columns={SHEETS_FILE: {"a": "b"}})
 
 
 def names_dialog(
@@ -694,7 +734,7 @@ def row_named(dialog: ExportNamesDialog, key: str, default: str) -> int:
     return next(
         row
         for row in range(dialog.table.rowCount())
-        if dialog._row_data(row)[1:] == (key, default)  # noqa: SLF001
+        if dialog._row_data(row) == (key, default)  # noqa: SLF001
     )
 
 
@@ -704,11 +744,20 @@ def name_cell(dialog: ExportNamesDialog, key: str, default: str) -> QTableWidget
     return item
 
 
+def tick_cell(dialog: ExportNamesDialog, key: str, default: str) -> QTableWidgetItem:
+    item = dialog.table.item(row_named(dialog, key, default), 1)
+    assert item is not None
+    return item
+
+
 def test_the_names_dialog_keeps_only_changed_names(
     qtbot: QtBot, connection: sqlite3.Connection, form: Form
 ) -> None:
     dialog = names_dialog(qtbot, connection, form, RENAMED)
-    assert name_cell(dialog, SHEETS_FILE, "Shift log - sheets").text() == "intake"
+    assert name_cell(dialog, SHEETS_FILE, "services").text() == "Services used"
+    first = dialog.table.item(0, 0)
+    assert first is not None
+    assert first.text() == "Sheets"  # only columns are listed
 
     name_cell(dialog, SHEETS_FILE, "Date").setText("Date")
     name_cell(dialog, SHEETS_FILE, "Shift").setText(" shift ")
@@ -721,6 +770,52 @@ def test_the_names_dialog_keeps_only_changed_names(
         "services": "Services used",
         "Shift": "shift",
     }
+    assert accepted.left_out == {}
+    assert accepted.order == {}
+
+
+def test_the_names_dialog_chooses_and_orders_the_columns(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+    assert tick_cell(dialog, SHEETS_FILE, "Shift").checkState() == Qt.CheckState.Checked
+
+    tick_cell(dialog, SHEETS_FILE, "Shift").setCheckState(Qt.CheckState.Unchecked)
+    dialog.table.setCurrentCell(row_named(dialog, SHEETS_FILE, "services"), 2)
+    assert not dialog.move_down_button.isEnabled()  # the sheets file's last
+    dialog.move_column(-1)
+    dialog.accept()
+
+    accepted = dialog.names()
+    assert accepted is not None
+    assert accepted.left_out == {SHEETS_FILE: ["Shift"]}
+    assert accepted.order[SHEETS_FILE][-3:] == ["Date", "services", "Shift"]
+    assert "Visits" not in accepted.order
+
+    # Shown as kept, and Reset puts every column back, in its own order.
+    again = names_dialog(qtbot, connection, form, accepted)
+    assert row_named(again, SHEETS_FILE, "services") < row_named(
+        again, SHEETS_FILE, "Shift"
+    )
+    assert tick_cell(again, SHEETS_FILE, "Shift").checkState() == (
+        Qt.CheckState.Unchecked
+    )
+    again.reset()
+    again.accept()
+    assert again.names() == ExportNames()
+
+
+def test_a_column_only_moves_among_its_own_files(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+    first_of_visits = row_named(dialog, "Visits", "sheet_id")
+    dialog.table.setCurrentCell(first_of_visits, 2)
+
+    dialog.move_column(-1)
+
+    assert not dialog.move_up_button.isEnabled()
+    assert dialog.table.currentRow() == first_of_visits
 
 
 def test_the_names_dialog_refuses_two_columns_with_one_name(
@@ -733,25 +828,29 @@ def test_the_names_dialog_refuses_two_columns_with_one_name(
 
     assert dialog.names() is None
     assert dialog.error_label.text() == (
-        'Two columns of "Shift log - sheets" would both be called "date".'
+        'Two columns of the sheets file would both be called "date".'
     )
 
-    dialog.reset()
+    # A column left out takes no name.
+    tick_cell(dialog, SHEETS_FILE, "Date").setCheckState(Qt.CheckState.Unchecked)
     dialog.accept()
+    assert dialog.names() is not None
 
-    assert dialog.names() == ExportNames()
 
-
-def test_the_names_dialog_refuses_two_files_with_one_name(
+def test_the_names_dialog_needs_a_column_in_each_file(
     qtbot: QtBot, connection: sqlite3.Connection, form: Form
 ) -> None:
     dialog = names_dialog(qtbot, connection, form, ExportNames())
+    for row in range(dialog.table.rowCount()):
+        key, default = dialog._row_data(row)  # noqa: SLF001
+        if key == "Visits":
+            tick_cell(dialog, key, default).setCheckState(Qt.CheckState.Unchecked)
 
-    name_cell(dialog, "Visits", "Shift log - Visits").setText("Shift log - sheets")
     dialog.accept()
 
+    assert dialog.names() is None
     assert dialog.error_label.text() == (
-        'Two files would both be called "Shift log - sheets".'
+        'Tick at least one column of the table "Visits".'
     )
 
 
@@ -776,10 +875,110 @@ def test_names_set_from_the_capture_screen_are_used_by_exports(
         return_value=(form.form_id, CSV_FORMAT, None),
     )
     mocker.patch(
-        "omr_data_collector.ui.CapturePage.choose_export_folder",
-        return_value=tmp_path / "export",
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        return_value=tmp_path / "export" / "intake.csv",
     )
 
     page.export_data()
 
-    assert (tmp_path / "export" / "intake.csv").exists()
+    with (tmp_path / "export" / "intake.csv").open(encoding="utf-8-sig") as file:
+        assert "Services used" in file.readline()
+
+
+def test_table_files_beside_it_are_only_replaced_if_you_say(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    form: Form,
+    tmp_path: Path,
+) -> None:
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export",
+        return_value=(form.form_id, CSV_FORMAT, None),
+    )
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        return_value=tmp_path / "Log.csv",
+    )
+    (tmp_path / "Log - Visits.csv").write_text("keep me")
+    confirm = mocker.patch(
+        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=False
+    )
+
+    page.export_data()
+
+    assert "Log - Visits.csv" in confirm.call_args.args[2]
+    assert (tmp_path / "Log - Visits.csv").read_text() == "keep me"
+    assert not (tmp_path / "Log.csv").exists()
+
+    confirm.return_value = True
+    page.export_data()
+
+    assert (tmp_path / "Log - Visits.csv").read_text() != "keep me"
+
+
+# --- Sheets from versions with different columns -------------------------------------
+
+
+@pytest.fixture
+def two_versions(
+    connection: sqlite3.Connection, form: Form, tmp_path: Path
+) -> tuple[Form, dict[str, str]]:
+    """Version 2 adds the question "notes"; a sheet from each version."""
+    extra = Question("notes", "Notes", answer=AnswerSpec(ANSWER_TYPES.WRITTEN))
+    newer = save_form(
+        connection, replace(form, blocks=(*form.blocks, FormBlock(extra)))
+    )
+    add_sheet(connection, tmp_path, newer, "two.jpg", {(3, None, None): ("ok",)})
+    return newer, ids_by_file(connection)
+
+
+def test_sheets_from_versions_with_different_columns_are_named(
+    connection: sqlite3.Connection, two_versions: tuple[Form, dict[str, str]]
+) -> None:
+    newer, ids = two_versions
+
+    data = collect(connection, newer)
+
+    assert data.missing == [MissingColumn(None, "notes", (1,))]
+    assert mixed_layout_warning(data) == (
+        "Warning: these sheets were printed from versions of the form with "
+        "different columns, so they don't all line up. Columns a sheet's version "
+        'didn\'t have are left blank for it: "notes" (not on version 1).'
+    )
+    # One version's sheets alone share their layout.
+    assert collect(connection, newer, [ids["two.jpg"]]).missing == []
+    assert mixed_layout_warning(collect(connection, newer, [ids["one.jpg"]])) == ""
+
+
+def test_the_export_dialog_warns_about_mixed_versions(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    two_versions: tuple[Form, dict[str, str]],
+) -> None:
+    newer, _ = two_versions
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    shown: list[ExportDialog] = []
+
+    def look(dialog: ExportDialog) -> int:
+        shown.append(dialog)
+        return 0  # cancelled
+
+    mocker.patch.object(ExportDialog, "exec", look)
+
+    page.export_data()
+
+    (dialog,) = shown
+    assert dialog.warning.text().startswith("Warning: these sheets were printed")
+    assert not dialog.warning.isHidden()
+    assert dialog.ok_button.accessibleDescription() == dialog.warning.text()
+
+    dialog.chosen_button.setChecked(True)
+    dialog.sheet_list.item(1).setCheckState(Qt.CheckState.Checked)  # two.jpg
+
+    assert dialog.warning.isHidden()
+    assert newer.name in dialog.form_combo.currentText()

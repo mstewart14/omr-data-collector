@@ -53,16 +53,20 @@ class ExportDialog(QDialog):
         forms: Sequence[tuple[Form, int]],
         sheets: Mapping[str, Sequence[tuple[str, str]]] | None = None,
         edit_names: Callable[[str], object] | None = None,
+        layout_warning: Callable[[str, list[str] | None], str] | None = None,
     ) -> None:
         """``forms`` are the forms with checked sheets and how many each has.
 
         ``sheets`` are each form's checked sheets, by form ID, as (capture ID,
-        description) in the order they were added. ``edit_names`` opens the names
-        of a form's outputs (by form ID) for renaming.
+        description) in the order they were added. ``edit_names`` opens a form's
+        columns (by form ID) to choose and rename. ``layout_warning`` says, for
+        a form ID and the sheets chosen (None for all), if those sheets don't
+        share one layout ("" if they do).
         """
         super().__init__(parent)
         self.setWindowTitle(tr("Export data"))
         self._sheets = sheets or {}
+        self._layout_warning = layout_warning
         self.form_combo = QComboBox()
         for form, count in forms:
             self.form_combo.addItem(
@@ -72,9 +76,9 @@ class ExportDialog(QDialog):
         self.format_combo = QComboBox()
         for value, label in format_labels().items():
             self.format_combo.addItem(label, value)
-        self.names_button = QPushButton(tr("&Names…"))
+        self.names_button = QPushButton(tr("&Columns…"))
         self.names_button.setToolTip(
-            tr("Rename the files and columns this form's data is exported to")
+            tr("Choose which of this form's columns are exported, and rename them")
         )
         self.names_button.setEnabled(bool(forms) and edit_names is not None)
         if edit_names is not None:
@@ -100,6 +104,9 @@ class ExportDialog(QDialog):
             )
         )
         self.note.setWordWrap(True)
+        self.warning = QLabel()
+        self.warning.setWordWrap(True)
+        self.warning.setVisible(False)
 
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -117,6 +124,7 @@ class ExportDialog(QDialog):
         layout.addWidget(self.sheet_list)
         layout.addWidget(moves)
         layout.addWidget(self.note)
+        layout.addWidget(self.warning)
         layout.addWidget(self.buttons)
 
         self.form_combo.currentIndexChanged.connect(self._fill_sheets)
@@ -238,4 +246,14 @@ class ExportDialog(QDialog):
             choosing and 0 <= row < self.sheet_list.count() - 1
         )
         has_forms = self.form_combo.count() > 0
-        self.ok_button.setEnabled(has_forms and (not choosing or bool(self._ticked())))
+        ready = has_forms and (not choosing or bool(self._ticked()))
+        self.ok_button.setEnabled(ready)
+        warning = ""
+        if ready and self._layout_warning is not None:
+            warning = self._layout_warning(
+                self.form_combo.currentData(), self._ticked() if choosing else None
+            )
+        self.warning.setText(warning)
+        self.warning.setVisible(bool(warning))
+        # Read out with the Export button, so it's heard before exporting.
+        self.ok_button.setAccessibleDescription(warning)
