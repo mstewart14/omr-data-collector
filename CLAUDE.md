@@ -140,7 +140,8 @@ engine bridge.
   since people can mark a short form alike.
 - **Export** (`export/data_export.py`, Capture > Export data): a form's saved
   captures, from every version, as a sheets CSV (sheet columns, sheet details,
-  questions) plus a CSV per table (one row per filled row, repeating the sheet
+  questions) plus a CSV per table (one row per filled row: something marked or
+  written, so an empty yes/no's "left empty" value doesn't count; repeating the sheet
   and its details), or one JSON file nesting the same. Each sheet and table row
   counts its answers changed by hand (`corrected_answers`,
   `row_corrected_answers`); the JSON names them. The columns describing

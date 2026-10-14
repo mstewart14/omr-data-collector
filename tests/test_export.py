@@ -150,7 +150,7 @@ SHEET_ONE = {
     (2, 0, 0): ("09:30",),
     (2, 0, 1): ("yes",),
     (2, 1, 0): (),
-    (2, 1, 1): ("no",),  # an empty yes/no bubble reads as "no"
+    (2, 1, 1): ("no",),  # an empty yes/no bubble: its "left empty" value
     (2, 2, 0): (),
     (2, 2, 1): (),
 }
@@ -218,9 +218,24 @@ def test_table_rows_repeat_the_sheet_and_skip_empty_rows(
     ]
     assert [(row["row"], row["time"], row["first"]) for row in visits.rows] == [
         ("1", "09:30", "yes"),
-        ("2", "", "no"),
+        # Row 2 has only an empty yes/no bubble ("no"): nothing filled in.
     ]
     assert {row["Shift"] for row in visits.rows} == {"night"}
+
+
+def test_a_row_of_only_empty_yes_no_bubbles_isnt_exported(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = saved_form(connection)
+    marked = {**SHEET_ONE, (2, 2, 1): ("yes",)}  # row 3: only its bubble marked
+    add_sheet(connection, tmp_path, form, "a.jpg", marked)
+
+    (visits,) = collect(connection, form).tables
+
+    assert [(row["row"], row["first"]) for row in visits.rows] == [
+        ("1", "yes"),
+        ("3", "yes"),
+    ]
 
 
 def test_csv_files_open_in_excel_as_utf8(
@@ -323,7 +338,7 @@ def test_json_nests_each_sheets_data(
     assert sheet["correctedAnswers"] == []
     assert sheet["tables"]["Visits"] == [
         {"row": 1, "values": {"time": "09:30", "first": "yes"}, "correctedColumns": []},
-        {"row": 2, "values": {"time": "", "first": "no"}, "correctedColumns": []},
+        # Row 2 has only an empty yes/no bubble: not filled in, so not listed.
     ]
 
 
@@ -346,7 +361,7 @@ def test_answers_changed_by_hand_are_counted(
 
     assert data.sheets[0]["corrected_answers"] == "2"
     (visits,) = data.tables
-    assert [row["row_corrected_answers"] for row in visits.rows] == ["1", "0"]
+    assert [row["row_corrected_answers"] for row in visits.rows] == ["1"]
     assert {row["corrected_answers"] for row in visits.rows} == {"2"}
 
 
@@ -361,10 +376,7 @@ def test_json_names_the_answers_changed_by_hand(
 
     (sheet,) = json.loads(path.read_text(encoding="utf-8"))["sheets"]
     assert sheet["correctedAnswers"] == ["Services used"]
-    assert [row["correctedColumns"] for row in sheet["tables"]["Visits"]] == [
-        ["first"],
-        [],
-    ]
+    assert [row["correctedColumns"] for row in sheet["tables"]["Visits"]] == [["first"]]
 
 
 def test_combined_sheets_add_up_their_changes(
@@ -524,7 +536,6 @@ def test_chosen_sheets_combine_into_one_in_the_order_given(
     ] == [
         ("two.jpg", "1", "1", "23:10"),
         ("one.jpg", "1", "2", "09:30"),
-        ("one.jpg", "2", "3", ""),
     ]
 
 
@@ -541,7 +552,7 @@ def test_combined_values_that_differ_are_all_kept(
     combined = data.document["combined"]
     assert combined["details"]["Date"] == ["2026/10/08", "2026/10/09"]
     assert combined["details"]["Shift"] == "night"
-    assert [row["combinedRow"] for row in combined["tables"]["Visits"]] == [1, 2, 3]
+    assert [row["combinedRow"] for row in combined["tables"]["Visits"]] == [1, 2]
 
 
 def test_only_saved_sheets_can_be_combined(

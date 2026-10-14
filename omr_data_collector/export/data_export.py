@@ -547,6 +547,8 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
     # Sheet details fields and questions changed by hand.
     corrected: list[str] = []
     tables: dict[str, dict[int, dict[str, Any]]] = {}
+    # The table rows with something marked or written on them.
+    filled_in: set[tuple[str, int]] = set()
     # Each table row's columns changed by hand.
     corrected_cells: dict[str, dict[int, list[str]]] = {}
     for answer in capture.answers:
@@ -570,6 +572,8 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
             column = content.columns[answer.column]
             row = tables.setdefault(content.name, {}).setdefault(answer.table_row, {})
             row[column.name] = _value(column.answer, answer.values)
+            if _filled_in(column.answer, answer.values):
+                filled_in.add((content.name, answer.table_row))
             cells = corrected_cells.setdefault(content.name, {})
             changed = cells.setdefault(answer.table_row, [])
             if answer.changed_by_hand(column.answer):
@@ -590,7 +594,7 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         name: [
             (number + 1, values, corrected_cells.get(name, {}).get(number, []))
             for number, values in sorted(rows.items())
-            if any(values.values())
+            if (name, number) in filled_in
         ]
         for name, rows in tables.items()
     }
@@ -613,6 +617,19 @@ def _sheet(capture: Capture, form: Form) -> tuple[dict[str, Any], dict[str, Any]
         },
     }
     return grouped, document
+
+
+def _filled_in(spec: AnswerSpec, values: tuple[str, ...]) -> bool:
+    """Whether an answer was marked or written, not just left empty.
+
+    A yes/no bubble left empty saves its "left empty" value, which on its own
+    doesn't make a table row filled in.
+    """
+    if not any(values):
+        return False
+    if spec.answer_type == ANSWER_TYPES.YES_NO and len(spec.choices) > 1:
+        return values != (spec.choices[1].output,)
+    return True
 
 
 def _value(spec: AnswerSpec, values: tuple[str, ...]) -> str | list[str]:
