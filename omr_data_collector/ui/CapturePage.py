@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,8 +36,8 @@ from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     collect,
     csv_paths,
-    default_file_name,
     output_files,
+    safe_file_name,
     saved_sheet_counts,
     write_csv,
     write_json,
@@ -205,6 +206,19 @@ def mixed_layout_warning(data: FormData) -> str:
         "different columns, so they don't all line up. Columns a sheet's version "
         "didn't have are left blank for it: {columns}."
     ).format(columns=QLocale().createSeparatedList(columns))
+
+
+def default_file_name(form: Form, now: datetime | None = None) -> str:
+    """What an export of ``form`` is called unless named otherwise, no extension.
+
+    It starts with the local date and time (``now``), so exports sort in order.
+    """
+    now = now or datetime.now().astimezone()
+    return safe_file_name(
+        tr("{time} {name} v{version}", "Export file name").format(
+            time=now.strftime("%Y-%m-%d %H%M"), name=form.name, version=form.version
+        )
+    )
 
 
 def choose_export_path(

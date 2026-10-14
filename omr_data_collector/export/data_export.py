@@ -436,11 +436,6 @@ def write_csv(
     return paths
 
 
-def default_file_name(form: Form) -> str:
-    """What an export of ``form`` is called unless named otherwise, no extension."""
-    return safe_file_name(form.name)
-
-
 def write_json(data: FormData, path: Path, names: ExportNames | None = None) -> None:
     """Write the nested data; ``names`` renames the answers' keys (or leaves out)."""
     path.parent.mkdir(parents=True, exist_ok=True)

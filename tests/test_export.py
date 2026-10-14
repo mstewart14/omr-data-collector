@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import replace
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -36,7 +37,11 @@ from omr_data_collector.storage.export_store import (
     save_export_names,
 )
 from omr_data_collector.storage.form_store import mark_printed, save_form
-from omr_data_collector.ui.CapturePage import CapturePage, mixed_layout_warning
+from omr_data_collector.ui.CapturePage import (
+    CapturePage,
+    default_file_name,
+    mixed_layout_warning,
+)
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, JSON_FORMAT, ExportDialog
 from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 
@@ -236,6 +241,13 @@ def test_a_row_of_only_empty_yes_no_bubbles_isnt_exported(
         ("1", "yes"),
         ("3", "yes"),
     ]
+
+
+def test_an_export_is_named_for_when_and_which_form_version() -> None:
+    form = Form(name="Outside / Tents", version=3)
+    now = datetime(2026, 10, 14, 9, 5).astimezone()
+
+    assert default_file_name(form, now) == "2026-10-14 0905 Outside - Tents v3"
 
 
 def test_csv_files_open_in_excel_as_utf8(
@@ -453,7 +465,7 @@ def test_exporting_csv_from_the_capture_screen(
     page.export_data()
 
     ((_, file_format, suggested), _) = choose_path.call_args
-    assert (file_format, suggested.name) == (CSV_FORMAT, "Shift log")
+    assert (file_format, suggested.name[16:]) == (CSV_FORMAT, "Shift log v1")
     ((_, forms, sheets, _, _), _) = choose.call_args
     assert [(f.name, count) for f, count in forms] == [("Shift log", 1)]
     ((_, description),) = sheets[form.form_id]
@@ -487,7 +499,7 @@ def test_exporting_json_from_the_capture_screen(
     page.export_data()
 
     ((_, file_format, suggested), _) = choose_path.call_args
-    assert (file_format, suggested.name) == (JSON_FORMAT, "Shift log")
+    assert (file_format, suggested.name[16:]) == (JSON_FORMAT, "Shift log v1")
     assert json.loads((tmp_path / "shift.json").read_text())["sheets"]
 
 
