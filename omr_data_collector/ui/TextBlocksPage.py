@@ -25,6 +25,8 @@ class TextBlocksPage(LibraryPage):
     10001-10005).
     """
 
+    COPIED_INTO_FORMS = True
+
     def texts(self) -> LibraryTexts:
         return LibraryTexts(
             list_label=tr("Text &blocks"),

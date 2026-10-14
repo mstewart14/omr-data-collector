@@ -9,6 +9,8 @@ from omr_data_collector.models.Form import Form
 if TYPE_CHECKING:
     import sqlite3
 
+    from omr_data_collector.models.Form import BlockContent
+
 
 def list_forms(connection: sqlite3.Connection) -> list[Form]:
     """Every form at its latest version, sorted by name ignoring case."""
@@ -88,6 +90,44 @@ def save_form(connection: sqlite3.Connection, form: Form) -> Form:
                 (form.form_id, version, definition),
             )
     return replace(form, version=version)
+
+
+def forms_with_other_copies(
+    connection: sqlite3.Connection, source_id: str, content: BlockContent
+) -> list[Form]:
+    """Forms, at their latest version, with a copy of a library block unlike ``content``.
+
+    ``source_id`` is the library block's ID (``FormBlock.source_id``): these are
+    the forms that saving it everywhere would change (wiki 50012).
+    """
+    return [
+        form
+        for form in list_forms(connection)
+        if any(
+            block.source_id == source_id and block.content != content
+            for block in form.blocks
+        )
+    ]
+
+
+def update_copies(
+    connection: sqlite3.Connection, source_id: str, content: BlockContent
+) -> list[tuple[Form, bool]]:
+    """Put ``content`` in place of every form's copy of library block ``source_id``.
+
+    Each changed form is saved as ``save_form`` does: in place, or as a new
+    version when its latest has been printed, so sheets already printed still
+    scan. Returns each form as saved, and whether it got a new version.
+    """
+    saved = []
+    for form in forms_with_other_copies(connection, source_id, content):
+        blocks = tuple(
+            replace(block, content=content) if block.source_id == source_id else block
+            for block in form.blocks
+        )
+        stored = save_form(connection, replace(form, blocks=blocks))
+        saved.append((stored, stored.version != form.version))
+    return saved
 
 
 def mark_printed(

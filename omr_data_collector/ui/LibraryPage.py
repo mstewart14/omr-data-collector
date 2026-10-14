@@ -29,11 +29,17 @@ from PySide6.QtWidgets import (
 
 from omr_data_collector.i18n import tr
 from omr_data_collector.models.naming import copy_name
+from omr_data_collector.storage.form_store import (
+    forms_with_other_copies,
+    update_copies,
+)
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.form_helpers import (
+    ChangeWhere,
     add_field_row,
     add_shortcut,
     ask_save_discard_cancel,
+    ask_where_to_change,
     confirm_destructive,
 )
 
@@ -79,6 +85,9 @@ class LibraryPage(QWidget):
 
     # Off for pages whose items are opened another way (forms, from File > Open).
     SHOW_LIBRARY = True
+    # On for blocks forms take copies of: saving one asks whether the forms'
+    # copies change too (wiki 50012).
+    COPIED_INTO_FORMS = False
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
@@ -182,7 +191,12 @@ class LibraryPage(QWidget):
             if self.item_id(other) != self._editing_id
         }
         errors = item.validation_errors(other_names)
+        where = ChangeWhere.GOING_FORWARD
         if not errors:
+            where = self._ask_where_to_change(item)
+            if where is None:
+                self.status_message.emit(tr("Not saved."))
+                return False
             try:
                 self.store_item(item)
             except sqlite3.IntegrityError:
@@ -207,8 +221,47 @@ class LibraryPage(QWidget):
             item,
         )
         self._edit(stored)
-        self.status_message.emit(self.saved_message(stored))
+        message = self.saved_message(stored)
+        if where == ChangeWhere.EVERYWHERE:
+            message = f"{message} {self._change_everywhere(stored)}"
+        self.status_message.emit(message)
         return True
+
+    def _ask_where_to_change(self, item: Any) -> ChangeWhere | None:  # noqa: ANN401
+        """For a saved library block that forms have copies of, ask where it goes.
+
+        Nothing to ask for a new block, or one no form's copy differs from.
+        """
+        if not self.COPIED_INTO_FORMS or self._current is None:
+            return ChangeWhere.GOING_FORWARD
+        forms = forms_with_other_copies(self._connection, self.item_id(item), item)
+        if not forms:
+            return ChangeWhere.GOING_FORWARD
+        names = ", ".join(f'"{form.name}"' for form in forms)
+        return ask_where_to_change(
+            self,
+            tr('"{name}" is on %n form(s): {forms}.', None, len(forms)).format(
+                name=item.name, forms=names
+            ),
+            tr(
+                "Going forward only: those forms keep the copy they have, and forms "
+                "it's added to from now on get this one. Everywhere: their copies "
+                "change too, replacing any change made to them on the form. A form "
+                "that has been printed gets a new version, so the sheets already "
+                "printed from it still scan."
+            ),
+        )
+
+    def _change_everywhere(self, item: Any) -> str:  # noqa: ANN401
+        """Put ``item`` into the forms with copies of it; says what changed."""
+        saved = update_copies(self._connection, self.item_id(item), item)
+        new_versions = sum(1 for _form, is_new in saved if is_new)
+        message = tr("Changed on %n form(s) too.", None, len(saved))
+        if new_versions:
+            message += " " + tr(
+                "%n had been printed and got a new version.", None, new_versions
+            )
+        return message
 
     def open_item(self, item_id: str) -> bool:
         """Open a saved item, asking about unsaved changes first; False if not."""

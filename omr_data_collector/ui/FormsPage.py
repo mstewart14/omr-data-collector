@@ -573,10 +573,32 @@ class FormsPage(LibraryPage):
             self._edit_block_at(index)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 (Qt override)
-        # The libraries may have changed in their own sections meanwhile.
+        # The libraries may have changed in their own sections meanwhile, and
+        # with them the open form's copies ("Change everywhere").
         self.refresh_palette()
+        self._reload_if_changed_elsewhere()
         self._refresh_pages()
         super().showEvent(event)
+
+    def _reload_if_changed_elsewhere(self) -> None:
+        """Show the open form as stored, if it changed and nothing here is unsaved.
+
+        With unsaved changes the person's own edits stay on screen.
+        """
+        if self._current is None or self.has_unsaved_changes():
+            return
+        stored = next(
+            (
+                form
+                for form in list_forms(self._connection)
+                if form.form_id == self._current.form_id
+            ),
+            None,
+        )
+        if stored is not None and stored != self._current:
+            self._reload_list()
+            self._select(stored.form_id)
+            self._edit(stored)
 
     def open_from_list(self) -> None:
         """File > Open form: pick a saved form and open it here."""

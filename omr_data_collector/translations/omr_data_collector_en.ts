@@ -94,6 +94,27 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>"{name}" is on %n form(s): {forms}.</source>
+            <translation>
+                <numerusform>"{name}" is on %n form: {forms}.</numerusform>
+                <numerusform>"{name}" is on %n forms: {forms}.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Changed on %n form(s) too.</source>
+            <translation>
+                <numerusform>Changed on %n form too.</numerusform>
+                <numerusform>Changed on %n forms too.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>%n had been printed and got a new version.</source>
+            <translation>
+                <numerusform>%n had been printed and got a new version.</numerusform>
+                <numerusform>%n had been printed and got a new version.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>%n page(s).</source>
             <translation>
                 <numerusform>%n page.</numerusform>

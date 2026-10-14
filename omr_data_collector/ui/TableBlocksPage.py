@@ -99,6 +99,8 @@ class TableBlocksPage(LibraryPage):
     or landscape page.
     """
 
+    COPIED_INTO_FORMS = True
+
     def texts(self) -> LibraryTexts:
         return LibraryTexts(
             list_label=tr("Table li&brary"),

@@ -35,6 +35,8 @@ class QuestionsPage(LibraryPage):
     on the wiki (stories 40001-40010).
     """
 
+    COPIED_INTO_FORMS = True
+
     def texts(self) -> LibraryTexts:
         return LibraryTexts(
             list_label=tr("Question li&brary"),

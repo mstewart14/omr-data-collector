@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
@@ -100,6 +101,43 @@ def ask_new_or_keep_working(
     box.setEscapeButton(keep_button)
     box.exec()
     return box.clickedButton() is new_button
+
+
+class ChangeWhere(Enum):
+    """Where a library block's change goes (wiki 50012)."""
+
+    GOING_FORWARD = "going_forward"
+    EVERYWHERE = "everywhere"
+
+
+def ask_where_to_change(
+    parent: QWidget, question: str, details: str
+) -> ChangeWhere | None:
+    """Ask whether a library block's change also goes into the forms using it.
+
+    None if the person cancels. Going forward only is the default (Enter), as it
+    leaves every form as it is.
+    """
+    box = QMessageBox(
+        QMessageBox.Icon.Question, tr("Forms use this"), question, parent=parent
+    )
+    box.setInformativeText(details)
+    forward_button = box.addButton(
+        tr("&Going forward only"), QMessageBox.ButtonRole.AcceptRole
+    )
+    everywhere_button = box.addButton(
+        tr("Change &everywhere"), QMessageBox.ButtonRole.AcceptRole
+    )
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(forward_button)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is forward_button:
+        return ChangeWhere.GOING_FORWARD
+    if clicked is everywhere_button:
+        return ChangeWhere.EVERYWHERE
+    return None
 
 
 def confirm_destructive(

@@ -77,9 +77,13 @@ engine bridge.
   Every change to the form being edited must end with `_commit_change("what
   happened")`, which is what makes it undoable (Ctrl+Z) and names it in the
   "Undid: …" announcement; selection alone is not a change.
-- **Forms keep their own copy of every block** (wiki 50011-50012): editing a
-  library block later asks "going forward only" or "everywhere", and "everywhere"
-  makes new form versions so sheets already printed still scan.
+- **Forms keep their own copy of every block** (wiki 50011-50012): saving a
+  library block that a form's copy differs from asks "going forward only" or
+  "everywhere" (`LibraryPage._ask_where_to_change`, on pages with
+  `COPIED_INTO_FORMS`), and "everywhere" (`form_store.update_copies`) saves each
+  form as `save_form` does, so printed ones get a new version and sheets already
+  printed still scan. The form editor reloads a form changed that way when it's
+  shown, unless it has unsaved edits. Sheet details have no library copy.
 - **Printing** (`rendering/print_form.py`) draws with the same page painter as the
   editor. File > Export as PDF, Print preview and Print go through
   `FormsPage._ready_to_print` (organization entered, form saved, layout problems
