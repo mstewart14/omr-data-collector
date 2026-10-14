@@ -295,3 +295,45 @@ def test_entered_values_are_checked_against_the_answer(
     spec: AnswerSpec, values: tuple[str, ...], error: str
 ) -> None:
     assert spec.normalized().entry_error(values) == error
+
+
+@pytest.mark.parametrize(
+    ("entered", "saved"),
+    [
+        # Blank Saved as saves the words...
+        ((Choice("Yes"), Choice("No")), (Choice("Yes", "Yes"), Choice("No", "No"))),
+        # ...but once Marked has its own value, a blank one on Left empty saves
+        # nothing: its words are never printed and only describe it.
+        ((Choice("Yes", "1"), Choice("No")), (Choice("Yes", "1"), Choice("No", ""))),
+        (
+            (Choice("Yes", "1"), Choice("No", "0")),
+            (Choice("Yes", "1"), Choice("No", "0")),
+        ),
+        # No words and no value: nothing.
+        ((Choice("Yes"), Choice("")), (Choice("Yes", "Yes"), Choice("", ""))),
+    ],
+    ids=["words", "marked has a value", "both have values", "left empty blank"],
+)
+def test_what_a_yes_no_answer_saves(
+    entered: tuple[Choice, ...], saved: tuple[Choice, ...]
+) -> None:
+    spec = AnswerSpec(YES_NO, choices=entered).normalized()
+
+    assert spec.choices == saved
+    assert spec.empty_saves_nothing() == (saved[1].output == "")
+    # Allowed, with a warning in the editor rather than an error.
+    assert spec.validation_errors() == {}
+    # Saving it again changes nothing.
+    assert spec.normalized() == spec
+
+
+def test_a_yes_no_answer_still_needs_words_to_print() -> None:
+    assert errors(AnswerSpec(YES_NO, choices=choices("", "No"))) == {
+        "choices": '"Marked" needs words.'
+    }
+
+
+def test_only_the_left_empty_choice_may_be_blank() -> None:
+    assert "choices" in errors(
+        AnswerSpec(ANSWER_TYPES.ONE_CHOICE, choices=choices("Yes", ""))
+    )

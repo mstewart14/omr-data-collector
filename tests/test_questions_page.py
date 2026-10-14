@@ -410,3 +410,28 @@ def test_question_text_can_be_formatted(
     assert saved.prompt.strip() == "**Do you consent?**"
     page.item_list.setCurrentRow(0)
     assert not page.has_unsaved_changes()
+
+
+def test_a_yes_no_left_empty_with_no_value_warns_but_saves(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    page = make_page(qtbot, connection)
+    fields = page.answer_fields
+    page.name_edit.setText("consent")
+    page.text_fields.editor.setPlainText("Consent given?")
+    set_choice(page, 0, "Yes", "1")
+    set_choice(page, 1, "No")
+
+    assert fields.choices_note.isVisibleTo(page)
+    assert "nothing is saved" in fields.choices_note.text()
+    assert "nothing is saved" in fields.choices_table.accessibleDescription()
+
+    page.save()
+
+    (saved,) = list_questions(connection)
+    assert saved.answer.choices == (Choice("Yes", "1"), Choice("No", ""))
+    assert not page.has_unsaved_changes()
+
+    set_choice(page, 1, "No", "0")
+
+    assert not fields.choices_note.isVisibleTo(page)

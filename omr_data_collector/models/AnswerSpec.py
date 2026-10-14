@@ -104,19 +104,32 @@ class AnswerSpec:
     def normalized(self) -> AnswerSpec:
         """Trim choice text; a choice saved as nothing is saved as its label.
 
-        A date/time's length is set by its format, one box per character.
+        Except a yes/no answer's left-empty choice, once the marked one has a
+        saved value of its own: then a blank saved value saves nothing, and its
+        words (never printed) only describe it. A date/time's length is set by
+        its format, one box per character.
         """
         max_characters = self.max_characters
         if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
             max_characters = len(self.date_time_format)
-        choices = tuple(
-            Choice(
-                label=choice.label.strip(),
-                output=choice.output.strip() or choice.label.strip(),
-            )
+        choices = [
+            Choice(label=choice.label.strip(), output=choice.output.strip())
             for choice in self.choices
+        ]
+        own_value = bool(choices) and choices[0].output not in {"", choices[0].label}
+        for index, choice in enumerate(choices):
+            left_empty = self.answer_type == ANSWER_TYPES.YES_NO and index == 1
+            if not choice.output and not (left_empty and own_value):
+                choices[index] = replace(choice, output=choice.label)
+        return replace(self, choices=tuple(choices), max_characters=max_characters)
+
+    def empty_saves_nothing(self) -> bool:
+        """A yes/no answer whose bubble saves nothing when it's left empty."""
+        return (
+            self.answer_type == ANSWER_TYPES.YES_NO
+            and len(self.choices) == YES_NO_CHOICE_COUNT
+            and not self.choices[1].output
         )
-        return replace(self, choices=choices, max_characters=max_characters)
 
     def entry_error(self, values: tuple[str, ...]) -> str:
         """What is wrong with ``values`` as this answer's data, or "" if nothing.
@@ -247,7 +260,10 @@ class AnswerSpec:
             return {"choices": tr("Use at most %n choice(s).", None, MAX_CHOICES)}
 
         for number, choice in enumerate(self.choices, start=1):
-            if not choice.label:
+            # A yes/no answer's left-empty words are never printed: they may be
+            # blank, and the editor warns what that saves (empty_saves_nothing).
+            never_printed = self.answer_type == ANSWER_TYPES.YES_NO and number == 2
+            if not choice.label and not never_printed:
                 return {"choices": self._missing_words_message(number)}
 
         seen: dict[str, int] = {}
@@ -266,8 +282,7 @@ class AnswerSpec:
 
     def _missing_words_message(self, number: int) -> str:
         if self.answer_type == ANSWER_TYPES.YES_NO:
-            meaning = tr("Marked") if number == 1 else tr("Left empty")
-            return tr('"{meaning}" needs words.').format(meaning=meaning)
+            return tr('"Marked" needs words.')
         return tr("Choice {number} needs words to print.").format(number=number)
 
     def _written_errors(self) -> dict[str, str]:

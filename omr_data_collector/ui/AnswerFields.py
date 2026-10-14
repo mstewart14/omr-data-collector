@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -34,7 +35,7 @@ from omr_data_collector.ui.form_helpers import add_field_row
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from PySide6.QtWidgets import QFormLayout, QLabel
+    from PySide6.QtWidgets import QFormLayout
 
 
 def answer_type_labels() -> dict[str, str]:
@@ -91,7 +92,8 @@ def yes_no_table_description() -> str:
     return tr(
         "A yes/no answer is one bubble. The Marked row's words are printed beside "
         "it and saved when it is marked; the Left empty row's are saved when it "
-        "isn't (and never printed). Blank Saved as saves the words."
+        "isn't (and never printed). Blank Saved as saves the words, except on the "
+        "Left empty row once Marked has its own Saved as: then nothing is saved."
     )
 
 
@@ -198,6 +200,11 @@ class AnswerFields:
             )
             field_widgets[key] = widget
         form.addRow("", self.choice_buttons)
+        # A warning, not an error: saving goes ahead.
+        self.choices_note = QLabel()
+        self.choices_note.setWordWrap(True)
+        self.choices_note.hide()
+        form.addRow("", self.choices_note)
         for key, label_text, widget in (
             ("data_type", tr("Data t&ype"), self.data_type_combo),
             ("max_characters", tr("Si&ze (characters)"), self.characters_spin),
@@ -426,6 +433,26 @@ class AnswerFields:
             with QSignalBlocker(self.characters_spin):
                 self.characters_spin.setValue(len(self.date_format_combo.currentData()))
         self._update_choice_buttons()
+        self._update_choices_note()
+
+    def _update_choices_note(self) -> None:
+        """Say when an empty yes/no bubble will save nothing; it's allowed."""
+        yes_no = self.answer_type_combo.currentData() == ANSWER_TYPES.YES_NO
+        note = ""
+        if yes_no:
+            self._stash_choices()
+            spec = AnswerSpec(ANSWER_TYPES.YES_NO, choices=self._yes_no_choices)
+            if spec.normalized().empty_saves_nothing():
+                note = tr(
+                    "When the bubble is left empty, nothing is saved: the Left "
+                    "empty row has no Saved as."
+                )
+        self.choices_note.setText(note)
+        self._form.setRowVisible(self.choices_note, bool(note))
+        description = yes_no_table_description() if yes_no else list_table_description()
+        self.choices_table.setAccessibleDescription(
+            f"{description} {note}" if note else description
+        )
 
     def _update_choice_buttons(self) -> None:
         yes_no = self.answer_type_combo.currentData() == ANSWER_TYPES.YES_NO
