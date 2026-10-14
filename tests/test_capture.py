@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QTableWidgetItem
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
@@ -246,6 +246,12 @@ def cell_text(page: CapturePage, row: int, column: int) -> str:
     return item.text() if item is not None else ""
 
 
+def item_at(page: CapturePage, row: int, column: int) -> QTableWidgetItem:
+    item = page.answers_table.item(row, column)
+    assert item is not None
+    return item
+
+
 def full_name(page: CapturePage, row: int) -> str:
     """An answer's whole name, as screen readers hear it."""
     item = page.answers_table.item(row, 0)
@@ -455,6 +461,43 @@ def test_leaving_a_sheet_with_changes_asks_about_them(
     page.revert()
 
     assert not page.has_unsaved_changes()
+
+
+def test_saving_moves_on_to_the_next_sheet_without_asking_again(  # noqa: PLR0913 (fixtures)
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    photo: Path,
+    tmp_path: Path,
+) -> None:
+    form, layout = printed_form
+    other = Sheet(form, organization, layout)
+    other.fill_cell(2, row=1, column=2, choice=0)
+    second = other.photograph(tmp_path / "upload" / "second.jpg", degrees=-1)
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, photo, second)
+    page.read_waiting()
+    page.sheet_list.setCurrentRow(0)
+    first = page.sheet_list.currentItem().data(Qt.ItemDataRole.UserRole)
+    page.answers_table.selectRow(row_of(page, "services"))
+    page.answer_editor.choices_list.item(1).setCheckState(
+        page.answer_editor.choices_list.item(1).checkState().Checked
+    )
+    ask = mocker.patch(
+        "omr_data_collector.ui.CapturePage.ask_save_discard_cancel",
+        return_value=QMessageBox.StandardButton.Save,
+    )
+
+    assert page.save_data()
+
+    # The sheet just saved has nothing unsaved: no "save first?" on moving on.
+    ask.assert_not_called()
+    assert page.sheet_list.currentItem().data(Qt.ItemDataRole.UserRole) != first
+    assert not page.has_unsaved_changes()
+    saved = next(c for c in list_captures(connection) if c.capture_id == first)
+    assert saved.status == CAPTURE_STATUSES.SAVED
 
 
 # --- Working on the sheet itself ---------------------------------------------------
@@ -727,7 +770,7 @@ def test_table_answers_are_listed_by_their_column_and_banded_by_row(
 
     # The list shows the column; the whole name is read out and in the tooltip.
     assert cell_text(checking, row, 0) == "service"
-    assert table.item(row, 0).toolTip() == "Log, row 2, service"
+    assert item_at(checking, row, 0).toolTip() == "Log, row 2, service"
     question = row_of(checking, "services")
     assert cell_text(checking, question, 0) == "services"
 
@@ -735,7 +778,7 @@ def test_table_answers_are_listed_by_their_column_and_banded_by_row(
     shaded = {
         full_name(checking, index)
         for index in range(table.rowCount())
-        if table.item(index, 0).background().color() == band
+        if item_at(checking, index, 0).background().color() == band
     }
     assert "Log, row 2, time" in shaded
     assert "Log, row 2, service" in shaded
@@ -744,5 +787,6 @@ def test_table_answers_are_listed_by_their_column_and_banded_by_row(
     assert "services" not in shaded
     # A whole row's answers, in every column of the list.
     assert all(
-        table.item(row, column).background().color() == band for column in range(3)
+        item_at(checking, row, column).background().color() == band
+        for column in range(3)
     )

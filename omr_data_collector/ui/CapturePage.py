@@ -279,17 +279,20 @@ class CapturePage(QWidget):
             item = QListWidgetItem(status_text(capture))
             item.setData(Qt.ItemDataRole.UserRole, capture.capture_id)
             self.sheet_list.addItem(item)
-        self.sheet_list.blockSignals(False)  # noqa: FBT003
         self.empty_note.setVisible(not self._captures)
         ids = [capture.capture_id for capture in self._captures]
+        # The sheet is chosen here, not by the person: selecting it mustn't run
+        # _on_sheet_chosen, which would ask about leaving the sheet shown.
         if keep in ids:
             self.sheet_list.setCurrentRow(ids.index(keep))
-            self._show(self._captures[ids.index(keep)])
+            shown = self._captures[ids.index(keep)]
         elif self._captures:
             self.sheet_list.setCurrentRow(0)
-            self._show(self._captures[0])
+            shown = self._captures[0]
         else:
-            self._show(None)
+            shown = None
+        self.sheet_list.blockSignals(False)  # noqa: FBT003
+        self._show(shown)
         self._update_buttons()
 
     def add_images(self) -> None:
@@ -533,6 +536,8 @@ class CapturePage(QWidget):
             capture, status=CAPTURE_STATUSES.SAVED, answers=tuple(self._answers)
         )
         save_capture(self._connection, saved)
+        # Saved: nothing on it is unsaved now, so moving on asks nothing.
+        self._current = saved
         self.reload(select=self._next_to_check(saved))
         self.status_message.emit(
             tr('Saved the data from "{file}".').format(file=capture.original_name)
