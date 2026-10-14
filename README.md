@@ -9,11 +9,6 @@ A desktop app (macOS, Windows, Linux) for service providers who collect data on 
    result against the image and key in hand-written fields.
 3. **Export** the data as CSV or JSON.
 
-A separate, capture-only mobile app may come later.
-
-Product epics and user stories live on the team wiki:
-<https://docs.stewartclan.ca/OMR%20Data%20Collector>.
-
 ## Installing
 
 Installers for Windows, macOS (Apple Silicon) and Linux go on the
