@@ -45,6 +45,7 @@ from omr_data_collector.storage.form_store import load_form_version
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Mapping
     from pathlib import Path
 
     from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -94,13 +95,17 @@ class ExportNames:
     {default column name: name to use}; anything not named keeps its default.
     ``left_out`` maps a key to the default names of columns not exported, and
     ``order`` to the default names in the order chosen for them (columns added
-    to the form since go after, in their own order). Files are named when
-    exporting, not here.
+    to the form since go after, in their own order). ``skipped`` has the keys
+    of the CSV files not exported. Files are named when exporting, not here.
     """
 
     columns: dict[str, dict[str, str]] = field(default_factory=dict)
     left_out: dict[str, list[str]] = field(default_factory=dict)
     order: dict[str, list[str]] = field(default_factory=dict)
+    skipped: list[str] = field(default_factory=list)
+
+    def exports_file(self, key: str) -> bool:
+        return key not in self.skipped
 
     def column(self, key: str, default: str) -> str:
         return self.columns.get(key, {}).get(default) or default
@@ -122,7 +127,12 @@ class ExportNames:
         ]
 
     def to_dict(self) -> dict[str, Any]:
-        return {"columns": self.columns, "leftOut": self.left_out, "order": self.order}
+        return {
+            "columns": self.columns,
+            "leftOut": self.left_out,
+            "order": self.order,
+            "skippedFiles": self.skipped,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExportNames:
@@ -135,6 +145,7 @@ class ExportNames:
                 key: list(names) for key, names in data.get("leftOut", {}).items()
             },
             order={key: list(names) for key, names in data.get("order", {}).items()},
+            skipped=list(data.get("skippedFiles", [])),
         )
 
 
@@ -420,20 +431,31 @@ def csv_paths(data: FormData, path: Path) -> list[Path]:
     return paths
 
 
-def write_csv(
-    data: FormData, path: Path, names: ExportNames | None = None
-) -> list[Path]:
-    """Write the sheets file to ``path`` and each table's file beside it.
+def csv_files(data: FormData, path: Path) -> dict[str, Path]:
+    """``csv_paths`` by each file's key: SHEETS_FILE, then each table's name."""
+    keys = [SHEETS_FILE, *(table.name for table in data.tables)]
+    return dict(zip(keys, csv_paths(data, path), strict=True))
 
-    ``names`` renames columns from their defaults. Returns ``csv_paths``.
+
+def write_csv(
+    data: FormData, files: Mapping[str, Path], names: ExportNames | None = None
+) -> list[Path]:
+    """Write each file in ``files`` (by key, as ``csv_files`` gives) to its path.
+
+    A file not in ``files`` isn't written. ``names`` renames columns from their
+    defaults. Returns the paths written.
     """
     names = names or ExportNames()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    paths = csv_paths(data, path)
-    _write_rows(paths[0], data.sheet_columns, data.sheets, names, SHEETS_FILE)
-    for table, table_path in zip(data.tables, paths[1:], strict=True):
-        _write_rows(table_path, table.columns, table.rows, names, table.name)
-    return paths
+    rows = {SHEETS_FILE: (data.sheet_columns, data.sheets)} | {
+        table.name: (table.columns, table.rows) for table in data.tables
+    }
+    written: list[Path] = []
+    for key, path in files.items():
+        columns, values = rows[key]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_rows(path, columns, values, names, key)
+        written.append(path)
+    return written
 
 
 def write_json(data: FormData, path: Path, names: ExportNames | None = None) -> None:

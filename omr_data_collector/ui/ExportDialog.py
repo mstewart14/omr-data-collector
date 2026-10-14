@@ -77,9 +77,12 @@ class ExportDialog(QDialog):
         self.format_combo = QComboBox()
         for value, label in format_labels().items():
             self.format_combo.addItem(label, value)
-        self.names_button = QPushButton(tr("&Columns…"))
+        self.names_button = QPushButton(tr("Files and &columns…"))
         self.names_button.setToolTip(
-            tr("Choose which of this form's columns are exported, and rename them")
+            tr(
+                "Choose which files and columns of this form are exported, and "
+                "rename the columns"
+            )
         )
         self.names_button.setEnabled(bool(forms) and edit_names is not None)
         if edit_names is not None:

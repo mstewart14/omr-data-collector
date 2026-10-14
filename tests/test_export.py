@@ -18,6 +18,7 @@ from omr_data_collector.export.data_export import (
     ExportNames,
     MissingColumn,
     collect,
+    csv_files,
     output_files,
     safe_file_name,
     saved_sheet_counts,
@@ -43,13 +44,18 @@ from omr_data_collector.ui.CapturePage import (
     mixed_layout_warning,
 )
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, JSON_FORMAT, ExportDialog
-from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
+from omr_data_collector.ui.ExportNamesDialog import (
+    DEFAULT_COLUMN,
+    NAME_COLUMN,
+    ExportNamesDialog,
+)
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Callable
     from pathlib import Path
 
-    from PySide6.QtWidgets import QTableWidgetItem
+    from PySide6.QtWidgets import QListWidgetItem, QTableWidgetItem
     from pytest_mock import MockerFixture
     from pytestqt.qtbot import QtBot
 
@@ -253,7 +259,8 @@ def test_an_export_is_named_for_when_and_which_form_version() -> None:
 def test_csv_files_open_in_excel_as_utf8(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    written = write_csv(collect(connection, form), tmp_path / "out" / "October.csv")
+    data = collect(connection, form)
+    written = write_csv(data, csv_files(data, tmp_path / "out" / "October.csv"))
 
     # Each table's file beside the one named, after it.
     assert [path.name for path in written] == ["October.csv", "October - Visits.csv"]
@@ -272,7 +279,7 @@ def test_a_typed_formula_is_kept_as_text_in_csv_but_not_json(
     add_sheet(connection, tmp_path, form, "=1+1.jpg", typed)
     data = collect(connection, form)
 
-    sheets, _ = write_csv(data, tmp_path / "out" / "data.csv")
+    sheets, _ = write_csv(data, csv_files(data, tmp_path / "out" / "data.csv"))
     write_json(data, tmp_path / "out" / "data.json")
 
     with sheets.open(encoding="utf-8-sig", newline="") as file:
@@ -311,7 +318,8 @@ def test_two_tables_never_write_one_file(
     )
     mark_printed(connection, form.form_id, form.version)
 
-    written = write_csv(collect(connection, form), tmp_path / "Log.csv")
+    data = collect(connection, form)
+    written = write_csv(data, csv_files(data, tmp_path / "Log.csv"))
 
     assert [path.name for path in written] == [
         "Log.csv",
@@ -439,6 +447,15 @@ def test_a_question_cant_share_a_sheet_details_fields_name() -> None:
     )
 
 
+def save_sheets_as(path: Path) -> Callable[..., Path]:
+    """A save dialog choosing ``path`` for the sheets file, and the rest as suggested."""
+
+    def choose(_parent: object, _format: str, suggested: Path, key: str) -> Path:
+        return path if key == SHEETS_FILE else suggested
+
+    return choose
+
+
 # --- On the Capture screen -----------------------------------------------------------
 
 
@@ -457,15 +474,25 @@ def test_exporting_csv_from_the_capture_screen(
     )
     choose_path = mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
-        return_value=tmp_path / "export" / "October.csv",
+        side_effect=save_sheets_as(tmp_path / "export" / "October.csv"),
     )
     messages: list[str] = []
     page.status_message.connect(messages.append)
 
     page.export_data()
 
-    ((_, file_format, suggested), _) = choose_path.call_args
-    assert (file_format, suggested.name[16:]) == (CSV_FORMAT, "Shift log v1")
+    # Asked for each file in turn: the table's is suggested beside the sheets'.
+    (sheets_call, visits_call) = choose_path.call_args_list
+    (_, file_format, suggested, key) = sheets_call.args
+    assert (file_format, suggested.name[16:], key) == (
+        CSV_FORMAT,
+        "Shift log v1.csv",
+        SHEETS_FILE,
+    )
+    assert visits_call.args[2:] == (
+        tmp_path / "export" / "October - Visits.csv",
+        "Visits",
+    )
     ((_, forms, sheets, _, _), _) = choose.call_args
     assert [(f.name, count) for f, count in forms] == [("Shift log", 1)]
     ((_, description),) = sheets[form.form_id]
@@ -622,7 +649,7 @@ def test_combining_from_the_capture_screen(
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
-        return_value=tmp_path / "export" / "Shift log.csv",
+        side_effect=save_sheets_as(tmp_path / "export" / "Shift log.csv"),
     )
     messages: list[str] = []
     page.status_message.connect(messages.append)
@@ -666,7 +693,8 @@ RENAMED = ExportNames(
 def test_csv_columns_take_their_export_names(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    written = write_csv(collect(connection, form), tmp_path / "intake.csv", RENAMED)
+    data = collect(connection, form)
+    written = write_csv(data, csv_files(data, tmp_path / "intake.csv"), RENAMED)
 
     with written[0].open(encoding="utf-8-sig", newline="") as file:
         (row,) = list(csv.DictReader(file))
@@ -699,7 +727,8 @@ CHOSEN = ExportNames(
 def test_csv_has_only_the_chosen_columns_in_the_chosen_order(
     connection: sqlite3.Connection, form: Form, tmp_path: Path
 ) -> None:
-    sheets, visits = write_csv(collect(connection, form), tmp_path / "a.csv", CHOSEN)
+    data = collect(connection, form)
+    sheets, visits = write_csv(data, csv_files(data, tmp_path / "a.csv"), CHOSEN)
 
     with sheets.open(encoding="utf-8-sig", newline="") as file:
         header = next(csv.reader(file))
@@ -754,6 +783,7 @@ def names_dialog(
 
 
 def row_named(dialog: ExportNamesDialog, key: str, default: str) -> int:
+    dialog.show_file(key)
     return next(
         row
         for row in range(dialog.table.rowCount())
@@ -762,15 +792,42 @@ def row_named(dialog: ExportNamesDialog, key: str, default: str) -> int:
 
 
 def name_cell(dialog: ExportNamesDialog, key: str, default: str) -> QTableWidgetItem:
-    item = dialog.table.item(row_named(dialog, key, default), 2)
+    item = dialog.table.item(row_named(dialog, key, default), NAME_COLUMN)
     assert item is not None
     return item
 
 
 def tick_cell(dialog: ExportNamesDialog, key: str, default: str) -> QTableWidgetItem:
-    item = dialog.table.item(row_named(dialog, key, default), 1)
+    item = dialog.table.item(row_named(dialog, key, default), DEFAULT_COLUMN)
     assert item is not None
     return item
+
+
+def file_item(dialog: ExportNamesDialog, index: int) -> QListWidgetItem:
+    item = dialog.files_list.item(index)
+    assert item is not None
+    return item
+
+
+def test_the_names_dialog_lists_the_files_then_their_columns(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+
+    assert [
+        file_item(dialog, index).text() for index in range(dialog.files_list.count())
+    ] == ["Sheets file", 'Table "Visits" file']
+    assert dialog.columns_label.text() == "&Columns of the sheets file"
+    assert dialog.description_label.text().startswith("One row for each sheet")
+
+    dialog.show_file("Visits")
+
+    assert dialog.columns_label.text() == '&Columns of the table "Visits" file'
+    assert dialog.columns_label.buddy() is dialog.table
+    assert "sheet_id matches it" in dialog.description_label.text()
+    first = dialog.table.item(0, DEFAULT_COLUMN)
+    assert first is not None
+    assert first.text() == "sheet_id"
 
 
 def test_the_names_dialog_keeps_only_changed_names(
@@ -778,9 +835,6 @@ def test_the_names_dialog_keeps_only_changed_names(
 ) -> None:
     dialog = names_dialog(qtbot, connection, form, RENAMED)
     assert name_cell(dialog, SHEETS_FILE, "services").text() == "Services used"
-    first = dialog.table.item(0, 0)
-    assert first is not None
-    assert first.text() == "Sheets"  # only columns are listed
 
     name_cell(dialog, SHEETS_FILE, "Date").setText("Date")
     name_cell(dialog, SHEETS_FILE, "Shift").setText(" shift ")
@@ -795,6 +849,7 @@ def test_the_names_dialog_keeps_only_changed_names(
     }
     assert accepted.left_out == {}
     assert accepted.order == {}
+    assert accepted.skipped == []
 
 
 def test_the_names_dialog_chooses_and_orders_the_columns(
@@ -804,7 +859,7 @@ def test_the_names_dialog_chooses_and_orders_the_columns(
     assert tick_cell(dialog, SHEETS_FILE, "Shift").checkState() == Qt.CheckState.Checked
 
     tick_cell(dialog, SHEETS_FILE, "Shift").setCheckState(Qt.CheckState.Unchecked)
-    dialog.table.setCurrentCell(row_named(dialog, SHEETS_FILE, "services"), 2)
+    dialog.table.setCurrentCell(row_named(dialog, SHEETS_FILE, "services"), 1)
     assert not dialog.move_down_button.isEnabled()  # the sheets file's last
     dialog.move_column(-1)
     dialog.accept()
@@ -833,7 +888,7 @@ def test_a_column_only_moves_among_its_own_files(
 ) -> None:
     dialog = names_dialog(qtbot, connection, form, ExportNames())
     first_of_visits = row_named(dialog, "Visits", "sheet_id")
-    dialog.table.setCurrentCell(first_of_visits, 2)
+    dialog.table.setCurrentCell(first_of_visits, 1)
 
     dialog.move_column(-1)
 
@@ -847,12 +902,14 @@ def test_the_names_dialog_refuses_two_columns_with_one_name(
     dialog = names_dialog(qtbot, connection, form, ExportNames())
 
     name_cell(dialog, SHEETS_FILE, "Shift").setText("date")
+    dialog.show_file("Visits")
     dialog.accept()
 
     assert dialog.names() is None
     assert dialog.error_label.text() == (
         'Two columns of the sheets file would both be called "date".'
     )
+    assert dialog.current_key() == SHEETS_FILE  # shown where it is
 
     # A column left out takes no name.
     tick_cell(dialog, SHEETS_FILE, "Date").setCheckState(Qt.CheckState.Unchecked)
@@ -864,10 +921,10 @@ def test_the_names_dialog_needs_a_column_in_each_file(
     qtbot: QtBot, connection: sqlite3.Connection, form: Form
 ) -> None:
     dialog = names_dialog(qtbot, connection, form, ExportNames())
+    dialog.show_file("Visits")
     for row in range(dialog.table.rowCount()):
-        key, default = dialog._row_data(row)  # noqa: SLF001
-        if key == "Visits":
-            tick_cell(dialog, key, default).setCheckState(Qt.CheckState.Unchecked)
+        _, default = dialog._row_data(row)  # noqa: SLF001
+        tick_cell(dialog, "Visits", default).setCheckState(Qt.CheckState.Unchecked)
 
     dialog.accept()
 
@@ -875,6 +932,32 @@ def test_the_names_dialog_needs_a_column_in_each_file(
     assert dialog.error_label.text() == (
         'Tick at least one column of the table "Visits".'
     )
+
+    # Unless that file isn't exported.
+    file_item(dialog, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog.accept()
+    assert dialog.names() is not None
+
+
+def test_a_file_can_be_left_out_but_not_every_file(
+    qtbot: QtBot, connection: sqlite3.Connection, form: Form
+) -> None:
+    dialog = names_dialog(qtbot, connection, form, ExportNames())
+    file_item(dialog, 0).setCheckState(Qt.CheckState.Unchecked)
+    dialog.accept()
+
+    accepted = dialog.names()
+    assert accepted is not None
+    assert accepted.skipped == [SHEETS_FILE]
+    assert ExportNames.from_dict(accepted.to_dict()) == accepted
+
+    again = names_dialog(qtbot, connection, form, accepted)
+    assert file_item(again, 0).checkState() == Qt.CheckState.Unchecked
+    assert again.description_label.text().endswith("tick it on the left to export it.")
+    file_item(again, 1).setCheckState(Qt.CheckState.Unchecked)
+    again.accept()
+    assert again.names() is None
+    assert again.error_label.text() == "Tick at least one file to export."
 
 
 def test_names_set_from_the_capture_screen_are_used_by_exports(
@@ -899,7 +982,7 @@ def test_names_set_from_the_capture_screen_are_used_by_exports(
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
-        return_value=tmp_path / "export" / "intake.csv",
+        side_effect=save_sheets_as(tmp_path / "export" / "intake.csv"),
     )
 
     page.export_data()
@@ -908,7 +991,32 @@ def test_names_set_from_the_capture_screen_are_used_by_exports(
         assert "Services used" in file.readline()
 
 
-def test_table_files_beside_it_are_only_replaced_if_you_say(
+def test_a_file_left_out_isnt_asked_for_or_written(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    form: Form,
+    tmp_path: Path,
+) -> None:
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    save_export_names(connection, form.form_id, ExportNames(skipped=[SHEETS_FILE]))
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export",
+        return_value=(form.form_id, CSV_FORMAT, None, True),
+    )
+    choose_path = mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        return_value=tmp_path / "out" / "visits only.csv",
+    )
+
+    page.export_data()
+
+    assert [call.args[3] for call in choose_path.call_args_list] == ["Visits"]
+    assert [path.name for path in (tmp_path / "out").iterdir()] == ["visits only.csv"]
+
+
+def test_each_file_is_named_and_one_name_cant_take_two(
     qtbot: QtBot,
     connection: sqlite3.Connection,
     mocker: MockerFixture,
@@ -923,23 +1031,42 @@ def test_table_files_beside_it_are_only_replaced_if_you_say(
     )
     mocker.patch(
         "omr_data_collector.ui.CapturePage.choose_export_path",
-        return_value=tmp_path / "Log.csv",
+        side_effect=[
+            tmp_path / "sheets.csv",
+            tmp_path / "SHEETS.csv",
+            tmp_path / "rows" / "visits.csv",
+        ],
     )
-    (tmp_path / "Log - Visits.csv").write_text("keep me")
-    confirm = mocker.patch(
-        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=False
+    warn = mocker.patch("omr_data_collector.ui.CapturePage.QMessageBox.warning")
+
+    page.export_data()
+
+    assert "Sheets file" in warn.call_args.args[2]
+    assert (tmp_path / "sheets.csv").exists()
+    assert (tmp_path / "rows" / "visits.csv").exists()
+
+
+def test_cancelling_any_files_save_writes_none(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    form: Form,
+    tmp_path: Path,
+) -> None:
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export",
+        return_value=(form.form_id, CSV_FORMAT, None, True),
+    )
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.choose_export_path",
+        side_effect=[tmp_path / "out" / "sheets.csv", None],
     )
 
     page.export_data()
 
-    assert "Log - Visits.csv" in confirm.call_args.args[2]
-    assert (tmp_path / "Log - Visits.csv").read_text() == "keep me"
-    assert not (tmp_path / "Log.csv").exists()
-
-    confirm.return_value = True
-    page.export_data()
-
-    assert (tmp_path / "Log - Visits.csv").read_text() != "keep me"
+    assert not (tmp_path / "out").exists()
 
 
 # --- Sheets from versions with different columns -------------------------------------

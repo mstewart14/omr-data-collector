@@ -34,8 +34,9 @@ from PySide6.QtWidgets import (
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES, PAPER_SIZES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
+    SHEETS_FILE,
     collect,
-    csv_paths,
+    csv_files,
     output_files,
     safe_file_name,
     saved_sheet_counts,
@@ -82,7 +83,7 @@ from omr_data_collector.ui.accessibility import (
 from omr_data_collector.ui.AnswerEditor import AnswerEditor
 from omr_data_collector.ui.date_time_typing import typing_cells, typing_hint
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, ExportDialog
-from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
+from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog, file_label
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
@@ -222,18 +223,19 @@ def default_file_name(form: Form, now: datetime | None = None) -> str:
 
 
 def choose_export_path(
-    parent: QWidget, file_format: str, default_path: Path
+    parent: QWidget, file_format: str, default_path: Path, key: str | None = None
 ) -> Path | None:
-    """Ask what to call the exported file and where; None if cancelled.
+    """Ask what to call an exported file and where; None if cancelled.
 
-    For CSV it's the sheets file: each table's file goes beside it.
+    For CSV, ``key`` says which file: the sheets file or a table's.
     """
     if file_format == CSV_FORMAT:
-        title, filter_, suffix = (
-            tr("Export data as CSV"),
-            tr("CSV file (*.csv)"),
-            ".csv",
+        title = (
+            tr("Export the sheets file as CSV")
+            if key in {None, SHEETS_FILE}
+            else tr('Export the table "{table}" file as CSV').format(table=key)
         )
+        filter_, suffix = tr("CSV file (*.csv)"), ".csv"
     else:
         title, filter_, suffix = (
             tr("Export data as JSON"),
@@ -251,18 +253,9 @@ def choose_export_path(
     )
 
 
-def confirm_replacing(parent: QWidget, paths: list[Path]) -> bool:
-    """Ask before writing over table files beside the chosen one; True to go on."""
-    if not paths:
-        return True
-    return confirm_destructive(
-        parent,
-        tr("Replace files?"),
-        tr("The tables' files beside it are there already: {files}.").format(
-            files=QLocale().createSeparatedList([path.name for path in paths])
-        ),
-        tr("&Replace them"),
-    )
+def same_file(one: Path, other: Path) -> bool:
+    """Whether two paths name one file, ignoring case as Windows and macOS do."""
+    return str(one).casefold() == str(other).casefold()
 
 
 def choose_images(parent: QWidget) -> list[Path]:
@@ -491,25 +484,20 @@ class CapturePage(QWidget):
         form = by_id[form_id]
         names = load_export_names(self._connection, form.form_id)
         data = collect(self._connection, form, combine, latest_values=latest_values)
-        path = choose_export_path(
-            self, file_format, self._export_folder / default_file_name(form)
-        )
-        if path is None:
+        default_path = self._export_folder / default_file_name(form)
+        if file_format == CSV_FORMAT:
+            paths = self._choose_csv_paths(data, names, default_path)
+        else:
+            path = choose_export_path(self, file_format, default_path)
+            paths = None if path is None else {"": path}
+        if paths is None:
             return
-        self._export_folder = path.parent
+        self._export_folder = list(paths.values())[-1].parent
         try:
             if file_format == CSV_FORMAT:
-                # The save dialog asked about the file named; not the others.
-                beside = [
-                    other for other in csv_paths(data, path)[1:] if other.exists()
-                ]
-                if not confirm_replacing(self, beside):
-                    return
-                files = len(write_csv(data, path, names))
-                where = str(path.parent)
+                write_csv(data, paths, names)
             else:
-                write_json(data, path, names)
-                files, where = 1, str(path)
+                write_json(data, paths[""], names)
         except OSError as error:
             QMessageBox.warning(self, tr("Couldn't export the data"), str(error))
             return
@@ -519,8 +507,51 @@ class CapturePage(QWidget):
                 form=form.name
             )
             + " "
-            + tr("Wrote %n file(s) to {where}.", None, files).format(where=where)
+            + tr("Wrote %n file(s) to {where}.", None, len(paths)).format(
+                where=QLocale().createSeparatedList(
+                    list(dict.fromkeys(str(path.parent) for path in paths.values()))
+                )
+            )
         )
+
+    def _choose_csv_paths(
+        self, data: FormData, names: ExportNames, default_path: Path
+    ) -> dict[str, Path] | None:
+        """Ask where to save each CSV file exported, in turn; None if cancelled.
+
+        Each table's file is suggested beside the sheets file, named after it.
+        Choosing a file already chosen for another asks again.
+        """
+        suggested = csv_files(data, default_path.with_suffix(".csv"))
+        paths: dict[str, Path] = {}
+        for key in suggested:
+            if not names.exports_file(key):
+                continue
+            while True:
+                path = choose_export_path(self, CSV_FORMAT, suggested[key], key)
+                if path is None:
+                    return None
+                taken = [
+                    other for other, there in paths.items() if same_file(there, path)
+                ]
+                if not taken:
+                    break
+                QMessageBox.warning(
+                    self,
+                    tr("Choose another name"),
+                    tr(
+                        "That name is already used for the {file}. Choose another."
+                    ).format(file=file_label(taken[0])),
+                )
+            paths[key] = path
+            if key == SHEETS_FILE:
+                suggested = csv_files(data, path)
+            else:
+                suggested = {
+                    other: path.parent / place.name
+                    for other, place in suggested.items()
+                }
+        return paths
 
     def edit_export_names(self, form: Form) -> None:
         """Export data > Columns: choose and rename a form's exported columns."""

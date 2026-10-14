@@ -152,11 +152,14 @@ engine bridge.
   merged sheets row (differing values all kept, `;`-joined) and their table
   rows in turn, numbered on in `combined_row`. Pages aren't linked automatically:
   sheets may be photocopied, so nothing printed can tell copies apart.
-  The file is named in a save dialog when exporting (CSV: that's the sheets
-  file, each table's beside it as "<name> - <table>.csv", `csv_paths`; asks
-  before replacing those). Columns can be chosen, reordered and renamed per
-  form (Export data > Columns; `ExportNames.columns/left_out/order`, stored by
-  `storage/export_store.py`), keyed by their default names; blank keeps the
+  Each file is named in its own save dialog when exporting (CSV: the sheets
+  file, then each table's, suggested beside it as "<name> - <table>.csv",
+  `csv_files`/`csv_paths`; cancelling any writes none, and one path can't take
+  two files). CSV files can be left out, and columns chosen, reordered and
+  renamed, per form (Export data > Files and columns: files listed on the left,
+  the chosen one's columns on the right; `ExportNames.skipped/columns/left_out/
+  order`, stored by `storage/export_store.py`; JSON always has every file),
+  keyed by their default names; blank keeps the
   default, columns added later go after the chosen order, and JSON applies
   them only to answer and detail keys, not its structure. Sheets from versions
   with different columns are named in `FormData.missing`, and the Export
@@ -167,7 +170,7 @@ engine bridge.
   so old printed sheets give the same data as new ones.
   CSV cells go through `spreadsheet_safe` (an apostrophe before anything a
   spreadsheet would run as a formula: values come from handwriting and file
-  names), and `write_csv` never writes two files to one name.
+  names), and `csv_paths` never suggests two files one name.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.
