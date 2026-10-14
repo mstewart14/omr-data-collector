@@ -15,6 +15,11 @@ from PySide6.QtWidgets import (
 
 from omr_data_collector.constants import ANSWER_TYPES
 from omr_data_collector.i18n import tr
+from omr_data_collector.ui.date_time_typing import (
+    fill_separators,
+    typing_cells,
+    typing_hint,
+)
 
 if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -26,7 +31,8 @@ class AnswerEditor(QStackedWidget):
     """Edits one captured answer, with the control its kind of answer needs.
 
     One choice (or yes/no): a list to pick from, with "Nothing marked" first.
-    Any number of choices: a list of check boxes. Written: a line to type in.
+    Any number of choices: a list of check boxes. Written: a line to type in,
+    where a date or time's separators go in by themselves.
     ``current_editor`` is the control showing, which the field's label names.
     """
 
@@ -46,8 +52,12 @@ class AnswerEditor(QStackedWidget):
         self.currentChanged.connect(self.updateGeometry)
         self.choice_combo.currentIndexChanged.connect(self.changed)
         self.choices_list.itemChanged.connect(self.changed)
-        self.text_edit.textEdited.connect(self.changed)
+        self.text_edit.textEdited.connect(self._on_text_edited)
         self._spec: AnswerSpec | None = None
+
+    def _on_text_edited(self) -> None:
+        fill_separators(self.text_edit, typing_cells(self._spec))
+        self.changed.emit()
 
     def sizeHint(self) -> QSize:  # noqa: N802 (Qt override)
         # As big as the control showing, not the biggest of them (the list).
@@ -82,6 +92,7 @@ class AnswerEditor(QStackedWidget):
             self.setCurrentWidget(self.choices_list)
         elif spec.answer_type == ANSWER_TYPES.WRITTEN:
             self.text_edit.setText(values[0] if values else "")
+            self.text_edit.setPlaceholderText(typing_hint(spec))
             self.setCurrentWidget(self.text_edit)
         else:
             self.choice_combo.clear()

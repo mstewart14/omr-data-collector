@@ -3,8 +3,9 @@
 The page is shown straightened, as read, with every answer's current value drawn
 over it: the text typed for handwriting, and a ring round each chosen bubble.
 Clicking a handwritten answer opens a box over it to type in at once; clicking a
-bubble marks it. Tab and Shift+Tab go through the answers in reading order, and
-the arrow keys go to the nearest answer that way. On a bubble answer the
+bubble marks it. Tab and Shift+Tab go through the answers in reading order (from
+a typing box, on to the next answer typed in: Enter does too), and the arrow
+keys go to the nearest answer that way. On a bubble answer the
 number keys choose (1 for the first choice), Space marks or clears a yes/no
 bubble and Delete clears the answer.
 """
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import QLineEdit, QSizePolicy, QWidget
 
 from omr_data_collector.constants import ANSWER_TYPES
 from omr_data_collector.i18n import tr
+from omr_data_collector.ui.date_time_typing import fill_separators
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,7 +62,8 @@ class CanvasAnswer:
     ``choices`` are the printed choices as (saved value, label), in bubble order;
     for yes/no, ``empty_value`` is what an unmarked bubble saves. ``entry`` is
     where a written answer's typing goes, after its label (all of ``rect`` if
-    not given).
+    not given); ``entry_cells``, a date or time's format, which typing is laid
+    out in (``date_time_typing``), shown as ``entry_hint`` until typed in.
     """
 
     name: str
@@ -68,6 +71,8 @@ class CanvasAnswer:
     rect: Rect
     bubbles: tuple[Rect, ...] = ()
     entry: Rect | None = None
+    entry_cells: tuple[str, ...] | None = None
+    entry_hint: str = ""
     choices: tuple[tuple[str, str], ...] = ()
     empty_value: str = ""
     values: tuple[str, ...] = ()
@@ -299,6 +304,7 @@ class SheetCanvas(QWidget):
         text = answer.values[0] if answer.values else ""
         if self.editor.text() != text:
             self.editor.setText(text)
+        self.editor.setPlaceholderText(answer.entry_hint)
         self.editor.setAccessibleName(answer.name)
         self.editor.setAccessibleDescription(answer.problem)
         self.editor.show()
@@ -310,10 +316,12 @@ class SheetCanvas(QWidget):
         else:
             self.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _on_text_edited(self, text: str) -> None:
-        if self._current is None:
+    def _on_text_edited(self, _text: str) -> None:
+        answer = self._current_answer()
+        if answer is None or self._current is None:
             return
-        cleaned = text.strip()
+        fill_separators(self.editor, answer.entry_cells)
+        cleaned = self.editor.text().strip()
         self.values_edited.emit(self._current, (cleaned,) if cleaned else ())
 
     # --- Mouse ----------------------------------------------------------------------
@@ -376,14 +384,16 @@ class SheetCanvas(QWidget):
         """Keys in the typing box: move on, or let it edit the text."""
         key = event.key()
         # Tab is taken here, before Qt passes it up the widget tree: it goes to
-        # the next answer, or past the last one on to the next control.
+        # the next answer typed in (the bubbles between are read already), or
+        # past the last one on to the next control.
         if key in {Qt.Key.Key_Tab, Qt.Key.Key_Backtab}:
-            step = -1 if key == Qt.Key.Key_Backtab else 1
-            if not self._move_in_order(step):
+            shift = event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            step = -1 if key == Qt.Key.Key_Backtab or shift else 1
+            if not self._move_in_order(step, written=True):
                 QWidget.focusNextPrevChild(self, step > 0)
             return True
         if key in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
-            return self._move_in_order(1) or True
+            return self._move_in_order(1, written=True) or True
         if key in {Qt.Key.Key_Up, Qt.Key.Key_Down}:
             return self._handle_navigation(event)
         at_start = (
@@ -459,17 +469,22 @@ class SheetCanvas(QWidget):
             values = () if answer.values == (value,) else (value,)
         self.values_edited.emit(self._current, values)
 
-    def _move_in_order(self, step: int) -> bool:
-        if not self._answers:
-            return False
+    def _move_in_order(self, step: int, *, written: bool = False) -> bool:
+        """Go to the next answer (``step`` 1) or the one before (-1).
+
+        Only to answers typed in if ``written``. False if there is none.
+        """
         if self._current is None:
-            self.set_current(0 if step > 0 else len(self._answers) - 1, focus=True)
-            return True
-        target = self._current + step
-        if not 0 <= target < len(self._answers):
-            return False
-        self.set_current(target, focus=True)
-        return True
+            start = -1 if step > 0 else len(self._answers)
+        else:
+            start = self._current
+        target = start + step
+        while 0 <= target < len(self._answers):
+            if not written or self._answers[target].written:
+                self.set_current(target, focus=True)
+                return True
+            target += step
+        return False
 
     def _nearest(self, dx: int, dy: int) -> int | None:
         """The closest answer from the current one in a direction, if any."""

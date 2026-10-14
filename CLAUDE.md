@@ -129,7 +129,9 @@ engine bridge.
   with status SAVED; keyed-in values are checked with `AnswerSpec.entry_error`.
   Answers are filled in on the sheet itself (`ui/SheetCanvas.py`): click and
   type over handwriting, click bubbles or press 1-9, Tab and arrows between
-  answers; it draws the current values over the page, and the side list and
+  answers (from a typing box, Tab and Enter go on to the next answer typed in);
+  a date or time is typed as digits, its separators put in by
+  `ui/date_time_typing.py` (both typing boxes); it draws the current values over the page, and the side list and
   editor follow it (and it them).
   `CapturedAnswer.changed_by_hand` (bubbles changed from what was read; typing
   in handwriting isn't a change) shows in the Note column and is counted in the

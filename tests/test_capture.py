@@ -552,12 +552,22 @@ def test_tab_and_arrows_go_from_answer_to_answer(
     canvas = checking.sheet_canvas
     start = click_answer(qtbot, checking, "Log, row 1, time")
 
+    # From a box typed in, Tab skips the bubbles (read already) to the next.
     qtbot.keyClick(canvas.editor, Qt.Key.Key_Tab)
+    assert canvas.current() == row_of(checking, "Log, row 2, time")
+    assert canvas.editor.hasFocus()
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+    assert canvas.current() == start
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Return)
+    assert canvas.current() == row_of(checking, "Log, row 2, time")
 
-    assert canvas.current() == row_of(checking, "Log, row 1, first")
+    # On a bubble answer, Tab goes to the very next answer.
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Right)  # at the end of empty text
+    assert canvas.current() == row_of(checking, "Log, row 2, first")
     assert canvas.hasFocus()  # a bubble answer: the keys choose
-
     qtbot.keyClick(canvas, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+    assert canvas.current() == row_of(checking, "Log, row 2, time")
+    qtbot.keyClick(canvas.editor, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
     assert canvas.current() == start
 
     qtbot.keyClick(canvas.editor, Qt.Key.Key_Down)
@@ -565,6 +575,38 @@ def test_tab_and_arrows_go_from_answer_to_answer(
 
     qtbot.keyClick(canvas.editor, Qt.Key.Key_Right)  # at the end of empty text
     assert canvas.current() == row_of(checking, "Log, row 2, first")
+
+
+def test_a_time_is_typed_as_digits_only(qtbot: QtBot, checking: CapturePage) -> None:
+    canvas = checking.sheet_canvas
+    row = click_answer(qtbot, checking, "Log, row 1, time")
+    assert canvas.editor.placeholderText() == "HH:MM"
+
+    qtbot.keyClicks(canvas.editor, "930")
+    assert canvas.editor.text() == "93:0"  # as typed: checked, not guessed at
+    canvas.editor.clear()
+    qtbot.keyClicks(canvas.editor, "0930")
+
+    assert canvas.editor.text() == "09:30"
+    assert canvas.answer(row).values == ("09:30",)
+    assert cell_text(checking, row, 1) == "09:30"
+
+    canvas.editor.clear()
+    qtbot.keyClicks(canvas.editor, "9:30")  # a colon after one digit pads it
+    assert canvas.answer(row).values == ("09:30",)
+
+
+def test_the_side_editor_puts_the_separators_in_too(
+    qtbot: QtBot, checking: CapturePage
+) -> None:
+    checking.answers_table.selectRow(row_of(checking, "Log, row 1, time"))
+    text_edit = checking.answer_editor.text_edit
+    assert text_edit.placeholderText() == "HH:MM"
+
+    qtbot.keyClicks(text_edit, "1415")
+
+    assert text_edit.text() == "14:15"
+    assert checking.answer_editor.values() == ("14:15",)
 
 
 def test_clicking_a_bubble_marks_it(qtbot: QtBot, checking: CapturePage) -> None:

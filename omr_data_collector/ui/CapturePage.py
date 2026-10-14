@@ -78,6 +78,7 @@ from omr_data_collector.ui.accessibility import (
     style_error_label,
 )
 from omr_data_collector.ui.AnswerEditor import AnswerEditor
+from omr_data_collector.ui.date_time_typing import typing_cells, typing_hint
 from omr_data_collector.ui.ExportDialog import CSV_FORMAT, ExportDialog
 from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 from omr_data_collector.ui.form_helpers import (
@@ -924,6 +925,8 @@ class CapturePage(QWidget):
             rect=region.rect if region else (0, 0, 0, 0),
             bubbles=region.bubbles if region else (),
             entry=region.writing if region else None,
+            entry_cells=typing_cells(spec),
+            entry_hint=typing_hint(spec),
             choices=tuple((choice.output, choice.label) for choice in printed),
             empty_value=(
                 spec.choices[1].output
