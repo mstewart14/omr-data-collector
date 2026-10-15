@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QImageIOHandler, QImageWriter
 from PySide6.QtWidgets import QMessageBox, QTableWidgetItem
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
@@ -26,7 +26,7 @@ from omr_data_collector.storage.capture_store import (
 )
 from omr_data_collector.ui.accessibility import band_color
 from omr_data_collector.ui.CapturePage import CapturePage
-from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas
+from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas, upright_pixmap
 from tests.sheets import LETTER, Sheet
 
 if TYPE_CHECKING:
@@ -832,3 +832,19 @@ def test_table_answers_are_listed_by_their_column_and_banded_by_row(
         item_at(checking, row, column).background().color() == band
         for column in range(3)
     )
+
+
+def test_a_photo_kept_sideways_is_shown_the_way_up_it_was_taken(
+    tmp_path: Path,
+) -> None:
+    # As a phone keeps a portrait photo: landscape pixels, tagged to turn.
+    path = tmp_path / "phone.jpg"
+    sideways = QImage(400, 300, QImage.Format.Format_RGB32)
+    sideways.fill(Qt.GlobalColor.white)
+    writer = QImageWriter(str(path))
+    writer.setTransformation(QImageIOHandler.Transformation.TransformationRotate90)
+    assert writer.write(sideways)
+
+    pixmap = upright_pixmap(path)
+
+    assert (pixmap.width(), pixmap.height()) == (300, 400)

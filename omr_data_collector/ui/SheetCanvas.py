@@ -19,6 +19,7 @@ from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, S
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QImageReader,
     QKeyEvent,
     QKeySequence,
     QPainter,
@@ -83,6 +84,17 @@ class CanvasAnswer:
         return self.answer_type == ANSWER_TYPES.WRITTEN
 
 
+def upright_pixmap(path: Path) -> QPixmap:
+    """The image at ``path`` the way up it was taken.
+
+    A phone keeps a photo sideways with a note to turn it (its EXIF
+    orientation); Qt only follows that when asked, as OpenCV does when reading.
+    """
+    reader = QImageReader(str(path))
+    reader.setAutoTransform(True)
+    return QPixmap.fromImage(reader.read())
+
+
 class SheetCanvas(QWidget):
     """The straightened sheet, with its answers to check and fill in on it."""
 
@@ -124,7 +136,7 @@ class SheetCanvas(QWidget):
     # --- What it shows -----------------------------------------------------------
 
     def show_image(self, path: Path | None, description: str) -> None:
-        self._pixmap = QPixmap(str(path)) if path is not None else QPixmap()
+        self._pixmap = upright_pixmap(path) if path is not None else QPixmap()
         self.setAccessibleDescription(description)
         self._relayout()
 
