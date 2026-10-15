@@ -413,7 +413,7 @@ def test_import_form_explains_a_bad_file(
     path = tmp_path / f"bad{FILE_SUFFIX}"
     path.write_text("{}", encoding="utf-8")
     mocker.patch(f"{PAGE_MODULE}.choose_form_file_to_import", return_value=path)
-    warning = mocker.patch(f"{PAGE_MODULE}.QMessageBox.warning")
+    warning = mocker.patch(f"{PAGE_MODULE}.warn")
 
     page.import_form()
 

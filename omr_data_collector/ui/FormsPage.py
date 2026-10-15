@@ -75,9 +75,11 @@ from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
     add_standard_shortcuts,
+    ask,
     ask_save_first,
     confirm_despite_problems,
     tell,
+    warn,
 )
 from omr_data_collector.ui.LibraryPage import LibraryPage, LibraryTexts
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
@@ -206,33 +208,23 @@ def ask_include_library(parent: QWidget, count: int) -> bool | None:
     is the default: the form has its own copy of every block, which is enough to
     print it and read its sheets.
     """
-    box = QMessageBox(
-        QMessageBox.Icon.Question,
+    chosen = ask(
+        parent,
         tr("Export form"),
         tr("The form uses %n block(s) from your libraries.", None, count),
-        parent=parent,
-    )
-    box.setInformativeText(
-        tr(
+        [
+            tr("&Form only"),
+            tr("&Include library blocks"),
+            QMessageBox.StandardButton.Cancel,
+        ],
+        details=tr(
             "The form has its own copy of every block, which is all the other "
             "computer needs to print it and read its sheets. Include the library "
             "blocks too if the form will be edited there."
-        )
+        ),
+        escape=2,
     )
-    form_only = box.addButton(tr("&Form only"), QMessageBox.ButtonRole.AcceptRole)
-    include = box.addButton(
-        tr("&Include library blocks"), QMessageBox.ButtonRole.AcceptRole
-    )
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(form_only)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    clicked = box.clickedButton()
-    if clicked is form_only:
-        return False
-    if clicked is include:
-        return True
-    return None
+    return None if chosen not in {0, 1} else chosen == 1
 
 
 class AddLibrary(Enum):
@@ -251,8 +243,26 @@ def ask_add_library(
     ``changed`` names the blocks this computer has different copies of: only
     then is replacing them offered. Form only is the default.
     """
-    box = QMessageBox(
-        QMessageBox.Icon.Question,
+    details = tr(
+        "The form has its own copy of every block either way; the library blocks "
+        "are only needed to edit them here."
+    )
+    answers = [AddLibrary.FORM_ONLY, AddLibrary.ADD_NEW]
+    buttons: list[str | QMessageBox.StandardButton] = [
+        tr("&Form only"),
+        tr("&Add new ones") if changed else tr("&Add them"),
+    ]
+    if changed:
+        details += " " + tr(
+            "Your libraries already have different versions of %n of them: {names}.",
+            None,
+            len(changed),
+        ).format(names=", ".join(f'"{name}"' for name in changed))
+        answers.append(AddLibrary.ADD_AND_REPLACE)
+        buttons.append(tr("Add and &replace changed ones"))
+    buttons.append(QMessageBox.StandardButton.Cancel)
+    chosen = ask(
+        parent,
         tr("Import form"),
         tr(
             "The file also has library blocks from the computer it came from "
@@ -260,43 +270,11 @@ def ask_add_library(
             None,
             count,
         ),
-        parent=parent,
+        buttons,
+        details=details,
+        escape=len(buttons) - 1,
     )
-    details = tr(
-        "The form has its own copy of every block either way; the library blocks "
-        "are only needed to edit them here."
-    )
-    if changed:
-        details += " " + tr(
-            "Your libraries already have different versions of %n of them: {names}.",
-            None,
-            len(changed),
-        ).format(names=", ".join(f'"{name}"' for name in changed))
-    box.setInformativeText(details)
-    form_only = box.addButton(tr("&Form only"), QMessageBox.ButtonRole.AcceptRole)
-    add_new = box.addButton(
-        tr("&Add new ones") if changed else tr("&Add them"),
-        QMessageBox.ButtonRole.AcceptRole,
-    )
-    replace_button = (
-        box.addButton(
-            tr("Add and &replace changed ones"), QMessageBox.ButtonRole.AcceptRole
-        )
-        if changed
-        else None
-    )
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(form_only)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    clicked = box.clickedButton()
-    if clicked is form_only:
-        return AddLibrary.FORM_ONLY
-    if clicked is add_new:
-        return AddLibrary.ADD_NEW
-    if replace_button is not None and clicked is replace_button:
-        return AddLibrary.ADD_AND_REPLACE
-    return None
+    return answers[chosen] if chosen is not None and chosen < len(answers) else None
 
 
 def ask_whose_changes(parent: QWidget, name: str) -> bool | None:
@@ -305,33 +283,25 @@ def ask_whose_changes(parent: QWidget, name: str) -> bool | None:
     True keeps this computer's, False takes the file's, None cancels. Keeping
     this computer's is the default, as it changes the least here.
     """
-    box = QMessageBox(
-        QMessageBox.Icon.Question,
+    chosen = ask(
+        parent,
         tr("Import form"),
         tr(
             'The form "{name}" was changed both here and on the other computer '
             "since it was last printed. Which changes should its latest version have?"
         ).format(name=name),
-        parent=parent,
-    )
-    box.setInformativeText(
-        tr(
+        [
+            tr("&Keep this computer's"),
+            tr("&Use the file's"),
+            QMessageBox.StandardButton.Cancel,
+        ],
+        details=tr(
             "Every printed version is kept either way, so sheets printed on either "
             "computer can still be read. The other changes are left out."
-        )
+        ),
+        escape=2,
     )
-    keep = box.addButton(tr("&Keep this computer's"), QMessageBox.ButtonRole.AcceptRole)
-    take = box.addButton(tr("&Use the file's"), QMessageBox.ButtonRole.AcceptRole)
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(keep)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    clicked = box.clickedButton()
-    if clicked is keep:
-        return True
-    if clicked is take:
-        return False
-    return None
+    return None if chosen not in {0, 1} else chosen == 0
 
 
 def import_summary(result: ImportResult, *, new_form: bool) -> str:
@@ -1029,7 +999,7 @@ class FormsPage(LibraryPage):
         try:
             pages = save_pdf(path, form, organization, organization.paper_size)
         except OSError as error:
-            QMessageBox.warning(self, tr("Couldn't save the PDF"), str(error))
+            warn(self, tr("Couldn't save the PDF"), str(error))
             return
         self._after_printing(
             form,
@@ -1156,7 +1126,7 @@ class FormsPage(LibraryPage):
         try:
             write_form_file(path, exported)
         except OSError as error:
-            QMessageBox.warning(self, tr("Couldn't export the form"), str(error))
+            warn(self, tr("Couldn't export the form"), str(error))
             return
         message = tr(
             'Exported the form "{name}", %n version(s), to {path}.',
@@ -1179,11 +1149,11 @@ class FormsPage(LibraryPage):
         try:
             exported = read_form_file(path)
         except FormFileError as error:
-            QMessageBox.warning(self, tr("Couldn't import the form"), str(error))
+            warn(self, tr("Couldn't import the form"), str(error))
             return
         plan = plan_import(self._connection, exported)
         if plan.problem:
-            QMessageBox.warning(self, tr("Couldn't import the form"), plan.problem)
+            warn(self, tr("Couldn't import the form"), plan.problem)
             return
         choices = self._ask_import_choices(plan)
         if choices is None:

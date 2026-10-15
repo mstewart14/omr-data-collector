@@ -71,19 +71,78 @@ def add_standard_shortcuts(
     return [add_shortcut(parent, sequence, callback) for sequence in sequences]
 
 
+def message_box(
+    parent: QWidget | None,
+    icon: QMessageBox.Icon,
+    title: str,
+    text: str,
+    details: str = "",
+) -> QMessageBox:
+    """A message box showing ``text`` (and ``details``) as plain text.
+
+    Message boxes otherwise read text that looks like HTML as HTML, links
+    included, and the names they show can come from other computers (an
+    imported form) or from handwriting.
+    """
+    box = QMessageBox(icon, title, text, parent=parent)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    if details:
+        box.setInformativeText(details)
+    return box
+
+
+def ask(  # noqa: PLR0913 (a question, its answers, and which are the defaults)
+    parent: QWidget | None,
+    title: str,
+    text: str,
+    buttons: Sequence[str | QMessageBox.StandardButton],
+    *,
+    icon: QMessageBox.Icon = QMessageBox.Icon.Question,
+    details: str = "",
+    default: int = 0,
+    escape: int | None = None,
+    destructive: int | None = None,
+) -> int | None:
+    """Ask a question; the index in ``buttons`` of the answer, None if closed.
+
+    ``buttons`` are labels (with their Alt+letter) or standard buttons such as
+    Cancel. ``default`` is the button Enter chooses, ``escape`` the one Escape
+    does, and ``destructive`` one that can't be undone, which platforms place
+    apart from the others.
+    """
+    box = message_box(parent, icon, title, text, details)
+    added = [
+        box.addButton(button)
+        if isinstance(button, QMessageBox.StandardButton)
+        else box.addButton(
+            button,
+            QMessageBox.ButtonRole.DestructiveRole
+            if index == destructive
+            else QMessageBox.ButtonRole.AcceptRole,
+        )
+        for index, button in enumerate(buttons)
+    ]
+    box.setDefaultButton(added[default])
+    if escape is not None:
+        box.setEscapeButton(added[escape])
+    box.exec()
+    clicked = box.clickedButton()
+    return next(
+        (index for index, button in enumerate(added) if button is clicked), None
+    )
+
+
 def ask_save_discard_cancel(
     parent: QWidget, question: str
 ) -> QMessageBox.StandardButton:
     """Ask what to do with unsaved changes; Save is the default answer."""
-    return QMessageBox.question(
-        parent,
-        tr("Unsaved changes"),
-        question,
-        QMessageBox.StandardButton.Save
-        | QMessageBox.StandardButton.Discard
-        | QMessageBox.StandardButton.Cancel,
+    answers = (
         QMessageBox.StandardButton.Save,
+        QMessageBox.StandardButton.Discard,
+        QMessageBox.StandardButton.Cancel,
     )
+    chosen = ask(parent, tr("Unsaved changes"), question, answers, escape=2)
+    return answers[chosen if chosen is not None else 2]
 
 
 def ask_new_or_keep_working(
@@ -94,13 +153,17 @@ def ask_new_or_keep_working(
     ``new_label`` is the button that starts one, like "&New question". Keep
     working is the default (Enter, Escape), so nothing is lost by accident.
     """
-    box = QMessageBox(QMessageBox.Icon.Question, title, message, parent=parent)
-    new_button = box.addButton(new_label, QMessageBox.ButtonRole.AcceptRole)
-    keep_button = box.addButton(tr("&Keep working"), QMessageBox.ButtonRole.RejectRole)
-    box.setDefaultButton(keep_button)
-    box.setEscapeButton(keep_button)
-    box.exec()
-    return box.clickedButton() is new_button
+    return (
+        ask(
+            parent,
+            title,
+            message,
+            [new_label, tr("&Keep working")],
+            default=1,
+            escape=1,
+        )
+        == 0
+    )
 
 
 class ChangeWhere(Enum):
@@ -118,24 +181,21 @@ def ask_where_to_change(
     None if the person cancels. Going forward only is the default (Enter), as it
     leaves every form as it is.
     """
-    box = QMessageBox(
-        QMessageBox.Icon.Question, tr("Forms use this"), question, parent=parent
+    chosen = ask(
+        parent,
+        tr("Forms use this"),
+        question,
+        [
+            tr("&Going forward only"),
+            tr("Change &everywhere"),
+            QMessageBox.StandardButton.Cancel,
+        ],
+        details=details,
+        escape=2,
     )
-    box.setInformativeText(details)
-    forward_button = box.addButton(
-        tr("&Going forward only"), QMessageBox.ButtonRole.AcceptRole
-    )
-    everywhere_button = box.addButton(
-        tr("Change &everywhere"), QMessageBox.ButtonRole.AcceptRole
-    )
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(forward_button)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    clicked = box.clickedButton()
-    if clicked is forward_button:
+    if chosen == 0:
         return ChangeWhere.GOING_FORWARD
-    if clicked is everywhere_button:
+    if chosen == 1:
         return ChangeWhere.EVERYWHERE
     return None
 
@@ -147,47 +207,58 @@ def confirm_destructive(
 
     Cancel is the default button, so pressing Enter never destroys anything.
     """
-    box = QMessageBox(QMessageBox.Icon.Warning, title, question, parent=parent)
-    action_button = box.addButton(action, QMessageBox.ButtonRole.DestructiveRole)
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(cancel_button)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    return box.clickedButton() is action_button
+    chosen = ask(
+        parent,
+        title,
+        question,
+        [action, QMessageBox.StandardButton.Cancel],
+        icon=QMessageBox.Icon.Warning,
+        default=1,
+        escape=1,
+        destructive=0,
+    )
+    return chosen == 0
 
 
 def ask_save_first(parent: QWidget, question: str) -> bool:
     """Ask to save before going on (printing, say); True to save and go on."""
-    box = QMessageBox(
-        QMessageBox.Icon.Question, tr("Save first"), question, parent=parent
+    chosen = ask(
+        parent,
+        tr("Save first"),
+        question,
+        [QMessageBox.StandardButton.Save, QMessageBox.StandardButton.Cancel],
+        escape=1,
     )
-    save_button = box.addButton(QMessageBox.StandardButton.Save)
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(save_button)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    return box.clickedButton() is save_button
+    return chosen == 0
 
 
 def confirm_despite_problems(
     parent: QWidget, heading: str, problems: Sequence[str]
 ) -> bool:
     """List problems and ask whether to go ahead anyway; Cancel is the default."""
-    box = QMessageBox(
-        QMessageBox.Icon.Warning,
+    chosen = ask(
+        parent,
         tr("Problems to check"),
         heading + "\n\n" + "\n".join(f"- {problem}" for problem in problems),
-        parent=parent,
+        [tr("Go ahead anyway"), QMessageBox.StandardButton.Cancel],
+        icon=QMessageBox.Icon.Warning,
+        default=1,
+        escape=1,
     )
-    go_ahead = box.addButton(tr("Go ahead anyway"), QMessageBox.ButtonRole.AcceptRole)
-    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(cancel_button)
-    box.setEscapeButton(cancel_button)
-    box.exec()
-    return box.clickedButton() is go_ahead
+    return chosen == 0
 
 
 def tell(parent: QWidget, title: str, message: str) -> None:
     """Show a message that needs nothing but OK."""
-    box = QMessageBox(QMessageBox.Icon.Information, title, message, parent=parent)
-    box.exec()
+    message_box(parent, QMessageBox.Icon.Information, title, message).exec()
+
+
+def warn(
+    parent: QWidget | None,
+    title: str,
+    message: str,
+    *,
+    icon: QMessageBox.Icon = QMessageBox.Icon.Warning,
+) -> None:
+    """Show a problem that needs nothing but OK (a file that couldn't be saved)."""
+    message_box(parent, icon, title, message).exec()

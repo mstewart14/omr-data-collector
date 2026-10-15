@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -43,7 +42,7 @@ from omr_data_collector.ui.accessibility import (
     show_field_errors,
     style_error_label,
 )
-from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
+from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut, warn
 from omr_data_collector.ui.qr_printing import paint_organization_qr_page
 from omr_data_collector.ui.TablePreview import orientation_names
 
@@ -163,7 +162,7 @@ class OrganizationPage(QWidget):
         try:
             save_qr_code(make_qr_code(build_organization_payload(self._saved)), path)
         except (OSError, ValueError) as error:
-            QMessageBox.warning(self, tr("Couldn't save the QR code"), str(error))
+            warn(self, tr("Couldn't save the QR code"), str(error))
             return
         self.status_message.emit(tr("QR code saved to {path}.").format(path=path))
 

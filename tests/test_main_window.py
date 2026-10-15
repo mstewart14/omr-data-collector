@@ -75,7 +75,7 @@ def test_closes_without_asking_when_nothing_changed(
     qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
 ) -> None:
     window = make_window(qtbot, connection)
-    question = mocker.patch.object(QMessageBox, "question")
+    question = mocker.patch("omr_data_collector.ui.MainWindow.ask_save_discard_cancel")
     event = QCloseEvent()
 
     window.closeEvent(event)
@@ -102,7 +102,9 @@ def test_asks_about_unsaved_changes_on_close(
     closes, saved = CLOSE_ANSWERS[answer]
     window = make_window(qtbot, connection)
     window.organization_page.name_edit.setText("Food Bank")
-    mocker.patch.object(QMessageBox, "question", return_value=answer)
+    mocker.patch(
+        "omr_data_collector.ui.MainWindow.ask_save_discard_cancel", return_value=answer
+    )
     event = QCloseEvent()
 
     window.closeEvent(event)
@@ -116,8 +118,9 @@ def test_stays_open_when_saving_on_close_fails(
 ) -> None:
     window = make_window(qtbot, connection)
     window.organization_page.email_edit.setText("not an email")
-    mocker.patch.object(
-        QMessageBox, "question", return_value=QMessageBox.StandardButton.Save
+    mocker.patch(
+        "omr_data_collector.ui.MainWindow.ask_save_discard_cancel",
+        return_value=QMessageBox.StandardButton.Save,
     )
     event = QCloseEvent()
 
@@ -227,12 +230,13 @@ def test_the_window_fits_a_small_screen(
 def test_a_database_that_cant_be_opened_is_explained(
     tmp_path: Path, mocker: MockerFixture
 ) -> None:
-    critical = mocker.patch.object(QMessageBox, "critical")
+    critical = mocker.patch("omr_data_collector.app.warn")
     newer = tmp_path / "newer.sqlite3"
     sqlite3.connect(newer).execute("PRAGMA user_version = 999").connection.close()
 
     assert open_app_database(newer) is None
 
-    (_, title, message), _ = critical.call_args
+    (_, title, message), options = critical.call_args
     assert title == "Couldn't open the app's data"
     assert "newer version of the app" in message
+    assert options["icon"] == QMessageBox.Icon.Critical

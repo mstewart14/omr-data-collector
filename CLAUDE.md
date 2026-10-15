@@ -37,7 +37,11 @@ engine bridge.
     `MainWindow.show_status` shows and announces to screen readers;
   - ask before anything that can't be undone with `form_helpers.confirm_destructive`
     (Cancel is the default) and about unsaved changes with
-    `form_helpers.ask_save_discard_cancel`;
+    `form_helpers.ask_save_discard_cancel`; build any other question with
+    `form_helpers.ask` and report problems with `warn`, never a `QMessageBox`
+    of its own: `message_box` shows text as plain text, since names in it can
+    come from imported files and Qt would otherwise render them as HTML, links
+    included;
   - give images an accessible name and description;
   - set a tab order that follows the screen;
   - take colors from `accessibility` helpers checked to 4.5:1, re-chosen on

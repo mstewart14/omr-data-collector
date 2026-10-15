@@ -90,6 +90,7 @@ from omr_data_collector.ui.form_helpers import (
     add_shortcut,
     ask_save_discard_cancel,
     confirm_destructive,
+    warn,
 )
 from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas
 
@@ -534,7 +535,7 @@ class CapturePage(QWidget):
             else:
                 write_json(data, paths[""], names)
         except OSError as error:
-            QMessageBox.warning(self, tr("Couldn't export the data"), str(error))
+            warn(self, tr("Couldn't export the data"), str(error))
             return
         # Two counts, so two sentences: each gets its own plural form.
         self.status_message.emit(
@@ -571,7 +572,7 @@ class CapturePage(QWidget):
                 ]
                 if not taken:
                     break
-                QMessageBox.warning(
+                warn(
                     self,
                     tr("Choose another name"),
                     tr(

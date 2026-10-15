@@ -1037,7 +1037,7 @@ def test_each_file_is_named_and_one_name_cant_take_two(
             tmp_path / "rows" / "visits.csv",
         ],
     )
-    warn = mocker.patch("omr_data_collector.ui.CapturePage.QMessageBox.warning")
+    warn = mocker.patch("omr_data_collector.ui.CapturePage.warn")
 
     page.export_data()
 

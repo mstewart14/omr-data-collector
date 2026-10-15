@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QPageLayout, QPdfWriter
 from PySide6.QtPdf import QPdfDocument
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog
 
 from omr_data_collector.constants import PAGE_ORIENTATIONS, PAPER_SIZES
 from omr_data_collector.identity.qr_code import read_qr_codes
@@ -176,7 +176,7 @@ def test_save_qr_code_reports_failures(
     mocker.patch.object(
         QFileDialog, "getSaveFileName", return_value=(str(tmp_path / "qr.gif"), "")
     )
-    warning = mocker.patch.object(QMessageBox, "warning")
+    warning = mocker.patch("omr_data_collector.ui.OrganizationPage.warn")
 
     page.save_qr_code()
 

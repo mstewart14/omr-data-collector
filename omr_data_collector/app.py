@@ -12,6 +12,7 @@ from omr_data_collector.constants import DATABASE_FILENAME
 from omr_data_collector.i18n import install_translators, tr
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.ui.app_icon import DESKTOP_FILE_NAME, app_icon
+from omr_data_collector.ui.form_helpers import warn
 from omr_data_collector.ui.MainWindow import MainWindow
 
 
@@ -38,13 +39,14 @@ def open_app_database(path: Path) -> sqlite3.Connection | None:
     try:
         return open_database(path)
     except (sqlite3.Error, OSError, RuntimeError) as error:
-        QMessageBox.critical(
+        warn(
             None,
             tr("Couldn't open the app's data"),
             tr(
                 "The app's data in {path} couldn't be opened, so the app can't "
                 "start: {error}"
             ).format(path=path, error=error),
+            icon=QMessageBox.Icon.Critical,
         )
         return None
 
