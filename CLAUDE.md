@@ -174,6 +174,19 @@ engine bridge.
 - **Mnemonics are checked among controls showing together**: the tests step
   through each answer type and data type, so fields never shown at once (a
   choice list's and a written answer's) may share a letter.
+- **Moving forms between computers** (`storage/form_transfer.py`, File > Export
+  form / Import form): a `.omrform` JSON file with the form ID, every version
+  (definition, `printed_at`, `printed_layout`) and, if the person chooses, the
+  library blocks any version was copied from. The form never needs them: its
+  copies are enough to print and read sheets, so Form only is the default on
+  both ends. Import keeps the ID so sheets printed on either computer scan on
+  both: printed versions are merged (one printed differently on each side is
+  refused), and when both sides have unprinted changes, or one side's draft was
+  overtaken by the other's printing, `ImportPlan.choose_latest` asks whose
+  become the latest version. Library blocks are matched by ID (differing ones
+  replaced only if chosen) and renamed "(imported)" on a name clash. A form
+  of the same name with another ID is refused. The organization isn't moved:
+  pages printed on the other computer show its own header.
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact

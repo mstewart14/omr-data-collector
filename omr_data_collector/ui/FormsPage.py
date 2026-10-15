@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from enum import Enum
 from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,6 +51,18 @@ from omr_data_collector.storage.form_store import (
     list_forms,
     mark_printed,
     save_form,
+)
+from omr_data_collector.storage.form_transfer import (
+    FILE_SUFFIX,
+    FormFileError,
+    ImportPlan,
+    ImportResult,
+    apply_import,
+    form_file,
+    library_blocks_used,
+    plan_import,
+    read_form_file,
+    write_form_file,
 )
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.storage.question_store import list_questions
@@ -159,6 +172,201 @@ def choose_form(parent: QWidget, forms: list[Form], printed: set[str]) -> str | 
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen_form_id()
+
+
+def choose_form_file_path(parent: QWidget, default_name: str) -> Path | None:
+    """Ask where to save an exported form; None if cancelled."""
+    file_name, _ = QFileDialog.getSaveFileName(
+        parent,
+        tr("Export form"),
+        default_name,
+        tr("Exported form (*{suffix})").format(suffix=FILE_SUFFIX),
+    )
+    if not file_name:
+        return None
+    path = Path(file_name)
+    return path if path.suffix.lower() == FILE_SUFFIX else path.with_suffix(FILE_SUFFIX)
+
+
+def choose_form_file_to_import(parent: QWidget) -> Path | None:
+    """Ask which exported form to import; None if cancelled."""
+    file_name, _ = QFileDialog.getOpenFileName(
+        parent,
+        tr("Import form"),
+        "",
+        tr("Exported form (*{suffix})").format(suffix=FILE_SUFFIX),
+    )
+    return Path(file_name) if file_name else None
+
+
+def ask_include_library(parent: QWidget, count: int) -> bool | None:
+    """Ask whether an export includes the library blocks the form uses.
+
+    True to include them, False for the form only, None if cancelled. Form only
+    is the default: the form has its own copy of every block, which is enough to
+    print it and read its sheets.
+    """
+    box = QMessageBox(
+        QMessageBox.Icon.Question,
+        tr("Export form"),
+        tr("The form uses %n block(s) from your libraries.", None, count),
+        parent=parent,
+    )
+    box.setInformativeText(
+        tr(
+            "The form has its own copy of every block, which is all the other "
+            "computer needs to print it and read its sheets. Include the library "
+            "blocks too if the form will be edited there."
+        )
+    )
+    form_only = box.addButton(tr("&Form only"), QMessageBox.ButtonRole.AcceptRole)
+    include = box.addButton(
+        tr("&Include library blocks"), QMessageBox.ButtonRole.AcceptRole
+    )
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(form_only)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is form_only:
+        return False
+    if clicked is include:
+        return True
+    return None
+
+
+class AddLibrary(Enum):
+    """What an import does with the library blocks in the file."""
+
+    FORM_ONLY = "form_only"
+    ADD_NEW = "add_new"
+    ADD_AND_REPLACE = "add_and_replace"
+
+
+def ask_add_library(
+    parent: QWidget, count: int, changed: Sequence[str]
+) -> AddLibrary | None:
+    """Ask whether to add the file's library blocks here; None if cancelled.
+
+    ``changed`` names the blocks this computer has different copies of: only
+    then is replacing them offered. Form only is the default.
+    """
+    box = QMessageBox(
+        QMessageBox.Icon.Question,
+        tr("Import form"),
+        tr(
+            "The file also has library blocks from the computer it came from "
+            "(%n block(s)). Add them to your libraries?",
+            None,
+            count,
+        ),
+        parent=parent,
+    )
+    details = tr(
+        "The form has its own copy of every block either way; the library blocks "
+        "are only needed to edit them here."
+    )
+    if changed:
+        details += " " + tr(
+            "Your libraries already have different versions of %n of them: {names}.",
+            None,
+            len(changed),
+        ).format(names=", ".join(f'"{name}"' for name in changed))
+    box.setInformativeText(details)
+    form_only = box.addButton(tr("&Form only"), QMessageBox.ButtonRole.AcceptRole)
+    add_new = box.addButton(
+        tr("&Add new ones") if changed else tr("&Add them"),
+        QMessageBox.ButtonRole.AcceptRole,
+    )
+    replace_button = (
+        box.addButton(
+            tr("Add and &replace changed ones"), QMessageBox.ButtonRole.AcceptRole
+        )
+        if changed
+        else None
+    )
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(form_only)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is form_only:
+        return AddLibrary.FORM_ONLY
+    if clicked is add_new:
+        return AddLibrary.ADD_NEW
+    if replace_button is not None and clicked is replace_button:
+        return AddLibrary.ADD_AND_REPLACE
+    return None
+
+
+def ask_whose_changes(parent: QWidget, name: str) -> bool | None:
+    """Ask whose unprinted changes become the latest version of an imported form.
+
+    True keeps this computer's, False takes the file's, None cancels. Keeping
+    this computer's is the default, as it changes the least here.
+    """
+    box = QMessageBox(
+        QMessageBox.Icon.Question,
+        tr("Import form"),
+        tr(
+            'The form "{name}" was changed both here and on the other computer '
+            "since it was last printed. Which changes should its latest version have?"
+        ).format(name=name),
+        parent=parent,
+    )
+    box.setInformativeText(
+        tr(
+            "Every printed version is kept either way, so sheets printed on either "
+            "computer can still be read. The other changes are left out."
+        )
+    )
+    keep = box.addButton(tr("&Keep this computer's"), QMessageBox.ButtonRole.AcceptRole)
+    take = box.addButton(tr("&Use the file's"), QMessageBox.ButtonRole.AcceptRole)
+    cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(keep)
+    box.setEscapeButton(cancel_button)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is keep:
+        return True
+    if clicked is take:
+        return False
+    return None
+
+
+def import_summary(result: ImportResult, *, new_form: bool) -> str:
+    """The status message after an import: what it added or changed."""
+    if new_form:
+        parts = [
+            tr(
+                'Imported the form "{name}" with %n version(s).',
+                None,
+                len(result.added_versions) + int(result.took_file_changes),
+            ).format(name=result.name)
+        ]
+    elif not result.changed_anything:
+        return tr('The form "{name}" here already has everything in the file.').format(
+            name=result.name
+        )
+    else:
+        parts = [tr('Imported the form "{name}".').format(name=result.name)]
+        if result.added_versions:
+            parts.append(
+                tr("Added %n printed version(s).", None, len(result.added_versions))
+            )
+        if result.took_file_changes:
+            parts.append(tr("Its latest changes are now the file's."))
+    if result.added_blocks:
+        parts.append(tr("Added %n library block(s).", None, result.added_blocks))
+    if result.replaced_blocks:
+        parts.append(tr("Replaced %n library block(s).", None, result.replaced_blocks))
+    parts.extend(
+        tr('"{old}" was added as "{new}", since that name was taken.').format(
+            old=old, new=new
+        )
+        for old, new in result.renamed_blocks
+    )
+    return " ".join(parts)
 
 
 def choose_pdf_path(parent: QWidget, default_name: str) -> Path | None:
@@ -917,6 +1125,107 @@ class FormsPage(LibraryPage):
                 "make version {next}."
             ).format(done=done, version=form.version, next=form.version + 1)
         )
+
+    # --- Moving forms between computers -------------------------------------------
+
+    def export_form(self) -> None:
+        """File > Export form: write the saved form, with its ID, to a file."""
+        if self._current is None or self.has_unsaved_changes():
+            if not ask_save_first(
+                self, tr("The form has unsaved changes. Save it to export it?")
+            ):
+                return
+            if not self.save():
+                return
+        form = self._current
+        if form is None:
+            return
+        used = library_blocks_used(self._connection, form.form_id)
+        with_library = ask_include_library(self, len(used)) if used else False
+        if with_library is None:
+            return
+        path = choose_form_file_path(
+            self,
+            tr("{name}{suffix}", "exported form file name").format(
+                name=_file_name(form.name), suffix=FILE_SUFFIX
+            ),
+        )
+        if path is None:
+            return
+        exported = form_file(self._connection, form.form_id, with_library=with_library)
+        try:
+            write_form_file(path, exported)
+        except OSError as error:
+            QMessageBox.warning(self, tr("Couldn't export the form"), str(error))
+            return
+        message = tr(
+            'Exported the form "{name}", %n version(s), to {path}.',
+            None,
+            len(exported.versions),
+        ).format(name=form.name, path=path)
+        if exported.library:
+            message += " " + tr(
+                "Included %n library block(s).", None, len(exported.library)
+            )
+        self.status_message.emit(message)
+
+    def import_form(self) -> None:
+        """File > Import form: add or update a form exported on another computer."""
+        if not self._resolve_unsaved_changes():
+            return
+        path = choose_form_file_to_import(self)
+        if path is None:
+            return
+        try:
+            exported = read_form_file(path)
+        except FormFileError as error:
+            QMessageBox.warning(self, tr("Couldn't import the form"), str(error))
+            return
+        plan = plan_import(self._connection, exported)
+        if plan.problem:
+            QMessageBox.warning(self, tr("Couldn't import the form"), plan.problem)
+            return
+        choices = self._ask_import_choices(plan)
+        if choices is None:
+            self.status_message.emit(tr("Nothing imported."))
+            return
+        keep_local, add = choices
+        result = apply_import(
+            self._connection,
+            plan,
+            keep_local=keep_local,
+            add_blocks=add != AddLibrary.FORM_ONLY,
+            replace_blocks=add == AddLibrary.ADD_AND_REPLACE,
+        )
+        self.refresh_palette()
+        self._reload_list()
+        stored = next(
+            (form for form in self._items if form.form_id == result.form_id), None
+        )
+        if stored is not None:
+            self._select(stored.form_id)
+            self._edit(stored)
+        self.status_message.emit(import_summary(result, new_form=plan.new_form))
+
+    def _ask_import_choices(self, plan: ImportPlan) -> tuple[bool, AddLibrary] | None:
+        """Whose changes to keep and what to do with library blocks; None if cancelled."""
+        keep_local = True
+        if plan.choose_latest:
+            answer = ask_whose_changes(self, plan.exported.name)
+            if answer is None:
+                return None
+            keep_local = answer
+        add = AddLibrary.FORM_ONLY
+        if plan.exported.library:
+            chosen = ask_add_library(
+                self,
+                len(plan.exported.library),
+                [block.name for block in plan.changed_blocks],
+            )
+            if chosen is None:
+                return None
+            add = chosen
+        return keep_local, add
 
     # --- Undo ---------------------------------------------------------------------
 

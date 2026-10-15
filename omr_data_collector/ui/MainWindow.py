@@ -177,6 +177,17 @@ class MainWindow(QMainWindow):
         ]
         self.file_menu.insertAction(after_new, open_action)
         self.file_menu.addSeparator()
+        for text, command in (
+            (tr("&Import form…"), self.forms_page.import_form),
+            (tr("Export for&m…"), self.forms_page.export_form),
+        ):
+            action = self.file_menu.addAction(text)
+            action.triggered.connect(
+                lambda _checked=False, command=command: self._run_in(
+                    self.forms_page, command
+                )
+            )
+        self.file_menu.addSeparator()
         for text, command, key in (
             (tr("E&xport as PDF…"), self.forms_page.export_pdf, None),
             (tr("Print pre&view…"), self.forms_page.print_preview, None),

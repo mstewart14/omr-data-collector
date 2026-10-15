@@ -12,3 +12,14 @@ def copy_name(name: str, taken_names: set[str]) -> str:
         candidate = tr("{name} (copy {number})").format(name=name, number=number)
         number += 1
     return candidate
+
+
+def imported_name(name: str, taken_names: set[str]) -> str:
+    """A name for an imported block whose name is taken: "Name (imported)", then 2..."""
+    taken = {taken_name.casefold() for taken_name in taken_names}
+    candidate = tr("{name} (imported)").format(name=name)
+    number = 2
+    while candidate.casefold() in taken:
+        candidate = tr("{name} (imported {number})").format(name=name, number=number)
+        number += 1
+    return candidate

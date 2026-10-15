@@ -45,6 +45,55 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>The form uses %n block(s) from your libraries.</source>
+            <translation>
+                <numerusform>The form uses %n block from your libraries.</numerusform>
+                <numerusform>The form uses %n blocks from your libraries.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>The file also has library blocks from the computer it came from (%n block(s)). Add them to your libraries?</source>
+            <translation>
+                <numerusform>The file also has library blocks from the computer it came from (%n block). Add them to your libraries?</numerusform>
+                <numerusform>The file also has library blocks from the computer it came from (%n blocks). Add them to your libraries?</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Your libraries already have different versions of %n of them: {names}.</source>
+            <translation>
+                <numerusform>Your libraries already have different versions of %n of them: {names}.</numerusform>
+                <numerusform>Your libraries already have different versions of %n of them: {names}.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Imported the form "{name}" with %n version(s).</source>
+            <translation>
+                <numerusform>Imported the form "{name}" with %n version.</numerusform>
+                <numerusform>Imported the form "{name}" with %n versions.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Added %n printed version(s).</source>
+            <translation>
+                <numerusform>Added %n printed version.</numerusform>
+                <numerusform>Added %n printed versions.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Added %n library block(s).</source>
+            <translation>
+                <numerusform>Added %n library block.</numerusform>
+                <numerusform>Added %n library blocks.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Replaced %n library block(s).</source>
+            <translation>
+                <numerusform>Replaced %n library block.</numerusform>
+                <numerusform>Replaced %n library blocks.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Delete the form "{name}"? %n sheet(s) captured from it would lose their form, so their data could no longer be checked or exported, and sheets printed from it could no longer be scanned. This can't be undone.</source>
             <translation>
                 <numerusform>Delete the form "{name}"? %n sheet captured from it would lose their form, so their data could no longer be checked or exported, and sheets printed from it could no longer be scanned. This can't be undone.</numerusform>
@@ -70,6 +119,20 @@
             <translation>
                 <numerusform>Saved %n page to {path}</numerusform>
                 <numerusform>Saved %n pages to {path}</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Exported the form "{name}", %n version(s), to {path}.</source>
+            <translation>
+                <numerusform>Exported the form "{name}", %n version, to {path}.</numerusform>
+                <numerusform>Exported the form "{name}", %n versions, to {path}.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Included %n library block(s).</source>
+            <translation>
+                <numerusform>Included %n library block.</numerusform>
+                <numerusform>Included %n library blocks.</numerusform>
             </translation>
         </message>
         <message numerus="yes">

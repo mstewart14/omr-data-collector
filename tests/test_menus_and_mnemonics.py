@@ -227,6 +227,8 @@ def test_file_menu_holds_the_form_commands(
         "&Revert form",
         "Dup&licate form",
         "&Delete form…",
+        "&Import form…",
+        "Export for&m…",
         "E&xport as PDF…",
         "Print pre&view…",
         "&Print…",
