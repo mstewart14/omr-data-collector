@@ -712,7 +712,7 @@ wheels = [
 
 [[package]]
 name = "omr-data-collector"
-version = "0.1.5"
+version = "0.1.6"
 source = { editable = "." }
 dependencies = [
     { name = "deepmerge" },
