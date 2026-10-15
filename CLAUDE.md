@@ -106,6 +106,21 @@ engine bridge.
   many. Its limits are from real phone photos; retune them only against real
   photos. `tests/test_scanning.py` is the round-trip test (`Sheet.use_mark`
   and `radius_mm` draw pale and part-filled marks).
+- **Lining a page up** (`engine/alignment.py`, `tests/test_alignment.py`): the
+  QR reader gives the code's corners in the code's own order, so
+  `scan_sheet` turns a sideways or upside-down picture upright first. It then
+  straightens as the template says (sheet edges, then markers) and, if that
+  fails, on the markers alone (`CropPage` can't find the edges of a flatbed
+  scan or a sheet on a cluttered table). **Every straightened page must have
+  its code where the form puts it** (`misalignment`): OMRChecker happily
+  straightens a page turned or stretched the wrong way and reads every bubble
+  as empty, so a page that fails is unreadable, never misread. Capture's
+  "Read it anyway" (`reframe=True`) is for a sheet printed at another size or
+  orientation (a landscape form shrunk onto portrait paper): `reframed` moves
+  and scales the picture so the code sits where the form puts it, then
+  straightens on the markers. The expected code place is worked out from the
+  stored template's size and today's 26 mm code; sheets printed before
+  2026-10-10 have a 22 mm code, within the check's tolerance.
 - **Sheet details** (`models/SheetDetails.py`): labelled answers (Date, Shift,
   Manager...), each field a table `Column`, written on the form (added from the form details,
   starting from a usual set) rather than kept in a library. By default

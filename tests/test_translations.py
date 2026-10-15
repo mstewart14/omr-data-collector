@@ -300,6 +300,9 @@ INTERNAL_CALLS = {
     "getattr",
     "setObjectName",
     "setStyleSheet",
+    # Log lines (not "warning", which QMessageBox shares).
+    "info",
+    "debug",
 }
 # Prose-looking strings that aren't for people to read, by file.
 NOT_FOR_PEOPLE = {
@@ -317,6 +320,13 @@ NOT_FOR_PEOPLE = {
     # Exception details for logs; the scanner shows its own message instead.
     "engine/marks.py": {"{} of {} bubbles unclear"},
     "engine/runner.py": {"page or markers not found"},
+    # Why a straightened page was set aside, for the log.
+    "engine/alignment.py": {
+        "code not found on the straightened page",
+        "code {} mm from where the form puts it",
+        "code turned {} degrees",
+        "code {} times its printed size",
+    },
 }
 PROSE = re.compile(r"[A-Za-z]{2,}[,.:;?!]? [A-Za-z]{2,}|^[A-Z][a-z]+$")
 # SQL statements, and lists of column names.

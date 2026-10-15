@@ -11,6 +11,7 @@ from PySide6.QtCore import QEvent, QLocale, QObject, QStandardPaths, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QDialog,
     QFileDialog,
     QFormLayout,
@@ -314,7 +315,8 @@ class CapturePage(QWidget):
         QWidget.setTabOrder(self.sheet_list, self.add_button)
         for before, after in (
             (self.add_button, self.read_button),
-            (self.read_button, self.remove_button),
+            (self.read_button, self.read_anyway_button),
+            (self.read_anyway_button, self.remove_button),
             (self.remove_button, self.export_button),
             (self.export_button, self.sheet_canvas),
             (self.sheet_canvas, self.answers_table),
@@ -459,6 +461,39 @@ class CapturePage(QWidget):
                 "%n couldn't be read; choose one to see why.", None, unreadable
             )
         self.status_message.emit(message)
+
+    def read_anyway(self) -> None:
+        """Read an unreadable sheet by finding its page from its QR code.
+
+        For a sheet printed at another size or orientation than its form (a
+        landscape form shrunk onto portrait paper, say), whose edges and corner
+        markers aren't where the form puts them.
+        """
+        capture = self._current
+        if capture is None or capture.status != CAPTURE_STATUSES.UNREADABLE:
+            self.status_message.emit(tr("Choose a sheet that couldn't be read."))
+            return
+        organization = load_organization(self._connection)
+        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            result = read_capture(self._connection, capture, paper_size, reframe=True)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.reload(select=result.capture_id)
+        if result.status == CAPTURE_STATUSES.READ:
+            self.status_message.emit(
+                tr(
+                    'Read "{file}" by finding the page from its QR code. Check '
+                    "every answer against the sheet before saving."
+                ).format(file=capture.original_name)
+            )
+        else:
+            self.status_message.emit(
+                tr('Still couldn\'t read "{file}": {problem}').format(
+                    file=capture.original_name, problem=result.problem
+                )
+            )
 
     def export_data(self) -> None:
         """Export a form's checked sheets as CSV files or a JSON file."""
@@ -697,6 +732,15 @@ class CapturePage(QWidget):
         self.add_button.clicked.connect(self.add_images)
         self.read_button = QPushButton(tr("Rea&d waiting sheets"))
         self.read_button.clicked.connect(self.read_waiting)
+        self.read_anyway_button = QPushButton(tr("Read it an&yway"))
+        self.read_anyway_button.setToolTip(
+            tr(
+                "Read the chosen unreadable sheet by finding the page from its QR "
+                "code: for a sheet printed at another size or orientation than "
+                "its form"
+            )
+        )
+        self.read_anyway_button.clicked.connect(self.read_anyway)
         self.remove_button = QPushButton(tr("Remo&ve sheet"))
         self.remove_button.clicked.connect(self.remove_sheet)
         self.export_button = QPushButton(tr("E&xport data…"))
@@ -720,7 +764,12 @@ class CapturePage(QWidget):
         layout.addWidget(self.empty_note)
         layout.addWidget(self.add_button)
         layout.addWidget(self.photo_tip)
-        for button in (self.read_button, self.remove_button, self.export_button):
+        for button in (
+            self.read_button,
+            self.read_anyway_button,
+            self.remove_button,
+            self.export_button,
+        ):
             layout.addWidget(button)
         return box
 
@@ -1134,6 +1183,10 @@ class CapturePage(QWidget):
         self.remove_button.setEnabled(self._current is not None)
         self.read_button.setEnabled(
             any(c.status == CAPTURE_STATUSES.WAITING for c in self._captures)
+        )
+        self.read_anyway_button.setEnabled(
+            self._current is not None
+            and self._current.status == CAPTURE_STATUSES.UNREADABLE
         )
 
     def _next_to_check(self, after: Capture) -> str:

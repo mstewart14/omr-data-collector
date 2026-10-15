@@ -275,6 +275,7 @@ class MainWindow(QMainWindow):
         for text, command in (
             (tr("Add &images…"), self.capture_page.add_images),
             (tr("&Read waiting sheets"), self.capture_page.read_waiting),
+            (tr("Read it any&way"), self.capture_page.read_anyway),
             (tr("&Export data…"), self.capture_page.export_data),
         ):
             action = self.capture_menu.addAction(text)

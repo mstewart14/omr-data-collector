@@ -21,13 +21,18 @@ if TYPE_CHECKING:
 
 
 def read_capture(
-    connection: sqlite3.Connection, capture: Capture, paper_size: str
+    connection: sqlite3.Connection,
+    capture: Capture,
+    paper_size: str,
+    *,
+    reframe: bool = False,
 ) -> Capture:
     """Read ``capture``'s image, store the outcome and return the updated capture.
 
     A sheet that can be read gets one answer for every place on its page where
     something can be answered, bubbles and handwriting alike, ready for review;
-    one that can't is marked unreadable with the reason.
+    one that can't is marked unreadable with the reason. ``reframe`` finds the
+    page from its QR code ("Read it anyway"; see ``scan_sheet``).
     """
     try:
         scanned = scan_sheet(
@@ -35,6 +40,7 @@ def read_capture(
             image_path(connection, capture),
             paper_size,
             page_image=page_image_path(connection, capture),
+            reframe=reframe,
         )
     except ScanError as error:
         updated = replace(

@@ -173,5 +173,14 @@ def read_qr_codes(image: np.ndarray) -> list[str]:
     detector miss, and needs no system library, so installers don't have to
     bundle zbar.
     """
-    texts, _ = cv2.wechat_qrcode.WeChatQRCode().detectAndDecode(image)
-    return list(texts)
+    return [text for text, _ in find_qr_codes(image)]
+
+
+def find_qr_codes(image: np.ndarray) -> list[tuple[str, np.ndarray]]:
+    """Every QR code found, with its four corners in the image's pixels.
+
+    The corners are in the code's own order (top-left, top-right, bottom-right,
+    bottom-left), however the image is turned, so they show which way up it is.
+    """
+    texts, points = cv2.wechat_qrcode.WeChatQRCode().detectAndDecode(image)
+    return list(zip(texts, points, strict=True))
