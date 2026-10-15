@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QLabel, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox
 
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import style_error_label
@@ -262,3 +263,20 @@ def warn(
 ) -> None:
     """Show a problem that needs nothing but OK (a file that couldn't be saved)."""
     message_box(parent, icon, title, message).exec()
+
+
+def ask_save_path(
+    parent: QWidget, title: str, default: Path | str, file_filter: str, suffix: str
+) -> Path | None:
+    """Ask where to save a file; None if cancelled.
+
+    ``suffix`` (".pdf") is added when the name typed lacks it, after the whole
+    name, so a dot in the name ("Intake v1.2") is kept.
+    """
+    name, _ = QFileDialog.getSaveFileName(parent, title, str(default), file_filter)
+    if not name:
+        return None
+    path = Path(name)
+    if path.suffix.casefold() == suffix.casefold():
+        return path
+    return path.with_name(path.name + suffix)

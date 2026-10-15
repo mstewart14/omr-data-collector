@@ -89,3 +89,8 @@ class Organization:
             errors["orientation"] = tr("Choose an orientation.")
 
         return errors
+
+
+def paper_size_of(organization: Organization | None) -> str:
+    """The organization's paper size, or Letter before one is entered."""
+    return organization.paper_size if organization is not None else PAPER_SIZES.LETTER

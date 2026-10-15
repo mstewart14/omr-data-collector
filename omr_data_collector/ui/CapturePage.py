@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES, PAPER_SIZES
+from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     SHEETS_FILE,
@@ -52,6 +52,7 @@ from omr_data_collector.layout.omr_template import (
     page_template,
     with_writing_areas,
 )
+from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -89,6 +90,7 @@ from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
     ask_save_discard_cancel,
+    ask_save_path,
     confirm_destructive,
     warn,
 )
@@ -244,14 +246,8 @@ def choose_export_path(
             tr("JSON file (*.json)"),
             ".json",
         )
-    name, _ = QFileDialog.getSaveFileName(
-        parent, title, str(default_path.with_suffix(suffix)), filter_
-    )
-    if not name:
-        return None
-    path = Path(name)
-    return (
-        path if path.suffix.casefold() == suffix else path.with_name(path.name + suffix)
+    return ask_save_path(
+        parent, title, default_path.with_suffix(suffix), filter_, suffix
     )
 
 
@@ -416,8 +412,7 @@ class CapturePage(QWidget):
         if not waiting:
             self.status_message.emit(tr("No sheets are waiting to be read."))
             return
-        organization = load_organization(self._connection)
-        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        paper_size = paper_size_of(load_organization(self._connection))
         progress = QProgressDialog(
             tr("Reading sheets…"), tr("Stop"), 0, len(waiting), self
         )
@@ -474,8 +469,7 @@ class CapturePage(QWidget):
         if capture is None or capture.status != CAPTURE_STATUSES.UNREADABLE:
             self.status_message.emit(tr("Choose a sheet that couldn't be read."))
             return
-        organization = load_organization(self._connection)
-        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        paper_size = paper_size_of(load_organization(self._connection))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             result = read_capture(self._connection, capture, paper_size, reframe=True)
@@ -1265,8 +1259,7 @@ class CapturePage(QWidget):
             region.writing is not None for region in stored.regions
         ):
             return stored
-        organization = load_organization(self._connection)
-        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        paper_size = paper_size_of(load_organization(self._connection))
         layout = layout_form(self._form, paper_size)
         if not 1 <= page <= len(layout.pages):
             return stored

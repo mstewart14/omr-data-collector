@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
+from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QWidget
 
 from omr_data_collector.ui.form_helpers import (
     ask,
     ask_save_first,
+    ask_save_path,
     confirm_despite_problems,
     confirm_destructive,
     message_box,
@@ -160,3 +162,27 @@ def test_warn_shows_the_problem_as_plain_text(
     warn(parent, "Couldn't save", "<b>disk full</b>")
 
     assert seen == {"text": "<b>disk full</b>", "plain": Qt.TextFormat.PlainText}
+
+
+@pytest.mark.parametrize(
+    ("typed", "saved"),
+    [
+        ("Intake v1.2", "Intake v1.2.pdf"),
+        ("Intake.PDF", "Intake.PDF"),
+        ("Intake", "Intake.pdf"),
+    ],
+)
+def test_save_paths_get_their_extension_without_losing_a_dot(
+    parent: QWidget, mocker: MockerFixture, typed: str, saved: str
+) -> None:
+    mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(typed, ""))
+
+    path = ask_save_path(parent, "Export", "Intake.pdf", "PDF (*.pdf)", ".pdf")
+
+    assert path == Path(saved)
+
+
+def test_a_cancelled_save_path_is_none(parent: QWidget, mocker: MockerFixture) -> None:
+    mocker.patch.object(QFileDialog, "getSaveFileName", return_value=("", ""))
+
+    assert ask_save_path(parent, "Export", "x.pdf", "PDF (*.pdf)", ".pdf") is None

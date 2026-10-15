@@ -21,10 +21,10 @@ from omr_data_collector.constants import (
     DEFAULT_TABLE_ROWS,
     MAX_TABLE_ROWS,
     PAGE_ORIENTATIONS,
-    PAPER_SIZES,
     WRITTEN_DATA_TYPES,
 )
 from omr_data_collector.i18n import tr
+from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.storage.table_block_store import (
@@ -351,8 +351,7 @@ class TableBlocksPage(LibraryPage):
     # --- Preview ------------------------------------------------------------------
 
     def _refresh_preview(self) -> None:
-        organization = load_organization(self._connection)
-        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        paper_size = paper_size_of(load_organization(self._connection))
         orientation = self.preview_orientation_combo.currentData()
         table = self.read_item(self.name_edit.text(), self._editing_id)
         self.preview.set_table(table, paper_size, orientation)

@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
 from omr_data_collector.constants import (
     BLOCK_KINDS,
     PAGE_ORIENTATIONS,
-    PAPER_SIZES,
     SHEET_DETAILS_PLACEMENTS,
     TABLE_BREAKS,
 )
@@ -42,6 +41,7 @@ from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_title
 from omr_data_collector.models.ordering import move_by, move_to
+from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.rendering.print_form import render_form, save_pdf
 from omr_data_collector.storage.capture_store import list_captures
@@ -64,10 +64,8 @@ from omr_data_collector.storage.form_transfer import (
     read_form_file,
     write_form_file,
 )
+from omr_data_collector.storage.library_store import list_libraries
 from omr_data_collector.storage.organization_store import load_organization
-from omr_data_collector.storage.question_store import list_questions
-from omr_data_collector.storage.table_block_store import list_table_blocks
-from omr_data_collector.storage.text_block_store import list_text_blocks
 from omr_data_collector.ui.accessibility import style_error_label
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.BlockPalette import BlockPalette
@@ -77,6 +75,7 @@ from omr_data_collector.ui.form_helpers import (
     add_standard_shortcuts,
     ask,
     ask_save_first,
+    ask_save_path,
     confirm_despite_problems,
     tell,
     warn,
@@ -178,16 +177,13 @@ def choose_form(parent: QWidget, forms: list[Form], printed: set[str]) -> str | 
 
 def choose_form_file_path(parent: QWidget, default_name: str) -> Path | None:
     """Ask where to save an exported form; None if cancelled."""
-    file_name, _ = QFileDialog.getSaveFileName(
+    return ask_save_path(
         parent,
         tr("Export form"),
         default_name,
         tr("Exported form (*{suffix})").format(suffix=FILE_SUFFIX),
+        FILE_SUFFIX,
     )
-    if not file_name:
-        return None
-    path = Path(file_name)
-    return path if path.suffix.lower() == FILE_SUFFIX else path.with_suffix(FILE_SUFFIX)
 
 
 def choose_form_file_to_import(parent: QWidget) -> Path | None:
@@ -341,13 +337,9 @@ def import_summary(result: ImportResult, *, new_form: bool) -> str:
 
 def choose_pdf_path(parent: QWidget, default_name: str) -> Path | None:
     """Ask where to save the PDF; None if cancelled."""
-    file_name, _ = QFileDialog.getSaveFileName(
-        parent, tr("Export as PDF"), default_name, tr("PDF document (*.pdf)")
+    return ask_save_path(
+        parent, tr("Export as PDF"), default_name, tr("PDF document (*.pdf)"), ".pdf"
     )
-    if not file_name:
-        return None
-    path = Path(file_name)
-    return path if path.suffix.lower() == ".pdf" else path.with_suffix(".pdf")
 
 
 def run_print_dialog(parent: QWidget, printer: QPrinter) -> bool:
@@ -797,11 +789,7 @@ class FormsPage(LibraryPage):
             self.block_palette.set_items(kind, items)
 
     def _libraries(self) -> dict[str, list[BlockContent]]:
-        return {
-            BLOCK_KINDS.TEXT: list(list_text_blocks(self._connection)),
-            BLOCK_KINDS.QUESTION: list(list_questions(self._connection)),
-            BLOCK_KINDS.TABLE: list(list_table_blocks(self._connection)),
-        }
+        return list_libraries(self._connection)
 
     def _edit_block_at(self, index: int) -> None:
         self.set_selection([index], index)
@@ -809,7 +797,7 @@ class FormsPage(LibraryPage):
 
     def _refresh_pages(self) -> None:
         organization = load_organization(self._connection)
-        paper_size = organization.paper_size if organization else PAPER_SIZES.LETTER
+        paper_size = paper_size_of(organization)
         self.canvas.set_form(
             self.read_item(self.name_edit.text(), self._editing_id),
             organization,

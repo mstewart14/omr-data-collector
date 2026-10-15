@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from omr_data_collector.models.Form import Form
@@ -10,6 +10,28 @@ if TYPE_CHECKING:
     import sqlite3
 
     from omr_data_collector.models.Form import BlockContent
+
+
+@dataclass(frozen=True)
+class StoredVersion:
+    """One row of ``form_version``: a version's definition and how it was printed."""
+
+    version: int
+    definition: dict[str, Any]
+    printed_at: str | None = None
+    printed_layout: dict[str, Any] | None = None
+
+    @property
+    def printed(self) -> bool:
+        return self.printed_at is not None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "definition": self.definition,
+            "printedAt": self.printed_at,
+            "printedLayout": self.printed_layout,
+        }
 
 
 def list_forms(connection: sqlite3.Connection) -> list[Form]:
@@ -66,12 +88,7 @@ def save_form(connection: sqlite3.Connection, form: Form) -> Form:
     """
     definition = json.dumps(form.definition())
     with connection:
-        connection.execute(
-            "INSERT INTO form (form_id, name) VALUES (?, ?)"
-            " ON CONFLICT(form_id) DO UPDATE SET name = excluded.name,"
-            " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-            (form.form_id, form.name),
-        )
+        _store_form_row(connection, form.form_id, form.name)
         latest = connection.execute(
             "SELECT version, printed_at FROM form_version WHERE form_id = ?"
             " ORDER BY version DESC LIMIT 1",
@@ -90,6 +107,81 @@ def save_form(connection: sqlite3.Connection, form: Form) -> Form:
                 (form.form_id, version, definition),
             )
     return replace(form, version=version)
+
+
+def _store_form_row(connection: sqlite3.Connection, form_id: str, name: str) -> None:
+    """Add the form's row, or bring its name (the latest version's) up to date."""
+    connection.execute(
+        "INSERT INTO form (form_id, name) VALUES (?, ?)"
+        " ON CONFLICT(form_id) DO UPDATE SET name = excluded.name,"
+        " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+        (form_id, name),
+    )
+
+
+def stored_versions(
+    connection: sqlite3.Connection, form_id: str
+) -> tuple[StoredVersion, ...]:
+    """Every stored version of a form, oldest first."""
+    rows = connection.execute(
+        "SELECT version, definition, printed_at, printed_layout FROM form_version"
+        " WHERE form_id = ? ORDER BY version",
+        (form_id,),
+    ).fetchall()
+    return tuple(
+        StoredVersion(
+            version=row["version"],
+            definition=json.loads(row["definition"]),
+            printed_at=row["printed_at"],
+            printed_layout=(
+                json.loads(row["printed_layout"]) if row["printed_layout"] else None
+            ),
+        )
+        for row in rows
+    )
+
+
+def store_versions(
+    connection: sqlite3.Connection,
+    form_id: str,
+    name: str,
+    versions: list[StoredVersion],
+) -> None:
+    """Make the form's stored versions ``versions`` (an imported form's).
+
+    Printed versions never change, so those already stored are kept as they
+    are; only the unprinted latest version is replaced. All in one transaction.
+
+    Raises:
+        sqlite3.IntegrityError: Another form already has this name.
+    """
+    with connection:
+        _store_form_row(connection, form_id, name)
+        printed_here = {
+            version.version
+            for version in stored_versions(connection, form_id)
+            if version.printed
+        }
+        connection.execute(
+            "DELETE FROM form_version WHERE form_id = ? AND printed_at IS NULL",
+            (form_id,),
+        )
+        for version in versions:
+            if version.version in printed_here:
+                continue
+            connection.execute(
+                "INSERT INTO form_version (form_id, version, definition,"
+                " printed_at, printed_layout) VALUES (?, ?, ?, ?, ?)",
+                (
+                    form_id,
+                    version.version,
+                    json.dumps(version.definition),
+                    version.printed_at,
+                    json.dumps(version.printed_layout)
+                    if version.printed_layout is not None
+                    else None,
+                ),
+            )
 
 
 def forms_with_other_copies(

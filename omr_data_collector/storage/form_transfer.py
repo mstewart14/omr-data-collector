@@ -14,25 +14,24 @@ from typing import TYPE_CHECKING, Any
 
 import jsonschema
 
-from omr_data_collector.constants import BLOCK_KINDS
 from omr_data_collector.i18n import tr
 from omr_data_collector.layout.omr_template import PageTemplate
 from omr_data_collector.models.Form import CONTENT_TYPES, Form, content_id, kind_of
 from omr_data_collector.models.naming import imported_name
 from omr_data_collector.schemas.printed_layout_schema import PRINTED_LAYOUT_SCHEMA
-from omr_data_collector.storage.question_store import list_questions, save_question
-from omr_data_collector.storage.table_block_store import (
-    list_table_blocks,
-    save_table_block,
+from omr_data_collector.storage.form_store import (
+    StoredVersion,
+    store_versions,
+    stored_versions,
 )
-from omr_data_collector.storage.text_block_store import (
-    list_text_blocks,
-    save_text_block,
+from omr_data_collector.storage.library_store import (
+    LIBRARY_KINDS,
+    library_blocks,
+    save_library_block,
 )
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable
     from pathlib import Path
 
     from omr_data_collector.models.Form import BlockContent
@@ -44,36 +43,11 @@ FILE_SUFFIX = ".omrform"
 # stays well under this. A larger file is read no further.
 MAX_FILE_BYTES = 20 * 1024 * 1024
 
-# The library kinds a form's blocks can be copied from (sheet details have none).
-LIBRARY_KINDS = (BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION, BLOCK_KINDS.TABLE)
-
 _ID = re.compile(r"^[0-9a-f]{32}$")
 
 
 class FormFileError(Exception):
     """The file isn't a form exported by this app; the message says why."""
-
-
-@dataclass(frozen=True)
-class StoredVersion:
-    """One row of ``form_version``, as it travels in the file."""
-
-    version: int
-    definition: dict[str, Any]
-    printed_at: str | None = None
-    printed_layout: dict[str, Any] | None = None
-
-    @property
-    def printed(self) -> bool:
-        return self.printed_at is not None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "version": self.version,
-            "definition": self.definition,
-            "printedAt": self.printed_at,
-            "printedLayout": self.printed_layout,
-        }
 
 
 @dataclass(frozen=True)
@@ -104,36 +78,6 @@ class FormFile:
 # --- Export ---------------------------------------------------------------------
 
 
-def stored_versions(
-    connection: sqlite3.Connection, form_id: str
-) -> tuple[StoredVersion, ...]:
-    """Every stored version of a form, oldest first."""
-    rows = connection.execute(
-        "SELECT version, definition, printed_at, printed_layout FROM form_version"
-        " WHERE form_id = ? ORDER BY version",
-        (form_id,),
-    ).fetchall()
-    return tuple(
-        StoredVersion(
-            version=row["version"],
-            definition=json.loads(row["definition"]),
-            printed_at=row["printed_at"],
-            printed_layout=(
-                json.loads(row["printed_layout"]) if row["printed_layout"] else None
-            ),
-        )
-        for row in rows
-    )
-
-
-def _library(connection: sqlite3.Connection) -> list[BlockContent]:
-    return [
-        *list_text_blocks(connection),
-        *list_questions(connection),
-        *list_table_blocks(connection),
-    ]
-
-
 def library_blocks_used(
     connection: sqlite3.Connection, form_id: str
 ) -> list[BlockContent]:
@@ -144,7 +88,9 @@ def library_blocks_used(
         for block in version.definition["blocks"]
         if block["sourceId"] is not None
     }
-    return [block for block in _library(connection) if content_id(block) in sources]
+    return [
+        block for block in library_blocks(connection) if content_id(block) in sources
+    ]
 
 
 def form_file(
@@ -439,34 +385,7 @@ def apply_import(
     if [version.to_dict() for version in merged] != [
         version.to_dict() for version in plan.local
     ]:
-        with connection:
-            connection.execute(
-                "INSERT INTO form (form_id, name) VALUES (?, ?)"
-                " ON CONFLICT(form_id) DO UPDATE SET name = excluded.name,"
-                " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-                (exported.form_id, name),
-            )
-            # Printed versions never change; only the unprinted one is replaced.
-            connection.execute(
-                "DELETE FROM form_version WHERE form_id = ? AND printed_at IS NULL",
-                (exported.form_id,),
-            )
-            for version in merged:
-                if version.version in printed_here:
-                    continue
-                connection.execute(
-                    "INSERT INTO form_version (form_id, version, definition,"
-                    " printed_at, printed_layout) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        exported.form_id,
-                        version.version,
-                        json.dumps(version.definition),
-                        version.printed_at,
-                        json.dumps(version.printed_layout)
-                        if version.printed_layout is not None
-                        else None,
-                    ),
-                )
+        store_versions(connection, exported.form_id, name, merged)
     added_blocks, replaced, renamed = (
         _import_library(connection, exported.library, replace_blocks=replace_blocks)
         if add_blocks
@@ -487,19 +406,12 @@ def _changed_blocks(
     connection: sqlite3.Connection, library: tuple[BlockContent, ...]
 ) -> tuple[BlockContent, ...]:
     """This computer's library blocks that the file has different copies of."""
-    here = {content_id(block): block for block in _library(connection)}
+    here = {content_id(block): block for block in library_blocks(connection)}
     return tuple(
         here[content_id(block)]
         for block in library
         if content_id(block) in here and here[content_id(block)] != block
     )
-
-
-_SAVERS: dict[str, Callable[[sqlite3.Connection, Any], None]] = {
-    BLOCK_KINDS.TEXT: save_text_block,
-    BLOCK_KINDS.QUESTION: save_question,
-    BLOCK_KINDS.TABLE: save_table_block,
-}
 
 
 def _import_library(
@@ -509,7 +421,7 @@ def _import_library(
     replace_blocks: bool,
 ) -> tuple[int, int, tuple[tuple[str, str], ...]]:
     """Add the file's library blocks; returns counts added and replaced, and renames."""
-    here = {content_id(block): block for block in _library(connection)}
+    here = {content_id(block): block for block in library_blocks(connection)}
     added = 0
     replaced = 0
     renamed: list[tuple[str, str]] = []
@@ -524,12 +436,12 @@ def _import_library(
             added += 1
         names = {
             other.name
-            for other in _library(connection)
+            for other in library_blocks(connection)
             if kind_of(other) == kind and content_id(other) != content_id(block)
         }
         if block.name.casefold() in {name.casefold() for name in names}:
             new_name = imported_name(block.name, names)
             renamed.append((block.name, new_name))
             block = replace(block, name=new_name)  # noqa: PLW2901 (stored renamed)
-        _SAVERS[kind](connection, block)
+        save_library_block(connection, block)
     return added, replaced, tuple(renamed)
