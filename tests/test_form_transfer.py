@@ -44,7 +44,7 @@ from tests.sheets import Sheet, intake_form
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from pytest_mock import MockerFixture
@@ -418,3 +418,61 @@ def test_import_form_explains_a_bad_file(
     page.import_form()
 
     assert "isn't a form exported" in warning.call_args.args[2]
+
+
+@pytest.fixture
+def printed_export(connection: sqlite3.Connection, tmp_path: Path) -> tuple[dict, Path]:
+    """A printed form's export, as JSON to tamper with, and where to write it."""
+    form = save_form(connection, intake_form())
+    print_version(connection, form)
+    return form_file(connection, form.form_id).to_dict(), tmp_path / f"x{FILE_SUFFIX}"
+
+
+def first_step_options(data: dict, step: int) -> dict:
+    layout = data["versions"][0]["printedLayout"]
+    return layout["pages"][0]["template"]["preProcessors"][step]["options"]
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        # Another file read as the marker.
+        lambda data: first_step_options(data, 1).update(
+            referenceImage="../../secret.png"
+        ),
+        # An image too large to hold in memory.
+        lambda data: first_step_options(data, 0).update(
+            processingImageShape=[100000, 100000]
+        ),
+        # A straightening step the app never writes.
+        lambda data: data["versions"][0]["printedLayout"]["pages"][0]["template"][
+            "preProcessors"
+        ].append({"name": "GaussianBlur", "options": {}}),
+    ],
+    ids=["marker file", "huge image", "extra step"],
+)
+def test_a_crafted_page_template_is_refused(
+    printed_export: tuple[dict, Path], tamper: Callable[[dict], None]
+) -> None:
+    data, path = printed_export
+    tamper(data)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(FormFileError, match="damaged or incomplete"):
+        read_form_file(path)
+
+
+def test_a_file_too_large_to_be_a_form_is_not_read(
+    printed_export: tuple[dict, Path], mocker: MockerFixture
+) -> None:
+    data, path = printed_export
+    path.write_text(json.dumps(data), encoding="utf-8")
+    mocker.patch(
+        "omr_data_collector.storage.form_transfer.MAX_FILE_BYTES",
+        len(json.dumps(data)) - 1,
+    )
+    read = mocker.spy(type(path), "read_text")
+
+    with pytest.raises(FormFileError, match="too large"):
+        read_form_file(path)
+    read.assert_not_called()

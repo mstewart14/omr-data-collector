@@ -204,7 +204,11 @@ engine bridge.
   overtaken by the other's printing, `ImportPlan.choose_latest` asks whose
   become the latest version. Library blocks are matched by ID (differing ones
   replaced only if chosen) and renamed "(imported)" on a name clash. A form
-  of the same name with another ID is refused. The organization isn't moved:
+  of the same name with another ID is refused. Page templates in the file
+  are handed to OMRChecker as they stand, so they must match
+  `schemas/printed_layout_schema.py` (only the app's own straightening
+  steps and marker file, bounded sizes), and files over `MAX_FILE_BYTES`
+  aren't read. The organization isn't moved:
   pages printed on the other computer show its own header.
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed

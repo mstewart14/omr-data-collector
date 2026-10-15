@@ -19,6 +19,7 @@ from omr_data_collector.i18n import tr
 from omr_data_collector.layout.omr_template import PageTemplate
 from omr_data_collector.models.Form import CONTENT_TYPES, Form, content_id, kind_of
 from omr_data_collector.models.naming import imported_name
+from omr_data_collector.schemas.printed_layout_schema import PRINTED_LAYOUT_SCHEMA
 from omr_data_collector.storage.question_store import list_questions, save_question
 from omr_data_collector.storage.table_block_store import (
     list_table_blocks,
@@ -39,6 +40,9 @@ if TYPE_CHECKING:
 FILE_FORMAT = "omr-data-collector-form"
 FILE_FORMAT_VERSION = 1
 FILE_SUFFIX = ".omrform"
+# Real exports are tens of kilobytes; a form with hundreds of printed versions
+# stays well under this. A larger file is read no further.
+MAX_FILE_BYTES = 20 * 1024 * 1024
 
 # The library kinds a form's blocks can be copied from (sheet details have none).
 LIBRARY_KINDS = (BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION, BLOCK_KINDS.TABLE)
@@ -178,13 +182,16 @@ def read_form_file(path: Path) -> FormFile:
         FormFileError: The file can't be read, or isn't an exported form.
     """
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        too_large = path.stat().st_size > MAX_FILE_BYTES
+        data = None if too_large else json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise FormFileError(
             tr("The file couldn't be read as an exported form: {problem}").format(
                 problem=error
             )
         ) from error
+    if too_large:
+        raise FormFileError(tr("The file is too large to be an exported form."))
     if not isinstance(data, dict) or data.get("format") != FILE_FORMAT:
         raise FormFileError(tr("The file isn't a form exported by this app."))
     if data.get("formatVersion") != FILE_FORMAT_VERSION:
@@ -234,6 +241,7 @@ def _parse_version(entry: dict[str, Any], form_id: str) -> StoredVersion:
     if printed_at is not None and not isinstance(printed_at, str):
         raise TypeError(printed_at)
     if layout is not None:
+        jsonschema.validate(instance=layout, schema=PRINTED_LAYOUT_SCHEMA)
         for page in layout["pages"]:
             PageTemplate.from_dict(page)
     return StoredVersion(version, entry["definition"], printed_at, layout)
