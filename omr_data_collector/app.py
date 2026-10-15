@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from omr_data_collector import APP_NAME, self_check
+from omr_data_collector import APP_NAME, app_version, self_check
 from omr_data_collector.constants import DATABASE_FILENAME
 from omr_data_collector.i18n import install_translators, tr
 from omr_data_collector.storage.database import open_database
@@ -52,6 +52,7 @@ def open_app_database(path: Path) -> sqlite3.Connection | None:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(app_version())
     app.setWindowIcon(app_icon())
     app.setDesktopFileName(DESKTOP_FILE_NAME)
     install_translators(app)

@@ -313,7 +313,8 @@ NOT_FOR_PEOPLE = {
     # The installer builds' check: its report and its throwaway sheet.
     "self_check.py": {
         "Self check",
-        "read {} from form {}",
+        "version {} read {} from form {}",
+        "the app's version isn't recorded",
         "read {} where {} was marked",
         "the form's first block isn't a question",
     },

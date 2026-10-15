@@ -11,6 +11,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 ROOT = Path(SPECPATH).parent
 PACKAGE = ROOT / "omr_data_collector"
 ICONS = ROOT / "packaging" / "icons"
@@ -27,6 +29,8 @@ a = Analysis(
     datas=[
         (str(PACKAGE / "translations" / "*.qm"), "omr_data_collector/translations"),
         (str(PACKAGE / "resources" / "*.svg"), "omr_data_collector/resources"),
+        # The package's own metadata, which About reads the version from.
+        *copy_metadata(NAME),
     ],
     excludes=[
         # OMRChecker imports these only for barcode and OCR fields, which our

@@ -15,6 +15,7 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from omr_data_collector import app_version
 from omr_data_collector.constants import ANSWER_TYPES, PAPER_SIZES
 from omr_data_collector.engine.scanning import scan_sheet
 from omr_data_collector.layout.form_layout import layout_form
@@ -88,6 +89,12 @@ def check(folder: Path) -> str:
     Raises:
         SelfCheckError: The sheet read back wrong.
     """
+    version = app_version()
+    if not version:
+        # About shows it, from the package's metadata, which the installer
+        # must bundle.
+        msg = "the app's version isn't recorded"
+        raise SelfCheckError(msg)
     connection = open_database(folder / "check.sqlite3")
     try:
         organization = Organization("Self check", paper_size=PAPER_SIZES.LETTER)
@@ -104,7 +111,7 @@ def check(folder: Path) -> str:
     if values != (CHOICES[MARKED],):
         msg = f"read {values!r} where {CHOICES[MARKED]!r} was marked"
         raise SelfCheckError(msg)
-    return f"read {values!r} from form {page.identity.form_id}"
+    return f"version {version} read {values!r} from form {page.identity.form_id}"
 
 
 def run(report: Path | None) -> int:

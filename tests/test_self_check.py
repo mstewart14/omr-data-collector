@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from omr_data_collector import self_check
+from omr_data_collector import app_version, self_check
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +21,7 @@ def test_the_self_check_reads_back_its_sheet(tmp_path: Path) -> None:
 
     outcome = report.read_text(encoding="utf-8")
     assert status == 0, outcome
-    assert outcome.startswith("ok: read ('green',)")
+    assert outcome.startswith(f"ok: version {app_version()} read ('green',)")
 
 
 def test_a_failing_self_check_reports_why(

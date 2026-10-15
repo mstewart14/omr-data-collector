@@ -22,6 +22,7 @@ from omr_data_collector.i18n import (
     tr,
 )
 from omr_data_collector.storage.organization_store import load_organization
+from omr_data_collector.ui.AboutDialog import AboutDialog
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
@@ -291,6 +292,13 @@ class MainWindow(QMainWindow):
         )
         language_action = self.preferences_menu.addAction(tr("&Language…"))
         language_action.triggered.connect(self.change_language)
+        self.preferences_menu.addSeparator()
+        about_action = self.preferences_menu.addAction(
+            tr("&About {app}…").format(app=APP_NAME)
+        )
+        # On macOS it moves to the application menu, where About belongs.
+        about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        about_action.triggered.connect(self.show_about)
 
     def _library_menu(
         self,
@@ -349,6 +357,10 @@ class MainWindow(QMainWindow):
         return next(
             index for index, (_, other) in enumerate(self.pages) if other is page
         )
+
+    def show_about(self) -> None:
+        """Preferences > About: the version, and links to the source and issues."""
+        AboutDialog(self).exec()
 
     def change_language(self) -> None:
         """Preferences > Language: choose the language for the next start."""

@@ -14,6 +14,7 @@ from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.storage.question_store import list_questions
 from omr_data_collector.storage.text_block_store import save_text_block
+from omr_data_collector.ui.AboutDialog import AboutDialog
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.ExportDialog import ExportDialog
@@ -179,6 +180,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: BlockContentDialog(None, BLOCK_KINDS.QUESTION, None),
         lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
         lambda: LanguageDialog(None, ""),
+        lambda: AboutDialog(None, "1.2.3"),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
         lambda: ExportDialog(None, []),
@@ -194,6 +196,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         "question",
         "picker",
         "language",
+        "about",
         "details",
         "field",
         "export",
@@ -276,6 +279,7 @@ def test_each_library_menu_opens_its_library_first(
     assert menu_texts(window.preferences_menu) == [
         f"&Organization details…\t{section_key(5)}",
         "&Language…",
+        "&About OMR Data Collector…",
     ]
 
     window.question_menu.actions()[0].trigger()
@@ -325,7 +329,7 @@ def test_organization_details_opens_the_organization_section(
 ) -> None:
     window = make_window(qtbot, connection)
     window.open_section(3)
-    organization, _language = window.preferences_menu.actions()
+    organization, _language, *_ = window.preferences_menu.actions()
 
     organization.trigger()
 

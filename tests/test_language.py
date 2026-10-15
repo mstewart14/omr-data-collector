@@ -147,7 +147,7 @@ def test_the_preferences_menu_opens_the_language_dialog(
     choose = mocker.patch(
         "omr_data_collector.ui.MainWindow.choose_language", return_value=None
     )
-    _organization, language = window.preferences_menu.actions()
+    _organization, language, *_ = window.preferences_menu.actions()
 
     language.trigger()
 
