@@ -26,7 +26,7 @@ from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
 
 if TYPE_CHECKING:
@@ -101,9 +101,7 @@ class BlockPickerDialog(QDialog):
         self.empty_note.setWordWrap(True)
         self.empty_note.setVisible(not self._items)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        self.buttons = ok_cancel_buttons(self)
         ok_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
         ok_button.setText(tr("Add copy"))
         ok_button.setEnabled(bool(self._items))
@@ -113,8 +111,6 @@ class BlockPickerDialog(QDialog):
                 texts["write_new"], QDialogButtonBox.ButtonRole.ActionRole
             )
             self.write_new_button.clicked.connect(self._choose_write_new)
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
         self.item_list.itemActivated.connect(lambda _item: self.accept())
 
         layout = QVBoxLayout(self)
@@ -222,11 +218,7 @@ class BlockContentDialog(QDialog):
                 *self.answer_fields.focus_chain(),
             ]
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
+        self.buttons = ok_cancel_buttons(self)
         layout = QVBoxLayout(self)
         layout.addLayout(self.form)
         layout.addWidget(self.buttons)

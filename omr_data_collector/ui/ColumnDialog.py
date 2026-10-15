@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLineEdit,
     QVBoxLayout,
@@ -19,7 +18,7 @@ from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.TableBlock import Column
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QLabel
@@ -92,11 +91,7 @@ class ColumnDialog(QDialog):
             lambda: None,
         )
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
+        self.buttons = ok_cancel_buttons(self)
 
         # A sheet detail's label says it all: no example is printed.
         self.form.setRowVisible(self.example_edit, not sheet_detail)

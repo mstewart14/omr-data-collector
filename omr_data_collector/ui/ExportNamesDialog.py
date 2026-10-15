@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from omr_data_collector.export.data_export import SHEETS_FILE, ExportNames
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import style_error_label
+from omr_data_collector.ui.form_helpers import move_buttons, ok_cancel_buttons
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -135,28 +136,18 @@ class ExportNamesDialog(QDialog):
         self.files_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _build_moves(self) -> QWidget:
-        self.move_up_button = QPushButton(tr("Move up"))
-        self.move_down_button = QPushButton(tr("Move down"))
+        moves, self.move_up_button, self.move_down_button = move_buttons(
+            tr("Column order")
+        )
         self.move_up_button.clicked.connect(lambda: self.move_column(-1))
         self.move_down_button.clicked.connect(lambda: self.move_column(1))
-        moves = QWidget()
-        moves.setAccessibleName(tr("Column order"))
-        moves_layout = QHBoxLayout(moves)
-        moves_layout.setContentsMargins(0, 0, 0, 0)
-        moves_layout.addWidget(self.move_up_button)
-        moves_layout.addWidget(self.move_down_button)
-        moves_layout.addStretch()
         return moves
 
     def _build_buttons(self) -> None:
         self.reset_button = QPushButton(tr("&Reset to defaults"))
         self.reset_button.clicked.connect(self.reset)
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        self.buttons = ok_cancel_buttons(self)
         self.buttons.addButton(self.reset_button, QDialogButtonBox.ButtonRole.ResetRole)
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
 
     def _build_table(self) -> QTableWidget:
         table = QTableWidget(0, 2)

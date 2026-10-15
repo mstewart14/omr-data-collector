@@ -196,8 +196,9 @@ engine bridge.
 - **Shared helpers to use rather than repeat:** `storage/library_store.py`
   (all three libraries: list, save any block), `form_store.stored_versions`/
   `store_versions` (a form's version rows), `Organization.paper_size_of`
-  (Letter before one is entered), and `form_helpers.ask_save_path` (adds the
-  extension after the whole name, keeping a dot in it).
+  (Letter before one is entered), `form_helpers.ask_save_path` (adds the
+  extension after the whole name, keeping a dot in it), and the button rows
+  `ok_cancel_buttons`, `move_buttons` and `save_revert_buttons`.
 - **Moving forms between computers** (`storage/form_transfer.py`, File > Export
   form / Import form): a `.omrform` JSON file with the form ID, every version
   (definition, `printed_at`, `printed_layout`) and, if the person chooses, the

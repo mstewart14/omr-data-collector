@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+    QWidget,
+)
 
 from omr_data_collector.ui.form_helpers import (
     ask,
@@ -16,6 +23,9 @@ from omr_data_collector.ui.form_helpers import (
     confirm_despite_problems,
     confirm_destructive,
     message_box,
+    move_buttons,
+    ok_cancel_buttons,
+    save_revert_buttons,
     tell,
     warn,
 )
@@ -186,3 +196,33 @@ def test_a_cancelled_save_path_is_none(parent: QWidget, mocker: MockerFixture) -
     mocker.patch.object(QFileDialog, "getSaveFileName", return_value=("", ""))
 
     assert ask_save_path(parent, "Export", "x.pdf", "PDF (*.pdf)", ".pdf") is None
+
+
+def test_ok_and_cancel_accept_and_reject_the_dialog(qtbot: QtBot) -> None:
+    dialog = QDialog()
+    qtbot.addWidget(dialog)
+    buttons = ok_cancel_buttons(dialog)
+
+    with qtbot.waitSignal(dialog.accepted):
+        buttons.button(QDialogButtonBox.StandardButton.Ok).click()
+    with qtbot.waitSignal(dialog.rejected):
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).click()
+
+
+def test_the_move_buttons_are_named_for_what_they_move(qtbot: QtBot) -> None:
+    row, up, down = move_buttons("Column order")
+    qtbot.addWidget(row)
+
+    assert row.accessibleName() == "Column order"
+    assert (up.text(), down.text()) == ("Move up", "Move down")
+
+
+def test_save_is_the_default_beside_revert(qtbot: QtBot) -> None:
+    save, revert, row = save_revert_buttons("Save it (Ctrl+S)")
+    holder = QWidget()
+    holder.setLayout(row)
+    qtbot.addWidget(holder)
+
+    assert save.isDefault()
+    assert save.toolTip() == "Save it (Ctrl+S)"
+    assert row.indexOf(revert) < row.indexOf(save)

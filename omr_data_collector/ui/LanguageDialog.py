@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLabel,
     QVBoxLayout,
@@ -14,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.i18n import language_choices, tr
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -46,11 +45,7 @@ class LanguageDialog(QDialog):
         note = QLabel(tr("The app changes language the next time it starts."))
         note.setWordWrap(True)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
+        self.buttons = ok_cancel_buttons(self)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)

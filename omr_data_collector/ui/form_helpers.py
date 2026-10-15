@@ -8,7 +8,15 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox
+from PySide6.QtWidgets import (
+    QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QWidget,
+)
 
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import style_error_label
@@ -16,7 +24,7 @@ from omr_data_collector.ui.accessibility import style_error_label
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from PySide6.QtWidgets import QFormLayout, QWidget
+    from PySide6.QtWidgets import QDialog, QFormLayout
 
 
 def add_field_row(
@@ -280,3 +288,47 @@ def ask_save_path(
     if path.suffix.casefold() == suffix.casefold():
         return path
     return path.with_name(path.name + suffix)
+
+
+def ok_cancel_buttons(dialog: QDialog) -> QDialogButtonBox:
+    """A dialog's OK and Cancel buttons, accepting and rejecting it."""
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    return buttons
+
+
+def move_buttons(accessible_name: str) -> tuple[QWidget, QPushButton, QPushButton]:
+    """A row of Move up and Move down buttons, named for what they reorder.
+
+    They have no Alt+letter: the list's own up and down keys select, and the
+    row's name tells screen readers what the buttons move.
+    """
+    up = QPushButton(tr("Move up"))
+    down = QPushButton(tr("Move down"))
+    row = QWidget()
+    row.setAccessibleName(accessible_name)
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(up)
+    layout.addWidget(down)
+    layout.addStretch()
+    return row, up, down
+
+
+def save_revert_buttons(
+    save_tooltip: str,
+) -> tuple[QPushButton, QPushButton, QHBoxLayout]:
+    """An editing page's Save (the default) and Revert buttons, at the right."""
+    save = QPushButton(tr("&Save"))
+    save.setDefault(True)
+    save.setToolTip(save_tooltip)
+    revert = QPushButton(tr("&Revert"))
+    revert.setToolTip(tr("Discard unsaved changes"))
+    row = QHBoxLayout()
+    row.addStretch()
+    row.addWidget(revert)
+    row.addWidget(save)
+    return save, revert, row

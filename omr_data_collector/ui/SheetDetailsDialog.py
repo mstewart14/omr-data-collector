@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
@@ -20,7 +19,7 @@ from PySide6.QtWidgets import (
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
 from omr_data_collector.ui.TableBlocksPage import column_summary
 
 if TYPE_CHECKING:
@@ -100,11 +99,7 @@ class SheetDetailsDialog(QDialog):
         actions_layout.addStretch()
         self.form.addRow("", actions)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
+        self.buttons = ok_cancel_buttons(self)
         layout = QVBoxLayout(self)
         layout.addLayout(self.form)
         layout.addWidget(self.buttons)

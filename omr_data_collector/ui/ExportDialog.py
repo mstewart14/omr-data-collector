@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -22,7 +21,11 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.i18n import tr
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import (
+    add_field_row,
+    move_buttons,
+    ok_cancel_buttons,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -115,13 +118,9 @@ class ExportDialog(QDialog):
         self.warning.setWordWrap(True)
         self.warning.setVisible(False)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        self.buttons = ok_cancel_buttons(self)
         self.ok_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
         self.ok_button.setText(tr("Export…"))
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form_layout)
@@ -199,15 +198,9 @@ class ExportDialog(QDialog):
         )
         self.sheet_label = QLabel(tr("Sheets to combine, in &order"))
         self.sheet_label.setBuddy(self.sheet_list)
-        self.move_up_button = QPushButton(tr("Move up"))
-        self.move_down_button = QPushButton(tr("Move down"))
-        moves = QWidget()
-        moves.setAccessibleName(tr("Sheet order"))
-        moves_layout = QHBoxLayout(moves)
-        moves_layout.setContentsMargins(0, 0, 0, 0)
-        moves_layout.addWidget(self.move_up_button)
-        moves_layout.addWidget(self.move_down_button)
-        moves_layout.addStretch()
+        moves, self.move_up_button, self.move_down_button = move_buttons(
+            tr("Sheet order")
+        )
         return moves
 
     def chosen(self) -> tuple[str, str, list[str] | None, bool]:

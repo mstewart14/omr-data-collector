@@ -41,6 +41,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_save_discard_cancel,
     ask_where_to_change,
     confirm_destructive,
+    save_revert_buttons,
 )
 
 if TYPE_CHECKING:
@@ -421,15 +422,9 @@ class LibraryPage(QWidget, Generic[ItemT]):
             QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         )
 
-        self.save_button = QPushButton(tr("&Save"))
-        self.save_button.setDefault(True)
-        self.save_button.setToolTip(self.texts().save_tooltip)
-        self.revert_button = QPushButton(tr("&Revert"))
-        self.revert_button.setToolTip(tr("Discard unsaved changes"))
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        buttons.addWidget(self.revert_button)
-        buttons.addWidget(self.save_button)
+        self.save_button, self.revert_button, buttons = save_revert_buttons(
+            self.texts().save_tooltip
+        )
 
         # The form scrolls, so nothing is cut off in a small window or at a large
         # system font size; Save and Revert stay in view below it.

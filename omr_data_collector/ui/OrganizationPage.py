@@ -42,7 +42,12 @@ from omr_data_collector.ui.accessibility import (
     show_field_errors,
     style_error_label,
 )
-from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut, warn
+from omr_data_collector.ui.form_helpers import (
+    add_field_row,
+    add_shortcut,
+    save_revert_buttons,
+    warn,
+)
 from omr_data_collector.ui.qr_printing import paint_organization_qr_page
 from omr_data_collector.ui.TablePreview import orientation_names
 
@@ -231,15 +236,9 @@ class OrganizationPage(QWidget):
             self.field_labels[field_name] = label
             self.error_labels[field_name] = error_label
 
-        self.save_button = QPushButton(tr("&Save"))
-        self.save_button.setDefault(True)
-        self.save_button.setToolTip(tr("Save the organization's details (Ctrl+S)"))
-        self.revert_button = QPushButton(tr("&Revert"))
-        self.revert_button.setToolTip(tr("Discard unsaved changes"))
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        buttons.addWidget(self.revert_button)
-        buttons.addWidget(self.save_button)
+        self.save_button, self.revert_button, buttons = save_revert_buttons(
+            tr("Save the organization's details (Ctrl+S)")
+        )
 
         details = QGroupBox(tr("Organization details"))
         details_layout = QVBoxLayout(details)
