@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 EDITOR_VISIBLE_LINES = 12
 
 
-class TextBlocksPage(LibraryPage):
+class TextBlocksPage(LibraryPage[TextBlock]):
     """Create, save, edit, duplicate and delete reusable text blocks.
 
     Covers the "Create reusable text content block" epic on the wiki (stories

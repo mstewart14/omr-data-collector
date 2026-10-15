@@ -379,8 +379,8 @@ class ExportNamesDialog(QDialog):
     @staticmethod
     def _default(table: QTableWidget, row: int) -> str:
         item = table.item(row, DEFAULT_COLUMN)
-        assert item is not None  # noqa: S101 (every row is filled)
-        return item.data(Qt.ItemDataRole.UserRole)
+        # Every row is filled in, so an item is always there.
+        return item.data(Qt.ItemDataRole.UserRole) if item is not None else ""
 
     @staticmethod
     def _cell(table: QTableWidget, row: int, column: int) -> str:

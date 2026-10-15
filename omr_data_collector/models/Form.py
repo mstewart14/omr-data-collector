@@ -233,7 +233,7 @@ class Form:
         return ""
 
     def _sheet_details_error(self) -> str:
-        """One set of sheet details in the header, and no field named like a question."""
+        """One header set of sheet details at most, and no field named as a question."""
         in_header = [
             number
             for number, block in enumerate(self.blocks, start=1)

@@ -386,10 +386,13 @@ class SheetCanvas(QWidget):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 (Qt override)
-        if watched is self.editor and event.type() == QEvent.Type.KeyPress:
-            assert isinstance(event, QKeyEvent)  # noqa: S101 (a key press)
-            if self._editor_key(event):
-                return True
+        if (
+            watched is self.editor
+            and isinstance(event, QKeyEvent)
+            and event.type() == QEvent.Type.KeyPress
+            and self._editor_key(event)
+        ):
+            return True
         return super().eventFilter(watched, event)
 
     def _editor_key(self, event: QKeyEvent) -> bool:

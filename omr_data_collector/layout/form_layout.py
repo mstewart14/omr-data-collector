@@ -629,11 +629,13 @@ class _PageBuilder:
         if isinstance(content, Question):
             question = question_geometry(content, self.width)
             height = question.height_mm
-        else:
-            assert isinstance(content, TextBlock)  # noqa: S101 (the only kind left)
+        elif isinstance(content, TextBlock):
             height = document_height_mm(
                 markdown_document(content.content, self.width, BODY_POINT_SIZE)
             )
+        else:
+            # Tables and sheet details are placed above; nothing else exists.
+            raise TypeError(type(content).__name__)
         # Text and questions are never split: one that doesn't fit moves down.
         if height > self.space and not self.page_is_empty:
             self.new_page()

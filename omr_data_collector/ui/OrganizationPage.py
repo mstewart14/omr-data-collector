@@ -329,7 +329,7 @@ class OrganizationPage(QWidget):
         self._update_state()
 
     def _show_errors(self, errors: dict[str, str]) -> bool:
-        """Show ``errors`` by their fields, focusing the first; whether there were any."""
+        """Show ``errors`` by their fields and focus the first; True if any."""
         return show_field_errors(
             self.form, self.field_widgets, self.error_labels, errors
         )

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 PROMPT_VISIBLE_LINES = 4
 
 
-class QuestionsPage(LibraryPage):
+class QuestionsPage(LibraryPage[Question]):
     """Create, save, edit, duplicate and delete reusable questions.
 
     Covers the "Create reusable data input question data collector block" epic

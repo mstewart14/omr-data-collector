@@ -114,7 +114,9 @@ def show_field_errors(
     error_labels: Mapping[str, QLabel],
     errors: Mapping[str, str],
 ) -> bool:
-    """Show each field's error from ``errors``, clearing the others' (``set_field_error``).
+    """Show each field's error from ``errors`` and clear the others'.
+
+    Each goes through ``set_field_error``.
 
     When there are errors, focus moves to the first field in ``fields`` order that
     has one; screen readers then read its name and, from its accessible

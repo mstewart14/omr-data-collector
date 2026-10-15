@@ -72,7 +72,9 @@ class PaperFrame:
         )
 
     def code_corners_mm(self, identity: SheetIdentity) -> np.ndarray:
-        """The printed code's corners (quiet zone excluded), in mm from the paper's corner.
+        """The printed code's corners, in mm from the paper's top-left corner.
+
+        The quiet zone around the code is left out, as the QR reader does.
 
         Top-left first, clockwise, as the QR reader reports them.
         """
@@ -181,9 +183,10 @@ def reframed(
 
     Moves, turns and scales the picture (no stretching or skewing) so the code
     lands where the form puts it, at ``REFRAME_PX_PER_MM``; whatever falls
-    outside the picture is white paper, with ``REFRAME_MARGIN`` around it. A page printed smaller or larger than
-    laid out then has its markers about where the template expects them, and
-    straightening on them corrects what's left.
+    outside the picture is white paper, with ``REFRAME_MARGIN`` around it. A
+    page printed smaller or larger than laid out then has its markers about
+    where the template expects them, and straightening on them corrects what's
+    left.
     """
     margin = np.array([frame.width_mm, frame.height_mm]) * REFRAME_MARGIN
     expected = (frame.code_corners_mm(identity) + margin) * REFRAME_PX_PER_MM

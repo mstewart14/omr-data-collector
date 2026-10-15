@@ -71,7 +71,7 @@ DRAWINGS: dict[str, Callable[[QPainter, QColor], None]] = {
 def format_icon(
     name: str, color: QColor, size: int, device_pixel_ratio: float = 1.0
 ) -> QIcon:
-    """The ``name`` icon (a key of ``DRAWINGS``) in ``color``, ``size`` pixels square."""
+    """Icon ``name`` (a key of ``DRAWINGS``) in ``color``, ``size`` pixels square."""
     pixels = max(round(size * device_pixel_ratio), 1)
     pixmap = QPixmap(pixels, pixels)
     pixmap.setDevicePixelRatio(device_pixel_ratio)

@@ -82,7 +82,7 @@ class TextBlockEditor(QTextEdit):
         return text_list.format().style() if text_list else None
 
     def toggle_list(self, style: QTextListFormat.Style) -> None:
-        """Make the selected paragraphs a list of ``style``, or plain if they are one."""
+        """Make the selected paragraphs a ``style`` list, or plain if already one."""
         cursor = self.textCursor()
         text_list = cursor.currentList()
         cursor.beginEditBlock()

@@ -144,7 +144,7 @@ MIGRATIONS: list[list[str]] = [
 
 
 def open_database(path: Path) -> sqlite3.Connection:
-    """Open (creating if needed) the app database at ``path`` and bring it up to date."""
+    """Open the app database at ``path``, creating it if needed, and update it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row

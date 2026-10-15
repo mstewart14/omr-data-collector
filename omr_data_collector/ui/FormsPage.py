@@ -382,7 +382,7 @@ def block_summary(number: int, block: FormBlock) -> str:
     )
 
 
-class FormsPage(LibraryPage):
+class FormsPage(LibraryPage[Form]):
     """The form editor: the pages as they will print (wiki 50001-50012).
 
     The libraries' blocks are on the left, to drag onto the pages; the pages fill
@@ -653,9 +653,14 @@ class FormsPage(LibraryPage):
 
     def _sheet_details_index(self) -> int | None:
         """The form's (first) sheet details block, which the form details set."""
+        found = self._sheet_details()
+        return found[0] if found is not None else None
+
+    def _sheet_details(self) -> tuple[int, SheetDetails] | None:
+        """The form's (first) sheet details block's place, and its details."""
         return next(
             (
-                index
+                (index, block.content)
                 for index, block in enumerate(self._blocks)
                 if isinstance(block.content, SheetDetails)
             ),
@@ -663,12 +668,9 @@ class FormsPage(LibraryPage):
         )
 
     def _update_sheet_details_controls(self) -> None:
-        index = self._sheet_details_index()
-        placement = NO_SHEET_DETAILS
-        if index is not None:
-            content = self._blocks[index].content
-            assert isinstance(content, SheetDetails)  # noqa: S101 (found as one)
-            placement = content.placement
+        found = self._sheet_details()
+        index = found[0] if found is not None else None
+        placement = found[1].placement if found is not None else NO_SHEET_DETAILS
         with QSignalBlocker(self.sheet_details_combo):
             self.sheet_details_combo.setCurrentIndex(
                 self.sheet_details_combo.findData(placement)
@@ -707,8 +709,10 @@ class FormsPage(LibraryPage):
             )
             return
         block = self._blocks[index]
-        assert isinstance(block.content, SheetDetails)  # noqa: S101 (found as one)
-        if block.content.placement == placement:
+        if (
+            not isinstance(block.content, SheetDetails)
+            or block.content.placement == placement
+        ):
             return
         others_in_header = any(
             isinstance(other.content, SheetDetails)
@@ -814,7 +818,7 @@ class FormsPage(LibraryPage):
         self.form.setRowVisible(self.problems_note, bool(warnings))
 
     def add_library_block(self, kind: str, item_id: str, index: int | None) -> None:
-        """Copy a library block onto the form at ``index`` (None: under the selection)."""
+        """Copy a library block onto the form at ``index``, or under the selection."""
         chosen = next(
             (item for item in self._libraries()[kind] if content_id(item) == item_id),
             None,
@@ -913,7 +917,7 @@ class FormsPage(LibraryPage):
         self._commit_change(tr('added "{name}"').format(name=block.content.name))
 
     def _insert_block(self, block: FormBlock, index: int | None) -> None:
-        """Insert at ``index``, or when None under the selected blocks (or at the end)."""
+        """Insert at ``index``, or else under the selected blocks (or at the end)."""
         if index is None:
             rows = self.selected_rows()
             index = rows[-1] + 1 if rows else len(self._blocks)
@@ -1166,7 +1170,7 @@ class FormsPage(LibraryPage):
         self.status_message.emit(import_summary(result, new_form=plan.new_form))
 
     def _ask_import_choices(self, plan: ImportPlan) -> tuple[bool, AddLibrary] | None:
-        """Whose changes to keep and what to do with library blocks; None if cancelled."""
+        """Whose changes to keep, and what to do with library blocks; None to cancel."""
         keep_local = True
         if plan.choose_latest:
             answer = ask_whose_changes(self, plan.exported.name)

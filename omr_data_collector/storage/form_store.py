@@ -97,13 +97,15 @@ def save_form(connection: sqlite3.Connection, form: Form) -> Form:
         if latest is not None and latest["printed_at"] is None:
             version = latest["version"]
             connection.execute(
-                "UPDATE form_version SET definition = ? WHERE form_id = ? AND version = ?",
+                "UPDATE form_version SET definition = ?"
+                " WHERE form_id = ? AND version = ?",
                 (definition, form.form_id, version),
             )
         else:
             version = latest["version"] + 1 if latest is not None else 1
             connection.execute(
-                "INSERT INTO form_version (form_id, version, definition) VALUES (?, ?, ?)",
+                "INSERT INTO form_version (form_id, version, definition)"
+                " VALUES (?, ?, ?)",
                 (form.form_id, version, definition),
             )
     return replace(form, version=version)
@@ -187,7 +189,7 @@ def store_versions(
 def forms_with_other_copies(
     connection: sqlite3.Connection, source_id: str, content: BlockContent
 ) -> list[Form]:
-    """Forms, at their latest version, with a copy of a library block unlike ``content``.
+    """Latest versions of forms whose copy of a library block differs from ``content``.
 
     ``source_id`` is the library block's ID (``FormBlock.source_id``): these are
     the forms that saving it everywhere would change (wiki 50012).
@@ -236,7 +238,8 @@ def mark_printed(
     """
     with connection:
         connection.execute(
-            "UPDATE form_version SET printed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
+            "UPDATE form_version"
+            " SET printed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
             " printed_layout = ?"
             " WHERE form_id = ? AND version = ? AND printed_at IS NULL",
             (

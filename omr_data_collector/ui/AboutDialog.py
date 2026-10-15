@@ -21,7 +21,7 @@ def _link(url: str, text: str) -> str:
 
 
 class AboutDialog(QDialog):
-    """Preferences > About: the app's version, its source code and where to report problems.
+    """Preferences > About: the version, the source code, where to report problems.
 
     The links open in the web browser, and are reached with Tab and opened with
     Enter like any other control.

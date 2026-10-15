@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
 
 from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QKeySequence
@@ -46,6 +46,8 @@ from omr_data_collector.ui.form_helpers import (
 if TYPE_CHECKING:
     from PySide6.QtGui import QShortcut
 
+    from omr_data_collector.models.Form import BlockContent
+
 
 @dataclass(frozen=True)
 class LibraryTexts:
@@ -72,7 +74,19 @@ class LibraryTexts:
     save_first: str  # "Save your changes to this question first?"
 
 
-class LibraryPage(QWidget):
+class LibraryItem(Protocol):
+    """What the page needs of the items it edits: a name, and its checks."""
+
+    @property
+    def name(self) -> str: ...
+
+    def validation_errors(self, other_names: set[str]) -> dict[str, str]: ...
+
+
+ItemT = TypeVar("ItemT", bound=LibraryItem)
+
+
+class LibraryPage(QWidget, Generic[ItemT]):
     """A library of reusable blocks: a list to pick from and an editor for one.
 
     Handles what every block type shares: New, Duplicate and Delete, the name
@@ -92,12 +106,12 @@ class LibraryPage(QWidget):
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
         self._connection = connection
-        self._items: list[Any] = []
+        self._items: list[ItemT] = []
         # The item being edited: a saved one, or None for a new, unsaved one, which
         # already has its permanent ID.
-        self._current: Any = None
+        self._current: ItemT | None = None
         self._editing_id = uuid.uuid4().hex
-        self._baseline: Any = None
+        self._baseline: ItemT | None = None
         self.shortcuts: list[QShortcut] = []
 
         layout = QHBoxLayout(self)
@@ -133,43 +147,43 @@ class LibraryPage(QWidget):
         """
         raise NotImplementedError
 
-    def load_fields(self, item: Any) -> None:  # noqa: ANN401
+    def load_fields(self, item: ItemT | None) -> None:
         """Show ``item`` (None for a new item) in the subclass's fields."""
         raise NotImplementedError
 
-    def read_item(self, name: str, item_id: str) -> Any:  # noqa: ANN401
+    def read_item(self, name: str, item_id: str) -> ItemT:
         """The item as currently entered, normalized."""
         raise NotImplementedError
 
-    def list_items(self) -> list[Any]:
+    def list_items(self) -> list[ItemT]:
         raise NotImplementedError
 
     def wrap_editor(self, editor_box: QWidget) -> QWidget:
         """Put more around the editor (the form pages); the editor alone by default."""
         return editor_box
 
-    def store_item(self, item: Any) -> None:  # noqa: ANN401
+    def store_item(self, item: ItemT) -> None:
         raise NotImplementedError
 
     def remove_item(self, item_id: str) -> None:
         raise NotImplementedError
 
-    def copy_item(self, item: Any, name: str) -> Any:  # noqa: ANN401
+    def copy_item(self, item: ItemT, name: str) -> ItemT:
         """A new item (with a new ID) like ``item`` but called ``name``."""
         raise NotImplementedError
 
-    def item_id(self, item: Any) -> str:  # noqa: ANN401
+    def item_id(self, item: ItemT) -> str:
         raise NotImplementedError
 
     def texts(self) -> LibraryTexts:
         """The page's labels and messages, in the person's language."""
         raise NotImplementedError
 
-    def delete_question(self, item: Any) -> str:  # noqa: ANN401
+    def delete_question(self, item: ItemT) -> str:
         """What to ask before deleting ``item``."""
         return self.texts().delete_question.format(name=item.name)
 
-    def saved_message(self, item: Any) -> str:  # noqa: ANN401
+    def saved_message(self, item: ItemT) -> str:
         """The status message after ``item`` is saved."""
         return self.texts().saved.format(name=item.name)
 
@@ -227,14 +241,17 @@ class LibraryPage(QWidget):
         self.status_message.emit(message)
         return True
 
-    def _ask_where_to_change(self, item: Any) -> ChangeWhere | None:  # noqa: ANN401
+    def _ask_where_to_change(self, item: ItemT) -> ChangeWhere | None:
         """For a saved library block that forms have copies of, ask where it goes.
 
         Nothing to ask for a new block, or one no form's copy differs from.
         """
         if not self.COPIED_INTO_FORMS or self._current is None:
             return ChangeWhere.GOING_FORWARD
-        forms = forms_with_other_copies(self._connection, self.item_id(item), item)
+        # Pages with COPIED_INTO_FORMS edit text blocks, questions or tables.
+        forms = forms_with_other_copies(
+            self._connection, self.item_id(item), cast("BlockContent", item)
+        )
         if not forms:
             return ChangeWhere.GOING_FORWARD
         names = ", ".join(f'"{form.name}"' for form in forms)
@@ -252,9 +269,11 @@ class LibraryPage(QWidget):
             ),
         )
 
-    def _change_everywhere(self, item: Any) -> str:  # noqa: ANN401
+    def _change_everywhere(self, item: ItemT) -> str:
         """Put ``item`` into the forms with copies of it; says what changed."""
-        saved = update_copies(self._connection, self.item_id(item), item)
+        saved = update_copies(
+            self._connection, self.item_id(item), cast("BlockContent", item)
+        )
         new_versions = sum(1 for _form, is_new in saved if is_new)
         message = tr("Changed on %n form(s) too.", None, len(saved))
         if new_versions:
@@ -276,16 +295,16 @@ class LibraryPage(QWidget):
         self._edit(item)
         return True
 
-    def items(self) -> list[Any]:
+    def items(self) -> list[ItemT]:
         """The saved items, as last listed."""
         return list(self._items)
 
     def save_from_user(self) -> None:
         """Save because the person asked to (Save, Ctrl+S, Enter, the menu)."""
-        if self.save():
+        if self.save() and self._current is not None:
             self.after_user_save(self._current)
 
-    def after_user_save(self, item: Any) -> None:  # noqa: ANN401
+    def after_user_save(self, item: ItemT) -> None:
         """What to do next after the person saves ``item``; nothing by default."""
 
     def revert(self) -> None:
@@ -340,7 +359,7 @@ class LibraryPage(QWidget):
         self.status_message.emit(self.texts().deleted.format(name=doomed.name))
 
     def show_errors(self, errors: dict[str, str]) -> bool:
-        """Show ``errors`` by their fields, focusing the first; whether there were any."""
+        """Show ``errors`` by their fields and focus the first; True if any."""
         return show_field_errors(
             self.form, self.field_widgets, self.error_labels, errors
         )
@@ -506,7 +525,7 @@ class LibraryPage(QWidget):
 
     # --- State --------------------------------------------------------------------
 
-    def _entered(self) -> Any:  # noqa: ANN401
+    def _entered(self) -> ItemT:
         return self.read_item(self.name_edit.text(), self._editing_id)
 
     def _reload_list(self) -> None:
@@ -527,7 +546,7 @@ class LibraryPage(QWidget):
                     self.item_list.setCurrentRow(row)
                     break
 
-    def _edit(self, item: Any) -> None:  # noqa: ANN401
+    def _edit(self, item: ItemT | None) -> None:
         """Load a saved item, or a blank new one, into the editor."""
         self._current = item
         self._editing_id = self.item_id(item) if item is not None else uuid.uuid4().hex

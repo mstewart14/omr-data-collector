@@ -91,7 +91,7 @@ def column_summary(column: Column) -> str:
     return summary.format(name=column.name, choices=labels)
 
 
-class TableBlocksPage(LibraryPage):
+class TableBlocksPage(LibraryPage[TableBlock]):
     """Create, save, edit, duplicate and delete reusable tables.
 
     Covers the "Create reusable data input table data collector block" epic on

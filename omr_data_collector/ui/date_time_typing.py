@@ -2,8 +2,8 @@
 
 The separators are printed on the form, so the person keying in what was written
 only types its digits. Typing a separator after one digit of a month, day,
-hour or minute pads it with a zero ("9:" for "09:"), and pasting a value written with other
-separators ("2026-10-13") keeps its parts.
+hour or minute pads it with a zero ("9:" for "09:"), and pasting a value
+written with other separators ("2026-10-13") keeps its parts.
 """
 
 from __future__ import annotations
@@ -34,9 +34,8 @@ def typing_cells(spec: AnswerSpec | None) -> Cells | None:
 
 def typing_hint(spec: AnswerSpec | None) -> str:
     """What to show in an empty box for ``spec``'s answer: a date or time's format."""
-    if typing_cells(spec) is None:
+    if spec is None or typing_cells(spec) is None:
         return ""
-    assert spec is not None  # noqa: S101 (typing_cells checked it)
     return date_time_format_labels()[spec.date_time_format]
 
 

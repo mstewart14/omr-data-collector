@@ -81,7 +81,7 @@ class FormFile:
 def library_blocks_used(
     connection: sqlite3.Connection, form_id: str
 ) -> list[BlockContent]:
-    """The library blocks any version of the form was copied from, still in the library."""
+    """Library blocks any version of the form was copied from, if still there."""
     sources = {
         block["sourceId"]
         for version in stored_versions(connection, form_id)

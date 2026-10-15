@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         FormLayout,
         PageLayout,
         PlacedBlock,
+        QuestionGeometry,
         WritingLine,
         WrittenBox,
     )
@@ -193,7 +194,7 @@ def _paint_block(painter: QPainter, placed: PlacedBlock, width: float) -> None:
             painter, markdown_document(content.content, width, BODY_POINT_SIZE), 0, 0
         )
     elif isinstance(content, Question) and placed.question is not None:
-        _paint_question(painter, content, placed, width)
+        _paint_question(painter, content, placed.question, width)
     elif isinstance(content, SheetDetails) and placed.details is not None:
         _paint_details(painter, content, placed.details, width)
     elif isinstance(content, TableBlock) and placed.table_part is not None:
@@ -212,10 +213,8 @@ def _paint_block(painter: QPainter, placed: PlacedBlock, width: float) -> None:
 
 
 def _paint_question(
-    painter: QPainter, question: Question, placed: PlacedBlock, width: float
+    painter: QPainter, question: Question, geometry: QuestionGeometry, width: float
 ) -> None:
-    geometry = placed.question
-    assert geometry is not None  # noqa: S101 (checked by the caller)
     draw_document(
         painter, markdown_document(question.prompt, width, BODY_POINT_SIZE), 0, 0
     )
