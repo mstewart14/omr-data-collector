@@ -6,6 +6,6 @@ Comment=Build paper forms, capture photos or scans of them filled in, and export
 Exec=omr-data-collector
 Icon=omr-data-collector
 Terminal=false
-Categories=Office;Education;
+Categories=Office;
 Keywords=OMR;form;survey;scan;bubble;
 StartupWMClass=omr-data-collector
