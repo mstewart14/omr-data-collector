@@ -10,6 +10,7 @@ import pytest
 from omr_data_collector.constants import (
     ANSWER_TYPES,
     BLOCK_KINDS,
+    PAGE_ORIENTATIONS,
     PAPER_SIZES,
     SHEET_DETAILS_PLACEMENTS,
     WRITTEN_DATA_TYPES,
@@ -408,7 +409,12 @@ def test_edit_sheet_details_opens_the_fields(
 
     page.edit_details_button.click()
 
-    write.assert_called_once_with(page, BLOCK_KINDS.SHEET_DETAILS, current)
+    write.assert_called_once_with(
+        page,
+        BLOCK_KINDS.SHEET_DETAILS,
+        current,
+        (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.PORTRAIT),
+    )
     assert details_blocks(page) == [edited]
     page.revert()
 

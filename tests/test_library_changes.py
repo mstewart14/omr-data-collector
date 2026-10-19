@@ -84,7 +84,12 @@ def library(
 
 
 def edit(page: TextBlocksPage | QuestionsPage | TableBlocksPage) -> None:
-    page.text_fields.editor.setPlainText("Changed in the library.")
+    fields = (
+        page.table_fields.text_fields
+        if isinstance(page, TableBlocksPage)
+        else page.text_fields
+    )
+    fields.editor.setPlainText("Changed in the library.")
 
 
 def copies(connection: sqlite3.Connection, block_id: str) -> dict[str, tuple[int, str]]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import replace
 from itertools import pairwise
 from typing import TYPE_CHECKING
@@ -15,19 +16,28 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
-from omr_data_collector.constants import ANSWER_TYPES, BLOCK_KINDS
+from omr_data_collector.constants import (
+    ANSWER_TYPES,
+    BLOCK_KINDS,
+    PAGE_ORIENTATIONS,
+    PAPER_SIZES,
+)
 from omr_data_collector.i18n import tr
 from omr_data_collector.models.AnswerSpec import AnswerSpec
+from omr_data_collector.models.Form import content_id
 from omr_data_collector.models.Question import Question
+from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
 from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
+from omr_data_collector.ui.TableFields import TableFields
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -36,6 +46,8 @@ if TYPE_CHECKING:
 
 TEXT_VISIBLE_LINES = 8
 PROMPT_VISIBLE_LINES = 4
+# The most of the screen's height a table dialog opens to.
+SCREEN_SHARE = 0.85
 
 
 def _picker_texts(kind: str) -> dict[str, str]:
@@ -66,7 +78,10 @@ def _picker_texts(kind: str) -> dict[str, str]:
         "title": tr("Add table"),
         "list": tr("&Tables in the library"),
         "empty": tr("There are no tables in the library yet."),
-        "empty_or_write": tr("There are no tables in the library yet."),
+        "empty_or_write": tr(
+            "There are no tables in the library yet. Write a new table, or add "
+            "some in the library first."
+        ),
         "write_new": tr("&Write a new table…"),
     }
 
@@ -132,38 +147,37 @@ class BlockPickerDialog(QDialog):
         self.accept()
 
 
-class BlockContentDialog(QDialog):
-    """Write a new text block or question on a form, or edit a form's own copy.
+def _content_titles(kind: str) -> tuple[str, str]:
+    """The dialog's title when editing a form's copy, and when writing a new one."""
+    if kind == BLOCK_KINDS.TEXT:
+        return tr("Edit text block on this form"), tr("Write a new text block")
+    if kind == BLOCK_KINDS.QUESTION:
+        return tr("Edit question on this form"), tr("Write a new question")
+    return tr("Edit table on this form"), tr("Write a new table")
 
-    Only the form's copy changes; the library block it came from doesn't.
+
+class BlockContentDialog(QDialog):
+    """Write a new text block, question or table on a form, or edit a form's copy.
+
+    Only the form's copy changes; the library block it came from doesn't. A
+    table is previewed on ``paper_size`` paper in ``orientation``, the form's.
     """
 
     def __init__(
-        self, parent: QWidget | None, kind: str, content: BlockContent | None
+        self,
+        parent: QWidget | None,
+        kind: str,
+        content: BlockContent | None,
+        paper_size: str = PAPER_SIZES.LETTER,
+        orientation: str = PAGE_ORIENTATIONS.PORTRAIT,
     ) -> None:
         super().__init__(parent)
         self._kind = kind
-        self._content_id = (
-            content.text_block_id
-            if isinstance(content, TextBlock)
-            else content.question_id
-            if isinstance(content, Question)
-            else None
-        )
+        self._paper_size = paper_size
+        self._content_id = content_id(content) if content is not None else None
         self._accepted: BlockContent | None = None
-        if kind == BLOCK_KINDS.TEXT:
-            title = (
-                tr("Edit text block on this form")
-                if content
-                else tr("Write a new text block")
-            )
-        else:
-            title = (
-                tr("Edit question on this form")
-                if content
-                else tr("Write a new question")
-            )
-        self.setWindowTitle(title)
+        editing_title, new_title = _content_titles(kind)
+        self.setWindowTitle(editing_title if content else new_title)
 
         self.form = QFormLayout()
         self.field_widgets: dict[str, QWidget] = {}
@@ -177,7 +191,15 @@ class BlockContentDialog(QDialog):
         registry = (self.field_widgets, self.field_labels, self.error_labels)
         focus_chain: list[QWidget] = [self.name_edit]
 
-        if kind == BLOCK_KINDS.TEXT:
+        if kind == BLOCK_KINDS.TABLE:
+            self.table_fields = TableFields(
+                self.form,
+                registry,
+                shortcut_parent=self,
+                on_change=self._refresh_table,
+            )
+            focus_chain += self.table_fields.focus_chain()
+        elif kind == BLOCK_KINDS.TEXT:
             self.text_fields = FormattedTextFields(
                 self.form,
                 registry,
@@ -220,16 +242,38 @@ class BlockContentDialog(QDialog):
 
         self.buttons = ok_cancel_buttons(self)
         layout = QVBoxLayout(self)
-        layout.addLayout(self.form)
+        if kind == BLOCK_KINDS.TABLE:
+            # A table's fields and preview are taller than most screens at a
+            # large font size: they scroll, with OK and Cancel kept in view.
+            fields = QWidget()
+            fields.setLayout(self.form)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(fields)
+            # Wide enough for every row; only the height scrolls.
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setMinimumWidth(
+                fields.sizeHint().width()
+                + scroll.verticalScrollBar().sizeHint().width()
+                + 2 * scroll.frameWidth()
+            )
+            layout.addWidget(scroll)
+            self._fit_height(fields)
+        else:
+            layout.addLayout(self.form)
         layout.addWidget(self.buttons)
         for before, after in pairwise([*focus_chain, *self.buttons.buttons()]):
             QWidget.setTabOrder(before, after)
 
-        self._load(content)
+        self._load(content, orientation)
         self.name_edit.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def entered_content(self) -> BlockContent:
         """The block as currently entered, normalized; an edited copy keeps its ID."""
+        if self._kind == BLOCK_KINDS.TABLE:
+            return self.table_fields.table(
+                self.name_edit.text(), self._content_id or uuid.uuid4().hex
+            )
         if self._kind == BLOCK_KINDS.TEXT:
             text = TextBlock(
                 name=self.name_edit.text(), content=self.text_fields.markdown()
@@ -266,8 +310,30 @@ class BlockContentDialog(QDialog):
                 style_error_label(label, self.palette())
         super().changeEvent(event)
 
-    def _load(self, content: BlockContent | None) -> None:
-        if isinstance(content, TextBlock):
+    def _fit_height(self, fields: QWidget) -> None:
+        """Open tall enough to show the fields, within the screen's height."""
+        screen = self.screen()
+        available = screen.availableGeometry().height() if screen is not None else None
+        height = fields.sizeHint().height() + self.buttons.sizeHint().height()
+        height += self.fontMetrics().height() * 2
+        if available is not None:
+            height = min(height, round(available * SCREEN_SHARE))
+        self.resize(self.sizeHint().width(), height)
+
+    def _refresh_table(self) -> None:
+        table = self.entered_content()
+        if isinstance(table, TableBlock):
+            self.table_fields.refresh(table, self._paper_size)
+
+    def _load(self, content: BlockContent | None, orientation: str) -> None:
+        if self._kind == BLOCK_KINDS.TABLE:
+            if isinstance(content, TableBlock):
+                self.name_edit.setText(content.name)
+            self.table_fields.load(
+                content if isinstance(content, TableBlock) else None, orientation
+            )
+            self._refresh_table()
+        elif isinstance(content, TextBlock):
             self.name_edit.setText(content.name)
             self.text_fields.set_markdown(content.content)
         elif isinstance(content, Question):

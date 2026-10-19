@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from omr_data_collector.constants import (
     BLOCK_KINDS,
     PAGE_ORIENTATIONS,
+    PAPER_SIZES,
     SHEET_DETAILS_PLACEMENTS,
     TABLE_BREAKS,
 )
@@ -122,9 +123,14 @@ DETAILS_START_WIDTH = 340
 # Larger than any screen: the splitter scales the sizes down, so the pages get
 # whatever the side panels don't.
 PAGES_START_WIDTH = 4000
-# Blocks written on the form itself can be; table copies are edited in the
-# library for now.
-EDITABLE_KINDS = {BLOCK_KINDS.TEXT, BLOCK_KINDS.QUESTION, BLOCK_KINDS.SHEET_DETAILS}
+# Every kind of block can be written on the form itself, or its copy edited
+# there (sheet details only ever are).
+EDITABLE_KINDS = {
+    BLOCK_KINDS.TEXT,
+    BLOCK_KINDS.QUESTION,
+    BLOCK_KINDS.TABLE,
+    BLOCK_KINDS.SHEET_DETAILS,
+}
 
 
 def pick_block(
@@ -145,11 +151,16 @@ def pick_block(
 
 
 def write_block(
-    parent: QWidget, kind: str, content: BlockContent | None
+    parent: QWidget,
+    kind: str,
+    content: BlockContent | None,
+    page: tuple[str, str] = (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.PORTRAIT),
 ) -> BlockContent | None:
-    """Write a new text block or question, or edit a form's copy; None if cancelled.
+    """Write a new block, or edit a form's copy of one; None if cancelled.
 
-    Sheet details are only ever edited: they're added from the palette.
+    ``page`` is the form's paper size and orientation, which a table is
+    previewed on. Sheet details are only ever edited: they're added from the
+    form details.
     """
     if kind == BLOCK_KINDS.SHEET_DETAILS:
         details_dialog = SheetDetailsDialog(
@@ -161,7 +172,7 @@ def write_block(
         if details_dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         return details_dialog.details()
-    dialog = BlockContentDialog(parent, kind, content)
+    dialog = BlockContentDialog(parent, kind, content, *page)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.content()
@@ -909,12 +920,19 @@ class FormsPage(LibraryPage[Form]):
         if chosen is not None:
             block = FormBlock(content=chosen, source_id=content_id(chosen))
         else:
-            written = write_block(self, kind, None)
+            written = write_block(self, kind, None, self._page())
             if written is None:
                 return
             block = FormBlock(content=written, source_id=None)
         self._insert_block(block, None)
         self._commit_change(tr('added "{name}"').format(name=block.content.name))
+
+    def _page(self) -> tuple[str, str]:
+        """The form's paper size and orientation, as shown."""
+        return (
+            paper_size_of(load_organization(self._connection)),
+            self.orientation_combo.currentData(),
+        )
 
     def _insert_block(self, block: FormBlock, index: int | None) -> None:
         """Insert at ``index``, or else under the selected blocks (or at the end)."""
@@ -931,7 +949,7 @@ class FormsPage(LibraryPage[Form]):
         if row < 0 or self._blocks[row].kind not in EDITABLE_KINDS:
             return
         block = self._blocks[row]
-        content = write_block(self, block.kind, block.content)
+        content = write_block(self, block.kind, block.content, self._page())
         if content is None:
             return
         self._blocks[row] = replace(block, content=content)
@@ -1341,11 +1359,7 @@ class FormsPage(LibraryPage[Form]):
         self.edit_block_button.setEnabled(
             single and block is not None and block.kind in EDITABLE_KINDS
         )
-        self.edit_block_button.setToolTip(
-            tr("Tables are edited in the Tables section")
-            if block is not None and block.kind == BLOCK_KINDS.TABLE
-            else tr("Edit this form's copy of the block")
-        )
+        self.edit_block_button.setToolTip(tr("Edit this form's copy of the block"))
         self.remove_block_button.setEnabled(bool(rows))
         self.remove_block_button.setText(
             tr("Remo&ve blocks") if len(rows) > 1 else tr("Remo&ve block")

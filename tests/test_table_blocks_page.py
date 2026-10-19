@@ -21,7 +21,8 @@ from omr_data_collector.storage.table_block_store import (
     save_table_block,
 )
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
-from omr_data_collector.ui.TableBlocksPage import TableBlocksPage, column_summary
+from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
+from omr_data_collector.ui.TableFields import column_summary
 
 if TYPE_CHECKING:
     import sqlite3
@@ -71,7 +72,9 @@ def column_names(page: TableBlocksPage) -> list[str]:
 
 def dialog_returns(mocker: MockerFixture, *columns: Column | None):
     """Stand in for the column dialog, answering with ``columns`` in turn."""
-    return mocker.patch(f"{PAGE_MODULE}.edit_column", side_effect=list(columns))
+    return mocker.patch(
+        "omr_data_collector.ui.TableFields.edit_column", side_effect=list(columns)
+    )
 
 
 # --- Columns ----------------------------------------------------------------------
@@ -82,19 +85,21 @@ def test_add_columns_and_save_the_table(
 ) -> None:
     page = make_page(qtbot, connection)
     page.name_edit.setText("Visit log")
-    page.text_fields.editor.setPlainText("One row per visit.")
-    page.rows_spin.setValue(25)
+    page.table_fields.text_fields.editor.setPlainText("One row per visit.")
+    page.table_fields.rows_spin.setValue(25)
     dialog_returns(mocker, TIME, VISIT)
 
-    page.add_column()
-    page.add_column()
+    page.table_fields.add_column()
+    page.table_fields.add_column()
     page.save()
 
     (saved,) = list_table_blocks(connection)
     assert saved.rows == 25
     assert saved.instructions.strip() == "One row per visit."
     assert [column.name for column in saved.columns] == ["time", "first_visit"]
-    assert page.column_list.item(1).text() == "first_visit (pick one: Y, N)"
+    assert (
+        page.table_fields.column_list.item(1).text() == "first_visit (pick one: Y, N)"
+    )
 
 
 def test_cancelling_the_dialog_adds_nothing(
@@ -103,7 +108,7 @@ def test_cancelling_the_dialog_adds_nothing(
     page = make_page(qtbot, connection)
     dialog_returns(mocker, None)
 
-    page.add_column()
+    page.table_fields.add_column()
 
     assert column_names(page) == []
     assert not page.has_unsaved_changes()
@@ -114,10 +119,10 @@ def test_the_dialog_is_told_the_other_column_names(
 ) -> None:
     save_table_block(connection, TableBlock(name="t", columns=(TIME, VISIT)))
     page = make_page(qtbot, connection)
-    page.column_list.setCurrentRow(1)
+    page.table_fields.column_list.setCurrentRow(1)
     edit = dialog_returns(mocker, None)
 
-    page.edit_selected_column()
+    page.table_fields.edit_selected_column()
 
     parent, column, other_names = edit.call_args.args
     assert parent is page
@@ -133,14 +138,14 @@ def test_edit_remove_and_reorder_columns(
     renamed = Column("visit_time", TIME.example, TIME.answer)
     dialog_returns(mocker, renamed)
 
-    page.column_list.setCurrentRow(0)
-    page.edit_selected_column()
-    page.column_list.setCurrentRow(2)
-    page.move_selected_column(-1)
+    page.table_fields.column_list.setCurrentRow(0)
+    page.table_fields.edit_selected_column()
+    page.table_fields.column_list.setCurrentRow(2)
+    page.table_fields.move_selected_column(-1)
     assert column_names(page) == ["visit_time", "services", "first_visit"]
-    assert page.column_list.currentRow() == 1
+    assert page.table_fields.column_list.currentRow() == 1
 
-    page.remove_selected_column()
+    page.table_fields.remove_selected_column()
     assert column_names(page) == ["visit_time", "first_visit"]
     assert page.has_unsaved_changes()
 
@@ -151,13 +156,13 @@ def test_column_buttons_follow_the_selection(
     save_table_block(connection, TableBlock(name="t", columns=(TIME, VISIT)))
     page = make_page(qtbot, connection)
 
-    page.column_list.setCurrentRow(0)
-    assert not page.move_left_button.isEnabled()
-    assert page.move_right_button.isEnabled()
+    page.table_fields.column_list.setCurrentRow(0)
+    assert not page.table_fields.move_left_button.isEnabled()
+    assert page.table_fields.move_right_button.isEnabled()
 
-    page.column_list.setCurrentRow(1)
-    assert page.move_left_button.isEnabled()
-    assert not page.move_right_button.isEnabled()
+    page.table_fields.column_list.setCurrentRow(1)
+    assert page.table_fields.move_left_button.isEnabled()
+    assert not page.table_fields.move_right_button.isEnabled()
 
 
 def test_saving_without_columns_points_at_the_columns_list(
@@ -172,7 +177,7 @@ def test_saving_without_columns_points_at_the_columns_list(
     page.save()
 
     assert page.error_labels["columns"].text() == "Add at least one column."
-    assert page.focusWidget() is page.column_list
+    assert page.focusWidget() is page.table_fields.column_list
 
 
 def test_duplicate_copies_the_columns(
@@ -241,27 +246,38 @@ def test_preview_starts_on_the_organizations_orientation(
 
     page = make_page(qtbot, connection)
 
-    assert page.preview_orientation_combo.currentData() == PAGE_ORIENTATIONS.LANDSCAPE
-    assert page.preview_summary.text().startswith("Fits on Letter landscape")
+    assert (
+        page.table_fields.preview_orientation_combo.currentData()
+        == PAGE_ORIENTATIONS.LANDSCAPE
+    )
+    assert page.table_fields.preview_summary.text().startswith(
+        "Fits on Letter landscape"
+    )
 
 
 def test_preview_summary_follows_changes(
     qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
 ) -> None:
     page = make_page(qtbot, connection)
-    assert page.preview_summary.text() == (
+    assert page.table_fields.preview_summary.text() == (
         "Add columns to preview the table on Letter portrait."
     )
     wide = Column("notes", answer=AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=40))
     dialog_returns(mocker, wide)
 
-    page.add_column()
-    assert page.preview_summary.text().startswith("Too wide for Letter portrait")
-
-    page.preview_orientation_combo.setCurrentIndex(
-        page.preview_orientation_combo.findData(PAGE_ORIENTATIONS.LANDSCAPE)
+    page.table_fields.add_column()
+    assert page.table_fields.preview_summary.text().startswith(
+        "Too wide for Letter portrait"
     )
-    assert page.preview_summary.text().startswith("Fits on Letter landscape")
+
+    page.table_fields.preview_orientation_combo.setCurrentIndex(
+        page.table_fields.preview_orientation_combo.findData(
+            PAGE_ORIENTATIONS.LANDSCAPE
+        )
+    )
+    assert page.table_fields.preview_summary.text().startswith(
+        "Fits on Letter landscape"
+    )
 
 
 def test_preview_describes_itself_to_screen_readers(
@@ -270,10 +286,13 @@ def test_preview_describes_itself_to_screen_readers(
     save_table_block(connection, TableBlock(name="t", columns=(TIME,)))
     page = make_page(qtbot, connection)
 
-    interface = QAccessible.queryAccessibleInterface(page.preview)
+    interface = QAccessible.queryAccessibleInterface(page.table_fields.preview)
 
     assert interface.text(QAccessible.Text.Name) == "Table preview"
-    assert interface.text(QAccessible.Text.Description) == page.preview_summary.text()
+    assert (
+        interface.text(QAccessible.Text.Description)
+        == page.table_fields.preview_summary.text()
+    )
 
 
 def test_preview_paints(qtbot: QtBot, connection: sqlite3.Connection) -> None:
@@ -281,9 +300,9 @@ def test_preview_paints(qtbot: QtBot, connection: sqlite3.Connection) -> None:
         connection, TableBlock(name="t", rows=40, columns=(TIME, VISIT, SERVICES))
     )
     page = make_page(qtbot, connection)
-    page.preview.resize(300, 380)
+    page.table_fields.preview.resize(300, 380)
 
-    image = page.preview.grab().toImage()
+    image = page.table_fields.preview.grab().toImage()
 
     assert not image.isNull()
 
@@ -302,10 +321,10 @@ def test_delete_in_the_columns_list_removes_a_column_not_the_table(
     confirm = mocker.patch(
         "omr_data_collector.ui.LibraryPage.confirm_destructive", return_value=False
     )
-    page.column_list.setFocus()
-    page.column_list.setCurrentRow(0)
+    page.table_fields.column_list.setFocus()
+    page.table_fields.column_list.setCurrentRow(0)
 
-    qtbot.keyClick(page.column_list, Qt.Key.Key_Delete)
+    qtbot.keyClick(page.table_fields.column_list, Qt.Key.Key_Delete)
 
     confirm.assert_not_called()
     assert column_names(page) == ["first_visit"]
@@ -317,9 +336,11 @@ def test_enter_on_a_column_opens_it(
     save_table_block(connection, TableBlock(name="t", columns=(TIME,)))
     page = make_page(qtbot, connection)
     edit = dialog_returns(mocker, None)
-    page.column_list.setCurrentRow(0)
+    page.table_fields.column_list.setCurrentRow(0)
 
-    page.column_list.itemActivated.emit(page.column_list.item(0))
+    page.table_fields.column_list.itemActivated.emit(
+        page.table_fields.column_list.item(0)
+    )
 
     edit.assert_called_once()
 
@@ -339,7 +360,7 @@ def test_tab_order_follows_the_screen(
     qtbot: QtBot, connection: sqlite3.Connection
 ) -> None:
     page = make_page(qtbot, connection)
-    fields = page.text_fields
+    fields = page.table_fields.text_fields
     expected = [
         page.item_list,
         page.new_button,
@@ -352,15 +373,15 @@ def test_tab_order_follows_the_screen(
         fields.bulleted_button,
         fields.numbered_button,
         fields.editor,
-        page.rows_spin,
-        page.fill_page_check,
-        page.column_list,
-        page.add_column_button,
-        page.edit_column_button,
-        page.remove_column_button,
-        page.move_left_button,
-        page.move_right_button,
-        page.preview_orientation_combo,
+        page.table_fields.rows_spin,
+        page.table_fields.fill_page_check,
+        page.table_fields.column_list,
+        page.table_fields.add_column_button,
+        page.table_fields.edit_column_button,
+        page.table_fields.remove_column_button,
+        page.table_fields.move_left_button,
+        page.table_fields.move_right_button,
+        page.table_fields.preview_orientation_combo,
         page.revert_button,
         page.save_button,
     ]
@@ -387,7 +408,7 @@ def test_the_form_scrolls_to_follow_keyboard_focus(
     scroll_bar = page.form_scroll.verticalScrollBar()
     assert scroll_bar.value() == 0
 
-    page.preview_orientation_combo.setFocus()
+    page.table_fields.preview_orientation_combo.setFocus()
 
     assert scroll_bar.value() > 0
 
@@ -455,19 +476,19 @@ def test_fill_to_end_of_page_sets_the_row_count_aside(
     save_table_block(connection, TableBlock(name="t", rows=12, columns=(TIME,)))
     page = make_page(qtbot, connection)
 
-    page.fill_page_check.setChecked(True)
-    assert not page.rows_spin.isEnabled()
+    page.table_fields.fill_page_check.setChecked(True)
+    assert not page.table_fields.rows_spin.isEnabled()
     assert page.has_unsaved_changes()
-    assert "Fills the page:" in page.preview_summary.text()
+    assert "Fills the page:" in page.table_fields.preview_summary.text()
     page.save()
 
     (saved,) = list_table_blocks(connection)
     assert saved.fill_page
     assert saved.rows == 12  # kept for when filling is turned off
 
-    page.fill_page_check.setChecked(False)
-    assert page.rows_spin.isEnabled()
-    assert page.rows_spin.value() == 12
+    page.table_fields.fill_page_check.setChecked(False)
+    assert page.table_fields.rows_spin.isEnabled()
+    assert page.table_fields.rows_spin.value() == 12
 
 
 def test_filled_tables_load_and_duplicate_with_the_setting(
@@ -477,7 +498,7 @@ def test_filled_tables_load_and_duplicate_with_the_setting(
         connection, TableBlock(name="Log", fill_page=True, columns=(TIME,))
     )
     page = make_page(qtbot, connection)
-    assert page.fill_page_check.isChecked()
+    assert page.table_fields.fill_page_check.isChecked()
     assert not page.has_unsaved_changes()
 
     page.duplicate_item()

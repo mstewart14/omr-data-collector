@@ -13,6 +13,7 @@ from omr_data_collector.constants import (
     BLOCK_KINDS,
     CAPTURE_STATUSES,
     PAGE_ORIENTATIONS,
+    PAPER_SIZES,
     TABLE_BREAKS,
 )
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
@@ -26,7 +27,7 @@ from omr_data_collector.storage.question_store import save_question
 from omr_data_collector.storage.table_block_store import save_table_block
 from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
-from omr_data_collector.ui.FormsPage import FormsPage, block_summary
+from omr_data_collector.ui.FormsPage import EDITABLE_KINDS, FormsPage, block_summary
 
 if TYPE_CHECKING:
     import sqlite3
@@ -181,26 +182,63 @@ def test_edit_the_forms_copy_of_a_question(
 
     page.edit_selected_block()
 
-    assert write.call_args.args[1:] == (BLOCK_KINDS.QUESTION, VISIT)
+    assert write.call_args.args[1:] == (
+        BLOCK_KINDS.QUESTION,
+        VISIT,
+        (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.PORTRAIT),
+    )
     edited = blocks(page)[1].content
     assert isinstance(edited, Question)
     assert edited.prompt == "First time here?"
     assert page.has_unsaved_changes()
 
 
-def test_table_copies_are_not_edited_on_the_form(
+def test_a_tables_copy_is_edited_on_the_form(
     qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
 ) -> None:
     saved_intake(connection)
     page = make_page(qtbot, connection)
-    write = writes(mocker)
+    longer = replace(LOG, rows=LOG.rows + 5)
+    write = writes(mocker, longer)
 
     page.block_list.setCurrentRow(2)
+    assert page.edit_block_button.isEnabled()
     page.edit_selected_block()
 
-    write.assert_not_called()
-    assert not page.edit_block_button.isEnabled()
-    assert page.edit_block_button.toolTip() == "Tables are edited in the Tables section"
+    assert write.call_args.args[1:] == (
+        BLOCK_KINDS.TABLE,
+        LOG,
+        (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.PORTRAIT),
+    )
+    edited = blocks(page)[2]
+    assert edited.content == longer
+    # Still the library table's copy, so "change everywhere" still reaches it.
+    assert edited.source_id == LOG.table_block_id
+    assert page.has_unsaved_changes()
+
+
+def test_a_new_table_is_written_on_the_form(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    saved_intake(connection)
+    page = make_page(qtbot, connection)
+    page.orientation_combo.setCurrentIndex(
+        page.orientation_combo.findData(PAGE_ORIENTATIONS.LANDSCAPE)
+    )
+    mocker.patch(f"{PAGE_MODULE}.pick_block", return_value=(True, None))
+    written = TableBlock("Supplies", columns=LOG.columns)
+    write = writes(mocker, written)
+
+    page.add_block(BLOCK_KINDS.TABLE)
+
+    assert write.call_args.args[1:] == (
+        BLOCK_KINDS.TABLE,
+        None,
+        (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.LANDSCAPE),
+    )
+    added = [block for block in blocks(page) if block.content.name == "Supplies"]
+    assert len(added) == 1
+    assert added[0].source_id is None
 
 
 def test_remove_and_reorder_blocks(
@@ -513,3 +551,60 @@ def test_editing_a_question_copy_keeps_its_id_and_checks_it(qtbot: QtBot) -> Non
     content = dialog.content()
     assert isinstance(content, Question)
     assert content.question_id == VISIT.question_id
+
+
+def test_editing_a_table_copy_keeps_its_id_and_checks_it(qtbot: QtBot) -> None:
+    dialog = BlockContentDialog(
+        None, BLOCK_KINDS.TABLE, LOG, PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.LANDSCAPE
+    )
+    qtbot.addWidget(dialog)
+    fields = dialog.table_fields
+
+    assert dialog.windowTitle() == "Edit table on this form"
+    assert dialog.name_edit.text() == LOG.name
+    assert fields.rows_spin.value() == LOG.rows
+    # Previewed on the form's own page.
+    assert fields.preview_orientation_combo.currentData() == (
+        PAGE_ORIENTATIONS.LANDSCAPE
+    )
+    assert "landscape" in fields.preview_summary.text()
+
+    while fields.column_list.count():
+        fields.column_list.setCurrentRow(0)
+        fields.remove_selected_column()
+    dialog.accept()
+    assert dialog.content() is None
+    assert dialog.error_labels["columns"].text() == "Add at least one column."
+
+
+def test_a_new_table_is_written_with_the_shared_table_fields(
+    qtbot: QtBot, mocker: MockerFixture
+) -> None:
+    dialog = BlockContentDialog(None, BLOCK_KINDS.TABLE, None)
+    qtbot.addWidget(dialog)
+    mocker.patch(
+        "omr_data_collector.ui.TableFields.edit_column", return_value=LOG.columns[0]
+    )
+    dialog.name_edit.setText("Supplies")
+    dialog.table_fields.rows_spin.setValue(4)
+    dialog.table_fields.add_column()
+
+    dialog.accept()
+
+    content = dialog.content()
+    assert isinstance(content, TableBlock)
+    assert (content.name, content.rows, content.columns) == (
+        "Supplies",
+        4,
+        (LOG.columns[0],),
+    )
+
+
+def test_the_table_picker_offers_to_write_a_new_table(qtbot: QtBot) -> None:
+    dialog = BlockPickerDialog(
+        None, BLOCK_KINDS.TABLE, [], can_write_new=BLOCK_KINDS.TABLE in EDITABLE_KINDS
+    )
+    qtbot.addWidget(dialog)
+
+    assert dialog.write_new_button is not None
+    assert dialog.write_new_button.text() == "&Write a new table…"

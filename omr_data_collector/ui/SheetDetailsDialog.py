@@ -20,7 +20,7 @@ from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
 from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
-from omr_data_collector.ui.TableBlocksPage import column_summary
+from omr_data_collector.ui.TableFields import column_summary
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QLabel

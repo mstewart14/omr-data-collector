@@ -10,7 +10,12 @@ from PySide6.QtCore import QByteArray, QMimeData, QPointF, Qt
 from PySide6.QtGui import QColor, QDropEvent, QImage, QPainter
 from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
 
-from omr_data_collector.constants import ANSWER_TYPES, BLOCK_KINDS, PAPER_SIZES
+from omr_data_collector.constants import (
+    ANSWER_TYPES,
+    BLOCK_KINDS,
+    PAGE_ORIENTATIONS,
+    PAPER_SIZES,
+)
 from omr_data_collector.identity.qr_code import parse_payload
 from omr_data_collector.layout.form_layout import QR_SIZE_MM, layout_form
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
@@ -362,7 +367,11 @@ def test_double_clicking_a_block_edits_the_forms_copy(
 
     page.canvas.block_activated.emit(1)
 
-    assert write.call_args.args[1:] == (BLOCK_KINDS.QUESTION, VISIT)
+    assert write.call_args.args[1:] == (
+        BLOCK_KINDS.QUESTION,
+        VISIT,
+        (PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.PORTRAIT),
+    )
 
 
 def test_open_form_opens_the_chosen_one(

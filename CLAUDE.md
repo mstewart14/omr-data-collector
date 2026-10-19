@@ -66,7 +66,10 @@ engine bridge.
   `build_fields` and says how to read, load, store and copy its item. How an answer
   is collected (yes/no, one or many choices, written) is an `AnswerSpec`, edited by
   `ui/AnswerFields.py`, which adds its rows to the page's own form; table columns
-  reuse both.
+  reuse both. A table's fields (instructions, rows, columns, preview) are
+  `ui/TableFields.py`, shared by the Table library and the form editor's
+  dialog for writing a table on a form or editing a form's copy
+  (`BlockContentDialog`): build table editing there, never a second copy.
 - **Paper positions come from `layout/`:** `form_layout.layout_form` places every
   block, bubble, writing box and table row on its page, in millimetres;
   `table_layout.py` sizes table columns and cells; `text.py` measures and draws text
