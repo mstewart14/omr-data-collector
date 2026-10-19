@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from PySide6.QtCore import QLocale
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractButton,
     QComboBox,
@@ -123,7 +124,15 @@ def _widget_texts(widget: QWidget) -> list[tuple[str, str]]:
     return texts
 
 
+def font_names() -> set[str]:
+    """Installed typefaces and their styles: named by the fonts, not the app."""
+    families = set(QFontDatabase.families())
+    styles = {style for family in families for style in QFontDatabase.styles(family)}
+    return families | styles
+
+
 def untranslated(root: QWidget) -> list[tuple[str, str]]:
+    fonts = font_names()
     # Numbers, punctuation and keyboard shortcuts are the same in every language.
     return [
         (where, text)
@@ -132,6 +141,7 @@ def untranslated(root: QWidget) -> list[tuple[str, str]]:
         and text not in PROPER_NAMES
         # Each language is named in itself, whatever the app is showing.
         and text not in {name for _, name in language_choices()[1:]}
+        and text not in fonts
         and re.search(r"[A-Za-z]{2}", text.split("\t")[0])
         and not re.fullmatch(r"(Ctrl|Shift|Alt|Meta|\+|[A-Z0-9]|\s)+", text)
     ]

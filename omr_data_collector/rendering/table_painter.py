@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -20,11 +21,13 @@ from omr_data_collector.layout.table_layout import (
 )
 from omr_data_collector.layout.text import draw_text
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
+from omr_data_collector.models.FormFont import STANDARD_SIZE
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
 
     from omr_data_collector.layout.table_layout import ColumnLayout, TableLayout
+    from omr_data_collector.models.FormFont import FormFont
     from omr_data_collector.models.TableBlock import Column, TableBlock
 
 INK = QColor("black")
@@ -55,7 +58,13 @@ def paint_table(painter: QPainter, table: TableBlock, layout: TableLayout) -> No
         for row in range(layout.rows):
             top = layout.header_height_mm + row * layout.row_height_mm
             _paint_cell(
-                painter, column, column_layout, x, top + layout.row_height_mm / 2
+                painter,
+                column,
+                column_layout,
+                x,
+                top + layout.row_height_mm / 2,
+                # Printed separators fill boxes of a fixed size.
+                replace(layout.font, size=STANDARD_SIZE),
             )
         x += column_layout.width_mm
     painter.restore()
@@ -69,13 +78,15 @@ def _paint_heading(
     layout: TableLayout,
 ) -> None:
     inner = column_layout.width_mm - 2 * CELL_PADDING_MM
-    line = line_height_mm(HEADER_POINT_SIZE)
+    font = layout.font
+    line = line_height_mm(HEADER_POINT_SIZE, font=font)
     draw_text(
         painter,
         QRectF(x + CELL_PADDING_MM, CELL_PADDING_MM, inner, line),
         Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
         column.name,
         HEADER_POINT_SIZE,
+        font=font,
         bold=True,
     )
     if column.example:
@@ -85,11 +96,12 @@ def _paint_heading(
             Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
             column.example,
             HEADER_POINT_SIZE,
+            font=font,
         )
     if column.answer.answer_type not in CHOICE_ANSWER_TYPES:
         return
     # Each choice's label above its bubble's column.
-    label_line = line_height_mm(CHOICE_LABEL_POINT_SIZE)
+    label_line = line_height_mm(CHOICE_LABEL_POINT_SIZE, font=font)
     label_top = layout.header_height_mm - CELL_PADDING_MM - label_line
     pitch = inner / max(len(column.answer.printed_choices()), 1)
     for centre, choice in zip(
@@ -103,15 +115,17 @@ def _paint_heading(
             Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextSingleLine,
             choice.label,
             CHOICE_LABEL_POINT_SIZE,
+            font=font,
         )
 
 
-def _paint_cell(
+def _paint_cell(  # noqa: PLR0913 (one cell: its column, place and font)
     painter: QPainter,
     column: Column,
     column_layout: ColumnLayout,
     x: float,
     middle: float,
+    font: FormFont,
 ) -> None:
     for left, printed in cell_written_marks_mm(column, column_layout):
         rect = QRectF(
@@ -128,6 +142,7 @@ def _paint_cell(
                     Qt.AlignmentFlag.AlignCenter,
                     printed,
                     PRINTED_SEPARATOR_POINT_SIZE,
+                    font=font,
                     bold=True,
                 )
         else:

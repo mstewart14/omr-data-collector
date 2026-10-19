@@ -18,6 +18,28 @@ FORM_DEFINITION_SCHEMA = {
     "properties": {
         "name": {"type": "string", "maxLength": FORM_NAME_MAX_LENGTH},
         "orientation": {"enum": list(PAGE_ORIENTATIONS.values())},
+        "font": {
+            "description": "The typeface and base size of the form's text; left "
+            "out for the computer's standard font at 10 pt",
+            "type": "object",
+            "required": ["family", "style", "size"],
+            "additionalProperties": False,
+            "properties": {
+                "family": {
+                    "description": "An installed font family, or empty for the "
+                    "computer's standard font",
+                    "type": "string",
+                    "maxLength": 200,
+                },
+                "style": {
+                    "description": "One of the family's styles, or empty for its "
+                    "regular one",
+                    "type": "string",
+                    "maxLength": 200,
+                },
+                "size": {"type": "number", "minimum": 1, "maximum": 100},
+            },
+        },
         "blocks": {
             "description": "Stacked top to bottom, in order",
             "type": "array",

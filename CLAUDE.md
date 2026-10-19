@@ -76,6 +76,15 @@ engine bridge.
   against a fixed 72-dpi reference. `rendering/` draws from those layouts (the
   editor now, printing next) and the OMRChecker template must read the same
   layouts, never compute its own, so what is seen is what is printed and scanned.
+- **Fonts:** each form has a `FormFont` (typeface, style, base size 8-14 pt;
+  `""` = the computer's standard font, `text.standard_family()`), set in its
+  form details. Every text helper in `layout/text.py` takes the form's font and
+  a kind of text's standard size, which the font scales; the layout carries the
+  font (`FormLayout.font`, `TableLayout.font`) so painters draw in what was
+  measured. Never draw form text with a bare `QFont()`: that is the app's own
+  font, which follows the desktop and Preferences > Text size
+  (`ui/app_font.py`). The header keeps its sizes (its height and QR code are
+  fixed), as do bubbles, boxes and rows, which are millimetres.
 - **The form editor** (`ui/FormsPage.py`) is a page view: `BlockPalette` to drag
   from, `PageCanvas` drawing the real pages (click, drag to reorder, drop to add),
   and the details panel with the Outline list. Every drag has a keyboard or menu

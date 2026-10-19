@@ -11,7 +11,7 @@ margins), x to the right and y down.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QPageLayout
@@ -34,11 +34,13 @@ from omr_data_collector.layout.table_layout import (
 )
 from omr_data_collector.layout.text import (
     document_height_mm,
+    has_family,
     markdown_document,
     plain_document,
     text_width_mm,
 )
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
+from omr_data_collector.models.FormFont import FormFont
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -218,6 +220,9 @@ class FormLayout:
     # room for the organization's name and the form's.
     header_height_mm: float = HEADER_HEIGHT_MM
     header_text_width_mm: float = 0.0
+    # The form's typeface and size, which its text was measured in: drawing
+    # must use the same.
+    font: FormFont = field(default_factory=FormFont)
 
 
 def layout_form(form: Form, paper_size: str) -> FormLayout:
@@ -226,10 +231,18 @@ def layout_form(form: Form, paper_size: str) -> FormLayout:
     paper = page_layout_for(paper_size, form.orientation).fullRect(
         QPageLayout.Unit.Millimeter
     )
-    header = _header_details(form, width)
+    header = _header_details(form, width, form.font)
     header_height = HEADER_HEIGHT_MM
     text_width = width - QR_SIZE_MM - HEADER_TEXT_GAP_MM
     warnings: list[str] = []
+    if not has_family(form.font):
+        warnings.append(
+            tr(
+                'The typeface "{family}" isn\'t installed on this computer, so '
+                "another is shown and printed in its place. Install it, or choose "
+                "another typeface."
+            ).format(family=form.font.family)
+        )
     if header is not None:
         header_height = max(HEADER_HEIGHT_MM, header.height_mm + HEADER_DETAILS_GAP_MM)
         text_width = header.x_mm - HEADER_TEXT_GAP_MM
@@ -247,7 +260,7 @@ def layout_form(form: Form, paper_size: str) -> FormLayout:
                     room=round(room),
                 )
             )
-    builder = _PageBuilder(width, height, header_height + HEADER_GAP_MM)
+    builder = _PageBuilder(width, height, form.font, header_height + HEADER_GAP_MM)
     builder.warnings += warnings
     for index, block in enumerate(form.blocks):
         builder.place(index, block)
@@ -264,10 +277,11 @@ def layout_form(form: Form, paper_size: str) -> FormLayout:
         paper_height_mm=paper.height(),
         header_height_mm=header_height,
         header_text_width_mm=text_width,
+        font=form.font,
     )
 
 
-def _header_details(form: Form, width_mm: float) -> PlacedBlock | None:
+def _header_details(form: Form, width_mm: float, font: FormFont) -> PlacedBlock | None:
     """The form's sheet details set to go in the header, placed there, if any.
 
     Right-aligned against the QR code's quiet zone, beside the names.
@@ -278,7 +292,7 @@ def _header_details(form: Form, width_mm: float) -> PlacedBlock | None:
             isinstance(content, SheetDetails)
             and content.placement == SHEET_DETAILS_PLACEMENTS.HEADER
         ):
-            geometry, box_width = header_details_geometry(content)
+            geometry, box_width = header_details_geometry(content, font=font)
             box_x = width_mm - QR_SIZE_MM - HEADER_TEXT_GAP_MM - box_width
             return PlacedBlock(
                 index,
@@ -314,17 +328,23 @@ def _shifted(geometry: DetailsGeometry, dx: float) -> DetailsGeometry:
     )
 
 
-def header_details_geometry(details: SheetDetails) -> tuple[DetailsGeometry, float]:
+def header_details_geometry(
+    details: SheetDetails, *, font: FormFont | None = None
+) -> tuple[DetailsGeometry, float]:
     """Sheet details stacked a field a line, labels in a column, from x = 0.
 
     Returns:
         The geometry, and the width of the box the fields take.
     """
+    font = font if font is not None else FormFont()
     label_width = (
         max(
             (
                 text_width_mm(
-                    detail_label(column.name), DETAIL_LABEL_POINT_SIZE, bold=True
+                    detail_label(column.name),
+                    DETAIL_LABEL_POINT_SIZE,
+                    font=font,
+                    bold=True,
                 )
                 for column in details.fields
             ),
@@ -335,7 +355,7 @@ def header_details_geometry(details: SheetDetails) -> tuple[DetailsGeometry, flo
     row = HEADER_DETAIL_ROW_MM
     fields = []
     for index, column in enumerate(details.fields):
-        answer_width, pitch = _detail_answer_width(column.answer)
+        answer_width, pitch = _detail_answer_width(column.answer, font)
         top = index * row
         fields.append(
             DetailField(
@@ -357,20 +377,23 @@ def header_details_geometry(details: SheetDetails) -> tuple[DetailsGeometry, flo
     return geometry, box_width
 
 
-def details_geometry(details: SheetDetails, width_mm: float) -> DetailsGeometry:
+def details_geometry(
+    details: SheetDetails, width_mm: float, *, font: FormFont | None = None
+) -> DetailsGeometry:
     """Lay a sheet details block's fields along lines ``width_mm`` wide.
 
     Each field takes the room its label and answer need, and fields wrap onto a
     new line when the next one doesn't fit. A field is never split: one wider
     than the page runs off its edge.
     """
+    font = font if font is not None else FormFont()
     placed: list[DetailField] = []
     x, line = 0.0, 0
     for index, column in enumerate(details.fields):
         label = text_width_mm(
-            detail_label(column.name), DETAIL_LABEL_POINT_SIZE, bold=True
+            detail_label(column.name), DETAIL_LABEL_POINT_SIZE, font=font, bold=True
         )
-        answer_width, pitch = _detail_answer_width(column.answer)
+        answer_width, pitch = _detail_answer_width(column.answer, font)
         width = label + DETAIL_LABEL_GAP_MM + answer_width
         if x > 0 and x + width > width_mm:
             x, line = 0.0, line + 1
@@ -405,13 +428,13 @@ def detail_label(name: str) -> str:
     return tr_printed("{name}:").format(name=name)
 
 
-def _detail_answer_width(answer: AnswerSpec) -> tuple[float, float]:
+def _detail_answer_width(answer: AnswerSpec, font: FormFont) -> tuple[float, float]:
     """How wide a field's answer is, and its bubble spacing (0 for written)."""
     if answer.answer_type in CHOICE_ANSWER_TYPES:
         choices = answer.printed_choices()
         widest = max(
             (
-                text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
+                text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE, font=font)
                 for choice in choices
             ),
             default=0.0,
@@ -470,10 +493,13 @@ def _detail_lines(
     )
 
 
-def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
-    """Where a question's parts go, ``width_mm`` wide."""
+def question_geometry(
+    question: Question, width_mm: float, *, font: FormFont | None = None
+) -> QuestionGeometry:
+    """Where a question's parts go, ``width_mm`` wide, its text in ``font``."""
+    font = font if font is not None else FormFont()
     prompt = document_height_mm(
-        markdown_document(question.prompt, width_mm, BODY_POINT_SIZE)
+        markdown_document(question.prompt, width_mm, BODY_POINT_SIZE, font=font)
     )
     y = prompt
     example_top = y
@@ -481,7 +507,9 @@ def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
     if question.example:
         example_top = y + PART_GAP_MM
         example = document_height_mm(
-            plain_document(question.example, width_mm, EXAMPLE_POINT_SIZE, italic=True)
+            plain_document(
+                question.example, width_mm, EXAMPLE_POINT_SIZE, font=font, italic=True
+            )
         )
         y = example_top + example
     answer_top = y + PART_GAP_MM
@@ -498,7 +526,7 @@ def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
         return QuestionGeometry(
             prompt, example_top, example, answer_top, 0.0, (), boxes, (), bottom
         )
-    pitch = _choice_pitch_mm(question)
+    pitch = _choice_pitch_mm(question, font)
     bubbles = _choice_bubbles(question, width_mm, answer_top, pitch)
     bottom = max(bubble.centre_y_mm for bubble in bubbles) + ANSWER_ROW_HEIGHT_MM / 2
     return QuestionGeometry(
@@ -506,7 +534,7 @@ def question_geometry(question: Question, width_mm: float) -> QuestionGeometry:
     )
 
 
-def _choice_pitch_mm(question: Question) -> float:
+def _choice_pitch_mm(question: Question, font: FormFont) -> float:
     """The spacing of a question's bubbles: room for the widest label.
 
     Evenly spaced bubbles line up neatly, and OMRChecker reads a row of them as
@@ -514,7 +542,7 @@ def _choice_pitch_mm(question: Question) -> float:
     """
     widest = max(
         (
-            text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE)
+            text_width_mm(choice.label, ANSWER_LABEL_POINT_SIZE, font=font)
             for choice in question.answer.printed_choices()
         ),
         default=0.0,
@@ -583,10 +611,15 @@ class _PageBuilder:
     """Fills pages top to bottom, starting new ones as blocks require."""
 
     def __init__(
-        self, width_mm: float, height_mm: float, content_top_mm: float = CONTENT_TOP_MM
+        self,
+        width_mm: float,
+        height_mm: float,
+        font: FormFont,
+        content_top_mm: float = CONTENT_TOP_MM,
     ) -> None:
         self.width = width_mm
         self.height = height_mm
+        self.font = font
         self.content_top = content_top_mm
         self.pages: list[list[PlacedBlock]] = [[]]
         self.y = content_top_mm
@@ -618,7 +651,7 @@ class _PageBuilder:
         if isinstance(content, SheetDetails):
             if content.placement == SHEET_DETAILS_PLACEMENTS.HEADER:
                 return  # in the header of every page: see layout_form
-            details = details_geometry(content, self.width)
+            details = details_geometry(content, self.width, font=self.font)
             if details.height_mm > self.space and not self.page_is_empty:
                 self.new_page()
             self.put(
@@ -627,11 +660,13 @@ class _PageBuilder:
             return
         question = None
         if isinstance(content, Question):
-            question = question_geometry(content, self.width)
+            question = question_geometry(content, self.width, font=self.font)
             height = question.height_mm
         elif isinstance(content, TextBlock):
             height = document_height_mm(
-                markdown_document(content.content, self.width, BODY_POINT_SIZE)
+                markdown_document(
+                    content.content, self.width, BODY_POINT_SIZE, font=self.font
+                )
             )
         else:
             # Tables and sheet details are placed above; nothing else exists.
@@ -648,7 +683,7 @@ class _PageBuilder:
         self.put(PlacedBlock(index, block, self.y, height, question=question))
 
     def _place_table(self, index: int, block: FormBlock, table: TableBlock) -> None:
-        full = table_layout(table)
+        full = table_layout(table, font=self.font)
         if full.width_mm > self.width:
             self.warnings.append(
                 tr(
@@ -660,7 +695,9 @@ class _PageBuilder:
         instructions = 0.0
         if table.instructions.strip():
             instructions = document_height_mm(
-                markdown_document(table.instructions, self.width, BODY_POINT_SIZE)
+                markdown_document(
+                    table.instructions, self.width, BODY_POINT_SIZE, font=self.font
+                )
             )
         grid_top = instructions + (INSTRUCTIONS_GAP_MM if instructions else 0)
 

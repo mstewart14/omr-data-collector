@@ -6,7 +6,7 @@ numbers, so what is previewed is what is printed and scanned.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from omr_data_collector.constants import ANSWER_TYPES
@@ -16,6 +16,7 @@ from omr_data_collector.layout.text import (  # noqa: F401 (MM_PER_POINT re-expo
     text_width_mm,
 )
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
+from omr_data_collector.models.FormFont import FormFont
 
 if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -48,6 +49,8 @@ class TableLayout:
     header_height_mm: float
     row_height_mm: float
     rows: int
+    # What its text was measured in, and so must be drawn in.
+    font: FormFont = field(default_factory=FormFont)
 
     @property
     def width_mm(self) -> float:
@@ -63,13 +66,13 @@ class TableLayout:
         return max(int(room // self.row_height_mm), 0)
 
 
-def choice_pitch_mm(answer: AnswerSpec) -> float:
+def choice_pitch_mm(answer: AnswerSpec, *, font: FormFont) -> float:
     """Bubble spacing: the standard pitch, or wider if a choice's label needs it."""
     if answer.answer_type not in CHOICE_ANSWER_TYPES:
         return 0
     widest_label = max(
         (
-            text_width_mm(choice.label, CHOICE_LABEL_POINT_SIZE)
+            text_width_mm(choice.label, CHOICE_LABEL_POINT_SIZE, font=font)
             for choice in answer.printed_choices()
         ),
         default=0,
@@ -77,22 +80,25 @@ def choice_pitch_mm(answer: AnswerSpec) -> float:
     return max(BUBBLE_PITCH_MM, widest_label + LABEL_GAP_MM)
 
 
-def column_layout(column: Column) -> ColumnLayout:
+def column_layout(column: Column, *, font: FormFont | None = None) -> ColumnLayout:
+    font = font if font is not None else FormFont()
     answer = column.answer
-    pitch = choice_pitch_mm(answer)
+    pitch = choice_pitch_mm(answer, font=font)
     if answer.answer_type == ANSWER_TYPES.WRITTEN:
         content = answer.characters() * WRITTEN_BOX_WIDTH_MM
     else:
         content = len(answer.printed_choices()) * pitch
     # The heading never wraps, so a column is at least as wide as its name; a
     # longer example wraps under it instead.
-    heading = text_width_mm(column.name, HEADER_POINT_SIZE, bold=True)
+    heading = text_width_mm(column.name, HEADER_POINT_SIZE, font=font, bold=True)
     return ColumnLayout(
         width_mm=max(content, heading) + 2 * CELL_PADDING_MM, choice_pitch_mm=pitch
     )
 
 
-def rows_to_print(table: TableBlock, space_mm: float) -> int:
+def rows_to_print(
+    table: TableBlock, space_mm: float, *, font: FormFont | None = None
+) -> int:
     """How many rows the table prints when ``space_mm`` of page height is left.
 
     A fixed count, or for a table that fills to the end of its page, every row
@@ -100,25 +106,28 @@ def rows_to_print(table: TableBlock, space_mm: float) -> int:
     """
     if not table.fill_page:
         return table.rows
-    return table_layout(table).rows_per_page(space_mm)
+    return table_layout(table, font=font).rows_per_page(space_mm)
 
 
-def table_layout(table: TableBlock) -> TableLayout:
+def table_layout(table: TableBlock, *, font: FormFont | None = None) -> TableLayout:
+    """The table's sizes in ``font`` (the standard one outside a form)."""
+    font = font if font is not None else FormFont()
     has_example = any(column.example for column in table.columns)
     has_choices = any(
         column.answer.answer_type in CHOICE_ANSWER_TYPES for column in table.columns
     )
-    header = 2 * CELL_PADDING_MM + line_height_mm(HEADER_POINT_SIZE)
+    header = 2 * CELL_PADDING_MM + line_height_mm(HEADER_POINT_SIZE, font=font)
     if has_example:
-        header += line_height_mm(HEADER_POINT_SIZE)
+        header += line_height_mm(HEADER_POINT_SIZE, font=font)
     if has_choices:
         # Choice labels sit in a line of their own, above their bubbles.
-        header += line_height_mm(CHOICE_LABEL_POINT_SIZE) + LABEL_GAP_MM
+        header += line_height_mm(CHOICE_LABEL_POINT_SIZE, font=font) + LABEL_GAP_MM
     return TableLayout(
-        columns=tuple(column_layout(column) for column in table.columns),
+        columns=tuple(column_layout(column, font=font) for column in table.columns),
         header_height_mm=header,
         row_height_mm=ROW_HEIGHT_MM,
         rows=table.rows,
+        font=font,
     )
 
 

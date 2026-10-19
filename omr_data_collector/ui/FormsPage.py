@@ -41,6 +41,7 @@ from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_title
+from omr_data_collector.models.FormFont import STANDARD_SIZE, FormFont
 from omr_data_collector.models.ordering import move_by, move_to
 from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.SheetDetails import SheetDetails
@@ -70,6 +71,11 @@ from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.accessibility import style_error_label
 from omr_data_collector.ui.BlockDialogs import BlockContentDialog, BlockPickerDialog
 from omr_data_collector.ui.BlockPalette import BlockPalette
+from omr_data_collector.ui.font_choices import (
+    family_choices,
+    size_choices,
+    style_choices,
+)
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
@@ -484,6 +490,12 @@ class FormsPage(LibraryPage[Form]):
         self.orientation_combo = QComboBox()
         for value, name in orientation_names().items():
             self.orientation_combo.addItem(name, value)
+        # The typeface and size the form prints in; its style choices follow the
+        # typeface chosen.
+        self.family_combo = QComboBox()
+        self.style_combo = QComboBox()
+        self.font_size_combo = QComboBox()
+        self._fill_font_combos(FormFont())
         self.version_note = QLabel()
         self.version_note.setWordWrap(True)
         # Layout problems to fix before printing, e.g. a table too wide.
@@ -512,6 +524,9 @@ class FormsPage(LibraryPage[Form]):
         )
         for key, label_text, widget in (
             ("orientation", tr("Page &orientation"), self.orientation_combo),
+            ("font_family", tr("T&ypeface"), self.family_combo),
+            ("font_style", tr("&Weight and style"), self.style_combo),
+            ("font_size", tr("Text si&ze"), self.font_size_combo),
             ("sheet_details", tr("Sheet &details"), self.sheet_details_combo),
             ("blocks", tr("B&locks (required)"), self.block_list),
         ):
@@ -519,7 +534,7 @@ class FormsPage(LibraryPage[Form]):
                 form, label_text, widget
             )
             self.field_widgets[key] = widget
-            if key == "orientation":
+            if key == "font_size":
                 form.addRow("", self.version_note)
                 form.addRow("", self.problems_note)
             if key == "sheet_details":
@@ -565,6 +580,9 @@ class FormsPage(LibraryPage[Form]):
         self._connect_blocks()
         return [
             self.orientation_combo,
+            self.family_combo,
+            self.style_combo,
+            self.font_size_combo,
             self.sheet_details_combo,
             self.edit_details_button,
             self.block_list,
@@ -580,6 +598,7 @@ class FormsPage(LibraryPage[Form]):
                     item.orientation if item is not None else PAGE_ORIENTATIONS.PORTRAIT
                 )
             )
+        self._fill_font_combos(item.font if item is not None else FormFont())
         self._blocks = list(item.blocks) if item is not None else []
         self._fill_block_list([0] if self._blocks else [])
         self._update_version_note(item)
@@ -593,6 +612,7 @@ class FormsPage(LibraryPage[Form]):
             blocks=tuple(self._blocks),
             form_id=item_id,
             version=self._current.version if self._current is not None else 0,
+            font=self.chosen_font(),
         ).normalized()
 
     def list_items(self) -> list[Form]:
@@ -618,6 +638,7 @@ class FormsPage(LibraryPage[Form]):
                 )
                 for block in item.blocks
             ),
+            font=item.font,
         )
 
     def item_id(self, item: Form) -> str:
@@ -653,6 +674,54 @@ class FormsPage(LibraryPage[Form]):
         return tr('Form "{name}" saved as version {version}.').format(
             name=item.name, version=item.version
         )
+
+    # --- The form's typeface and text size --------------------------------------
+
+    def chosen_font(self) -> FormFont:
+        """The typeface, style and size the form details show."""
+        size = self.font_size_combo.currentData()
+        return FormFont(
+            family=self.family_combo.currentData() or "",
+            style=self.style_combo.currentData() or "",
+            size=float(size) if size is not None else STANDARD_SIZE,
+        )
+
+    def _fill_font_combos(self, font: FormFont) -> None:
+        """Show ``font``, listing its family's own styles."""
+        with (
+            QSignalBlocker(self.family_combo),
+            QSignalBlocker(self.style_combo),
+            QSignalBlocker(self.font_size_combo),
+        ):
+            if self.family_combo.count() == 0 or (
+                font.family and self.family_combo.findData(font.family) < 0
+            ):
+                self.family_combo.clear()
+                for label, family in family_choices(font.family):
+                    self.family_combo.addItem(label, family)
+            self.family_combo.setCurrentIndex(
+                max(self.family_combo.findData(font.family), 0)
+            )
+            self._fill_style_combo(font.family, font.style)
+            self.font_size_combo.clear()
+            for label, size in size_choices(font.size):
+                self.font_size_combo.addItem(label, size)
+            self.font_size_combo.setCurrentIndex(
+                max(self.font_size_combo.findData(font.size), 0)
+            )
+
+    def _fill_style_combo(self, family: str, style: str) -> None:
+        with QSignalBlocker(self.style_combo):
+            self.style_combo.clear()
+            for label, value in style_choices(family, style):
+                self.style_combo.addItem(label, value)
+            self.style_combo.setCurrentIndex(max(self.style_combo.findData(style), 0))
+
+    def _family_changed(self) -> None:
+        # A family's styles are its own: the new one starts at Regular.
+        self._fill_style_combo(self.family_combo.currentData() or "", "")
+        self.update_state()
+        self._commit_change(tr("changed the typeface"))
 
     def update_state(self) -> None:
         super().update_state()
@@ -1239,6 +1308,7 @@ class FormsPage(LibraryPage[Form]):
         return _Snapshot(
             name=self.name_edit.text(),
             orientation=self.orientation_combo.currentData(),
+            font=self.chosen_font(),
             blocks=tuple(self._blocks),
             selected=tuple(self.selected_rows()),
         )
@@ -1264,6 +1334,7 @@ class FormsPage(LibraryPage[Form]):
             self.orientation_combo.setCurrentIndex(
                 self.orientation_combo.findData(snapshot.orientation)
             )
+        self._fill_font_combos(snapshot.font)
         self._blocks = list(snapshot.blocks)
         self._fill_block_list(list(snapshot.selected))
         self._shown = snapshot
@@ -1279,6 +1350,15 @@ class FormsPage(LibraryPage[Form]):
         self.orientation_combo.currentIndexChanged.connect(self.update_state)
         self.orientation_combo.currentIndexChanged.connect(
             lambda: self._commit_change(tr("changed the page orientation"))
+        )
+        self.family_combo.currentIndexChanged.connect(self._family_changed)
+        self.style_combo.currentIndexChanged.connect(self.update_state)
+        self.style_combo.currentIndexChanged.connect(
+            lambda: self._commit_change(tr("changed the weight and style"))
+        )
+        self.font_size_combo.currentIndexChanged.connect(self.update_state)
+        self.font_size_combo.currentIndexChanged.connect(
+            lambda: self._commit_change(tr("changed the text size"))
         )
         # Typing is undone by the name field itself; leaving it records the rename.
         self.name_edit.editingFinished.connect(
@@ -1409,12 +1489,13 @@ class _Snapshot:
 
     name: str
     orientation: str
+    font: FormFont
     blocks: tuple[FormBlock, ...]
     selected: tuple[int, ...]
 
-    def content(self) -> tuple[str, str, tuple[FormBlock, ...]]:
+    def content(self) -> tuple[str, str, FormFont, tuple[FormBlock, ...]]:
         """What counts as a change: everything but the selection."""
-        return self.name, self.orientation, self.blocks
+        return self.name, self.orientation, self.font, self.blocks
 
 
 def _moved_description(moved: list[int]) -> str:

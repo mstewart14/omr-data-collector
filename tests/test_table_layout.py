@@ -22,6 +22,7 @@ from omr_data_collector.layout.table_layout import (
     text_width_mm,
 )
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
+from omr_data_collector.models.FormFont import FormFont
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.ui.TablePreview import fit_summary
 
@@ -85,7 +86,9 @@ def test_a_column_is_never_narrower_than_its_name() -> None:
     name = "number_of_people_in_household"
     column = Column(name, answer=AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=1))
 
-    assert column_layout(column).width_mm >= text_width_mm(name, 8, bold=True)
+    assert column_layout(column).width_mm >= text_width_mm(
+        name, 8, font=FormFont(), bold=True
+    )
 
 
 def test_table_width_is_the_sum_of_its_columns() -> None:

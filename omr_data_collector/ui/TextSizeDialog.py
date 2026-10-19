@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QLocale, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -12,12 +12,8 @@ from PySide6.QtWidgets import (
 
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.app_font import TEXT_SIZES, desktop_text_font
+from omr_data_collector.ui.font_choices import points
 from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
-
-
-def points(size: float) -> str:
-    """A size in points, as this language writes numbers ("10.5 pt")."""
-    return tr("{size} pt").format(size=QLocale().toString(float(size), "g", 4))
 
 
 class TextSizeDialog(QDialog):

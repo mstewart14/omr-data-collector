@@ -7,6 +7,7 @@ selection and drop markers on top.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -38,6 +39,7 @@ from omr_data_collector.layout.text import (
     markdown_document,
     plain_document,
 )
+from omr_data_collector.models.FormFont import STANDARD_SIZE
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -56,6 +58,7 @@ if TYPE_CHECKING:
         WrittenBox,
     )
     from omr_data_collector.models.Form import Form
+    from omr_data_collector.models.FormFont import FormFont
     from omr_data_collector.models.Organization import Organization
 
 INK = QColor("black")
@@ -84,7 +87,7 @@ def paint_page(
     for placed in page.blocks:
         painter.save()
         painter.translate(0, placed.y_mm)
-        _paint_block(painter, placed, layout.width_mm)
+        _paint_block(painter, placed, layout.width_mm, layout.font)
         painter.restore()
     painter.restore()
 
@@ -108,6 +111,9 @@ def _paint_header(
     page: PageLayout,
 ) -> None:
     width = layout.width_mm
+    # The form's typeface, but always the standard size: the header's height and
+    # its QR code's place are fixed.
+    font = replace(layout.font, size=STANDARD_SIZE)
     qr = QRectF(width - QR_SIZE_MM, 0, QR_SIZE_MM, QR_SIZE_MM)
     if organization is not None:
         payload = build_form_payload(
@@ -127,7 +133,12 @@ def _paint_header(
         painter.drawRect(qr)
         painter.setPen(QPen(MUTED_INK))
         draw_text(
-            painter, qr, Qt.AlignmentFlag.AlignCenter, tr("QR code"), DETAIL_POINT_SIZE
+            painter,
+            qr,
+            Qt.AlignmentFlag.AlignCenter,
+            tr("QR code"),
+            DETAIL_POINT_SIZE,
+            font=font,
         )
 
     # Narrower when sheet details share the header.
@@ -138,7 +149,7 @@ def _paint_header(
         text: str, point_size: float, *, bold: bool = False, muted: bool = False
     ) -> None:
         nonlocal y
-        height = line_height_mm(point_size)
+        height = line_height_mm(point_size, font=font)
         painter.setPen(QPen(MUTED_INK if muted else INK))
         draw_text(
             painter,
@@ -146,6 +157,7 @@ def _paint_header(
             Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
             text,
             point_size,
+            font=font,
             bold=bold,
         )
         y += height
@@ -186,23 +198,30 @@ def _paint_header(
     painter.drawLine(QPointF(0, rule), QPointF(width, rule))
 
 
-def _paint_block(painter: QPainter, placed: PlacedBlock, width: float) -> None:
+def _paint_block(
+    painter: QPainter, placed: PlacedBlock, width: float, font: FormFont
+) -> None:
     content = placed.block.content
     painter.setPen(QPen(INK, LINE_WIDTH_MM))
     if isinstance(content, TextBlock):
         draw_document(
-            painter, markdown_document(content.content, width, BODY_POINT_SIZE), 0, 0
+            painter,
+            markdown_document(content.content, width, BODY_POINT_SIZE, font=font),
+            0,
+            0,
         )
     elif isinstance(content, Question) and placed.question is not None:
-        _paint_question(painter, content, placed.question, width)
+        _paint_question(painter, content, placed.question, width, font)
     elif isinstance(content, SheetDetails) and placed.details is not None:
-        _paint_details(painter, content, placed.details, width)
+        _paint_details(painter, content, placed.details, width, font)
     elif isinstance(content, TableBlock) and placed.table_part is not None:
         part = placed.table_part
         if part.instructions_height_mm:
             draw_document(
                 painter,
-                markdown_document(content.instructions, width, BODY_POINT_SIZE),
+                markdown_document(
+                    content.instructions, width, BODY_POINT_SIZE, font=font
+                ),
                 0,
                 0,
             )
@@ -213,26 +232,39 @@ def _paint_block(painter: QPainter, placed: PlacedBlock, width: float) -> None:
 
 
 def _paint_question(
-    painter: QPainter, question: Question, geometry: QuestionGeometry, width: float
+    painter: QPainter,
+    question: Question,
+    geometry: QuestionGeometry,
+    width: float,
+    font: FormFont,
 ) -> None:
     draw_document(
-        painter, markdown_document(question.prompt, width, BODY_POINT_SIZE), 0, 0
+        painter,
+        markdown_document(question.prompt, width, BODY_POINT_SIZE, font=font),
+        0,
+        0,
     )
     if question.example:
         painter.setPen(QPen(MUTED_INK))
         draw_document(
             painter,
-            plain_document(question.example, width, EXAMPLE_POINT_SIZE, italic=True),
+            plain_document(
+                question.example, width, EXAMPLE_POINT_SIZE, font=font, italic=True
+            ),
             0,
             geometry.example_top_mm,
         )
     _paint_answer_marks(
-        painter, geometry.bubbles, geometry.boxes, geometry.lines, width
+        painter, geometry.bubbles, geometry.boxes, geometry.lines, width, font
     )
 
 
 def _paint_details(
-    painter: QPainter, details: SheetDetails, geometry: DetailsGeometry, width: float
+    painter: QPainter,
+    details: SheetDetails,
+    geometry: DetailsGeometry,
+    width: float,
+    font: FormFont,
 ) -> None:
     """Each field's bold label, then its answer's bubbles, boxes or line."""
     for placed in geometry.fields:
@@ -251,17 +283,21 @@ def _paint_details(
             | Qt.TextFlag.TextSingleLine,
             detail_label(column.name),
             DETAIL_LABEL_POINT_SIZE,
+            font=font,
             bold=True,
         )
-        _paint_answer_marks(painter, placed.bubbles, placed.boxes, placed.lines, width)
+        _paint_answer_marks(
+            painter, placed.bubbles, placed.boxes, placed.lines, width, font
+        )
 
 
-def _paint_answer_marks(
+def _paint_answer_marks(  # noqa: PLR0913 (the marks, and what they are drawn in)
     painter: QPainter,
     bubbles: tuple[Bubble, ...],
     boxes: tuple[WrittenBox, ...],
     lines: tuple[WritingLine, ...],
     width: float,
+    font: FormFont,
 ) -> None:
     """Bubbles with their labels, boxes to write in, and lines to write on."""
     painter.setPen(QPen(INK, LINE_WIDTH_MM))
@@ -285,11 +321,12 @@ def _paint_answer_marks(
             | Qt.TextFlag.TextSingleLine,
             bubble.label,
             ANSWER_LABEL_POINT_SIZE,
+            font=font,
         )
     for box in boxes:
         rect = QRectF(box.x_mm, box.y_mm, box.width_mm, box.height_mm)
         if box.printed:
-            draw_printed_character(painter, rect, box.printed)
+            draw_printed_character(painter, rect, box.printed, font)
         else:
             painter.drawRect(rect)
     for line in lines:
@@ -298,8 +335,13 @@ def _paint_answer_marks(
         )
 
 
-def draw_printed_character(painter: QPainter, rect: QRectF, character: str) -> None:
-    """A separator printed in a box's place: the / of a date or : of a time."""
+def draw_printed_character(
+    painter: QPainter, rect: QRectF, character: str, font: FormFont
+) -> None:
+    """A separator printed in a box's place: the / of a date or : of a time.
+
+    In the form's typeface, at the standard size: the box is a fixed size.
+    """
     if character.strip():
         draw_text(
             painter,
@@ -307,5 +349,6 @@ def draw_printed_character(painter: QPainter, rect: QRectF, character: str) -> N
             Qt.AlignmentFlag.AlignCenter,
             character,
             PRINTED_SEPARATOR_POINT_SIZE,
+            font=replace(font, size=STANDARD_SIZE),
             bold=True,
         )

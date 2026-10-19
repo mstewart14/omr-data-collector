@@ -30,6 +30,7 @@ from omr_data_collector.ui.app_font import (
     saved_text_size,
 )
 from omr_data_collector.ui.CapturePage import CapturePage
+from omr_data_collector.ui.font_choices import points
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel, finish_editing
 from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
@@ -37,7 +38,7 @@ from omr_data_collector.ui.OrganizationPage import OrganizationPage
 from omr_data_collector.ui.QuestionsPage import QuestionsPage
 from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
-from omr_data_collector.ui.TextSizeDialog import TextSizeDialog, points
+from omr_data_collector.ui.TextSizeDialog import TextSizeDialog
 
 if TYPE_CHECKING:
     import sqlite3

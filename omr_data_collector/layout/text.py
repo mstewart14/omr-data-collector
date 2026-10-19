@@ -4,6 +4,10 @@ Everything on paper is laid out in millimetres. Text is measured against a
 reference that is exactly 72 dots per inch, so one point is one unit there, and
 the result is the same on any screen or printer; drawing then scales from that
 reference to the page.
+
+Every size here is the standard size of its kind of text (10 pt body text, 9 pt
+answer labels...); the form's own font (``FormFont``) scales it and names the
+typeface. Measuring and drawing take the same font, so the two always agree.
 """
 
 from __future__ import annotations
@@ -11,10 +15,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRectF
-from PySide6.QtGui import QFont, QFontMetricsF, QImage, QTextDocument
+from PySide6.QtGui import QFont, QFontDatabase, QFontMetricsF, QImage, QTextDocument
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
+
+    from omr_data_collector.models.FormFont import FormFont
 
 MM_PER_POINT = 25.4 / 72
 # GitHub-flavoured Markdown without raw HTML: anything HTML-like is kept as literal
@@ -45,38 +51,81 @@ def _reference() -> QImage:
     return _reference_device
 
 
-def measuring_font(*, bold: bool = False, italic: bool = False) -> QFont:
-    font = QFont()
+def standard_family() -> str:
+    """The computer's standard font: what a form with no typeface of its own uses.
+
+    The platform's own general font, which the app's text size preference
+    doesn't change.
+    """
+    return QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
+
+
+def form_family(form_font: FormFont) -> str:
+    """The family a form's text is drawn in."""
+    return form_font.family or standard_family()
+
+
+def text_font(
+    form_font: FormFont, *, bold: bool = False, italic: bool = False
+) -> QFont:
+    """A form's typeface, in its style, with bold and italic on top; size unset."""
+    family = form_family(form_font)
+    font = QFont(family)
+    if form_font.style:
+        # Weight and slant rather than the style's name: with a style name set,
+        # Qt ignores bold and italic.
+        weight = QFontDatabase.weight(family, form_font.style)
+        if weight > 0:
+            font.setWeight(QFont.Weight(weight))
+        font.setItalic(QFontDatabase.italic(family, form_font.style))
+    if bold:
+        font.setBold(True)
+    if italic:
+        font.setItalic(True)
+    return font
+
+
+def has_family(form_font: FormFont) -> bool:
+    """Whether the form's typeface is installed here (the standard one always is)."""
+    return not form_font.family or QFontDatabase.hasFamily(form_font.family)
+
+
+def measuring_font(
+    form_font: FormFont, *, bold: bool = False, italic: bool = False
+) -> QFont:
+    font = text_font(form_font, bold=bold, italic=italic)
     font.setPixelSize(MEASURING_PIXEL_SIZE)
-    font.setBold(bold)
-    font.setItalic(italic)
     return font
 
 
 def text_width_mm(
-    text: str, point_size: float, *, bold: bool = False, italic: bool = False
+    text: str,
+    point_size: float,
+    *,
+    font: FormFont,
+    bold: bool = False,
+    italic: bool = False,
 ) -> float:
-    """The printed width of one line of ``text`` at ``point_size``."""
-    advance = QFontMetricsF(measuring_font(bold=bold, italic=italic)).horizontalAdvance(
-        text
-    )
-    return advance / MEASURING_PIXEL_SIZE * point_size * MM_PER_POINT
+    """The printed width of one line of ``text`` at ``point_size`` in ``font``."""
+    metrics = QFontMetricsF(measuring_font(font, bold=bold, italic=italic))
+    size = point_size * font.scale
+    return metrics.horizontalAdvance(text) / MEASURING_PIXEL_SIZE * size * MM_PER_POINT
 
 
-def line_height_mm(point_size: float) -> float:
-    spacing = QFontMetricsF(measuring_font()).lineSpacing()
-    return spacing / MEASURING_PIXEL_SIZE * point_size * MM_PER_POINT
+def line_height_mm(point_size: float, *, font: FormFont) -> float:
+    spacing = QFontMetricsF(measuring_font(font)).lineSpacing()
+    return spacing / MEASURING_PIXEL_SIZE * point_size * font.scale * MM_PER_POINT
 
 
 def markdown_document(
-    markdown: str, width_mm: float, point_size: float
+    markdown: str, width_mm: float, point_size: float, *, font: FormFont
 ) -> QTextDocument:
     """Markdown laid out ``width_mm`` wide in ``point_size`` text, ready to measure."""
     document = QTextDocument()
     document.documentLayout().setPaintDevice(_reference())
-    font = QFont()
-    font.setPointSizeF(point_size)
-    document.setDefaultFont(font)
+    default = text_font(font)
+    default.setPointSizeF(point_size * font.scale)
+    document.setDefaultFont(default)
     document.setDocumentMargin(0)
     document.setMarkdown(markdown, MARKDOWN_FEATURES)
     document.setTextWidth(width_mm / MM_PER_POINT)
@@ -105,6 +154,7 @@ def draw_text(  # noqa: PLR0913 (where, what and how it looks)
     text: str,
     point_size: float,
     *,
+    font: FormFont,
     bold: bool = False,
     italic: bool = False,
 ) -> None:
@@ -112,11 +162,9 @@ def draw_text(  # noqa: PLR0913 (where, what and how it looks)
     scale = MM_PER_POINT / DRAW_UNITS_PER_POINT
     painter.save()
     painter.scale(scale, scale)
-    font = QFont()
-    font.setPixelSize(max(round(point_size * DRAW_UNITS_PER_POINT), 1))
-    font.setBold(bold)
-    font.setItalic(italic)
-    painter.setFont(font)
+    drawn = text_font(font, bold=bold, italic=italic)
+    drawn.setPixelSize(max(round(point_size * font.scale * DRAW_UNITS_PER_POINT), 1))
+    painter.setFont(drawn)
     painter.drawText(
         QRectF(
             rect_mm.x() / scale,
@@ -131,15 +179,19 @@ def draw_text(  # noqa: PLR0913 (where, what and how it looks)
 
 
 def plain_document(
-    text: str, width_mm: float, point_size: float, *, italic: bool = False
+    text: str,
+    width_mm: float,
+    point_size: float,
+    *,
+    font: FormFont,
+    italic: bool = False,
 ) -> QTextDocument:
     """Plain text (no Markdown) laid out ``width_mm`` wide, ready to measure."""
     document = QTextDocument()
     document.documentLayout().setPaintDevice(_reference())
-    font = QFont()
-    font.setPointSizeF(point_size)
-    font.setItalic(italic)
-    document.setDefaultFont(font)
+    default = text_font(font, italic=italic)
+    default.setPointSizeF(point_size * font.scale)
+    document.setDefaultFont(default)
     document.setDocumentMargin(0)
     document.setPlainText(text)
     document.setTextWidth(width_mm / MM_PER_POINT)

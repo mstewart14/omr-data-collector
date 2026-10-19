@@ -14,6 +14,7 @@ from omr_data_collector.constants import (
     TABLE_BREAKS,
 )
 from omr_data_collector.i18n import tr
+from omr_data_collector.models.FormFont import MAX_SIZE, MIN_SIZE, FormFont
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -128,6 +129,7 @@ class Form:
     blocks: tuple[FormBlock, ...] = ()
     form_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     version: int = 0
+    font: FormFont = field(default_factory=FormFont)
 
     def normalized(self) -> Form:
         return replace(
@@ -157,6 +159,11 @@ class Form:
         if self.orientation not in PAGE_ORIENTATIONS.values():
             errors["orientation"] = tr("Choose an orientation.")
 
+        if not MIN_SIZE <= self.font.size <= MAX_SIZE:
+            errors["font_size"] = tr(
+                "Choose a text size from {smallest} to {largest} points."
+            ).format(smallest=round(MIN_SIZE), largest=round(MAX_SIZE))
+
         blocks_error = self._blocks_error()
         if blocks_error:
             errors["blocks"] = blocks_error
@@ -164,11 +171,15 @@ class Form:
 
     def definition(self) -> dict[str, Any]:
         """The JSON stored for each version: everything needed to print or scan it."""
-        return {
+        definition: dict[str, Any] = {
             "name": self.name,
             "orientation": self.orientation,
             "blocks": [block.to_dict() for block in self.blocks],
         }
+        # Left out for the standard font, so forms from before fonts are unchanged.
+        if not self.font.is_standard():
+            definition["font"] = self.font.to_dict()
+        return definition
 
     @classmethod
     def from_definition(
@@ -186,6 +197,7 @@ class Form:
             blocks=tuple(FormBlock.from_dict(block) for block in data["blocks"]),
             form_id=form_id,
             version=version,
+            font=FormFont.from_dict(data.get("font")),
         )
 
     def _blocks_error(self) -> str:
