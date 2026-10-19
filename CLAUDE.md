@@ -104,7 +104,12 @@ engine bridge.
   editor. File > Export as PDF, Print preview and Print go through
   `FormsPage._ready_to_print` (organization entered, form saved, layout problems
   confirmed) and finish with `mark_printed`; a preview alone doesn't freeze the
-  version, printing from it does.
+  version, printing from it does. The first printing also stores the whole
+  layout (`layout/frozen_layout.py`, in `printed_layout` beside the page
+  templates), and later printings of that version draw from it
+  (`layout_to_print`), never a fresh layout: on a computer without the form's
+  typeface the text looks different (shrunk to fit its stored room if need be)
+  but nothing moves, so every copy scans against the stored templates.
 - **Scanning:** every page has four solid corner markers in the margins
   (`layout/markers.py`), so prints are drawn full-page. `layout/omr_template.py`
   builds each page's OMRChecker template from the layout (one field per row of

@@ -18,14 +18,24 @@ from omr_data_collector.constants import (
     PAPER_SIZES,
 )
 from omr_data_collector.identity.qr_code import parse_payload, read_qr_codes
+from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.frozen_layout import FROZEN_LAYOUT_KEY, thawed_layout
+from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
+from omr_data_collector.models.FormFont import FormFont
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.rendering.print_form import save_pdf
-from omr_data_collector.storage.form_store import is_printed, list_forms, save_form
+from omr_data_collector.storage.form_store import (
+    is_printed,
+    list_forms,
+    load_printed_layout,
+    mark_printed,
+    save_form,
+)
 from omr_data_collector.storage.organization_store import save_organization
 from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.MainWindow import MainWindow
@@ -366,3 +376,45 @@ def test_missing_organization_opens_its_details(
     window.forms_page.print_form()
 
     assert window.stack.currentWidget() is window.organization_page
+
+
+def test_printing_a_version_again_draws_from_its_first_printing(
+    page: FormsPage,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    mocker.patch(f"{PAGE_MODULE}.choose_pdf_path", return_value=tmp_path / "a.pdf")
+    page.export_pdf()
+    (form,) = list_forms(connection)
+    stored = load_printed_layout(connection, form.form_id, form.version)
+    assert stored is not None
+    first = thawed_layout(stored[FROZEN_LAYOUT_KEY], form)
+    save = mocker.patch(f"{PAGE_MODULE}.save_pdf", return_value=2)
+
+    page.export_pdf()
+
+    assert first is not None
+    assert save.call_args.args[4] == first
+
+
+def test_a_reprint_without_its_typeface_says_it_still_scans(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture
+) -> None:
+    save_organization(connection, ORGANIZATION)
+    form = save_form(connection, intake(font=FormFont(family="No Such Typeface")))
+    layout = layout_form(form, ORGANIZATION.paper_size)
+    mark_printed(connection, form.form_id, form.version, printed_layout(layout))
+    editor = FormsPage(connection)
+    qtbot.addWidget(editor)
+    confirm = mocker.patch(
+        f"{PAGE_MODULE}.confirm_despite_problems", return_value=False
+    )
+    choose = mocker.patch(f"{PAGE_MODULE}.choose_pdf_path")
+
+    editor.export_pdf()
+
+    (warning,) = confirm.call_args.args[2]
+    assert "No Such Typeface" in warning
+    assert "sheets still scan the same" in warning
+    choose.assert_not_called()

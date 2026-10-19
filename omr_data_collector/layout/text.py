@@ -12,12 +12,15 @@ typeface. Measuring and drawing take the same font, so the two always agree.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QFont, QFontDatabase, QFontMetricsF, QImage, QTextDocument
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from PySide6.QtGui import QPainter
 
     from omr_data_collector.models.FormFont import FormFont
@@ -36,6 +39,12 @@ MEASURING_PIXEL_SIZE = 100
 # Drawing works in tenths of a point, so font sizes like 7.5 pt stay exact even
 # though Qt font pixel sizes are whole numbers.
 DRAW_UNITS_PER_POINT = 10
+# Text within this share of its room fits: measuring rounds a little.
+FIT_TOLERANCE = 0.001
+# How far text may shrink to fit a stored layout's room, and how closely it is
+# fitted.
+SMALLEST_FIT = 0.5
+FIT_STEPS = 8
 
 _reference_device: QImage | None = None
 
@@ -160,6 +169,11 @@ def draw_text(  # noqa: PLR0913 (where, what and how it looks)
 ) -> None:
     """Draw ``text`` in ``rect_mm`` with a painter working in millimetres."""
     scale = MM_PER_POINT / DRAW_UNITS_PER_POINT
+    # Narrower to fit its place if it must: only when drawing a stored layout in
+    # a font other than the one it was measured in (frozen_layout).
+    width = text_width_mm(text, point_size, font=font, bold=bold, italic=italic)
+    if rect_mm.width() > 0 and width > rect_mm.width() * (1 + FIT_TOLERANCE):
+        point_size *= rect_mm.width() / width
     painter.save()
     painter.scale(scale, scale)
     drawn = text_font(font, bold=bold, italic=italic)
@@ -196,3 +210,26 @@ def plain_document(
     document.setPlainText(text)
     document.setTextWidth(width_mm / MM_PER_POINT)
     return document
+
+
+def fitted_document(
+    make: Callable[[FormFont], QTextDocument], font: FormFont, height_mm: float
+) -> QTextDocument:
+    """``make(font)``, in smaller text if that's what it takes to fit ``height_mm``.
+
+    A layout made in ``font`` always fits; this is for drawing a stored layout
+    in a substitute font that takes more room (``frozen_layout``).
+    """
+    document = make(font)
+    if document_height_mm(document) <= height_mm * (1 + FIT_TOLERANCE) + FIT_TOLERANCE:
+        return document
+    low, high = SMALLEST_FIT, 1.0
+    best = make(replace(font, size=font.size * low))
+    for _ in range(FIT_STEPS):
+        middle = (low + high) / 2
+        trial = make(replace(font, size=font.size * middle))
+        if document_height_mm(trial) <= height_mm:
+            low, best = middle, trial
+        else:
+            high = middle
+    return best

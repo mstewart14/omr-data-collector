@@ -37,7 +37,7 @@ from omr_data_collector.constants import (
     TABLE_BREAKS,
 )
 from omr_data_collector.i18n import tr
-from omr_data_collector.layout.form_layout import layout_form
+from omr_data_collector.layout.frozen_layout import frozen_warnings, layout_to_print
 from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_title
@@ -51,6 +51,7 @@ from omr_data_collector.storage.form_store import (
     delete_form,
     is_printed,
     list_forms,
+    load_printed_layout,
     mark_printed,
     save_form,
 )
@@ -99,6 +100,7 @@ if TYPE_CHECKING:
 
     from PySide6.QtGui import QShowEvent
 
+    from omr_data_collector.layout.form_layout import FormLayout
     from omr_data_collector.models.Form import BlockContent
     from omr_data_collector.models.Organization import Organization
 
@@ -1066,7 +1068,7 @@ class FormsPage(LibraryPage[Form]):
         )
         if ready is None:
             return
-        form, organization = ready
+        form, organization, layout = ready
         path = choose_pdf_path(
             self,
             tr("{name} v{version}.pdf", "PDF file name").format(
@@ -1076,13 +1078,13 @@ class FormsPage(LibraryPage[Form]):
         if path is None:
             return
         try:
-            pages = save_pdf(path, form, organization, organization.paper_size)
+            pages = save_pdf(path, form, organization, organization.paper_size, layout)
         except OSError as error:
             warn(self, tr("Couldn't save the PDF"), str(error))
             return
         self._after_printing(
             form,
-            organization,
+            layout,
             tr("Saved %n page(s) to {path}", None, pages).format(path=path),
         )
 
@@ -1094,12 +1096,12 @@ class FormsPage(LibraryPage[Form]):
         )
         if ready is None:
             return
-        form, organization = ready
+        form, organization, layout = ready
         printer = _printer(form, organization)
         if not run_print_dialog(self, printer):
             return
-        render_form(printer, form, organization, organization.paper_size)
-        self._after_printing(form, organization, tr("Sent the form to the printer"))
+        render_form(printer, form, organization, organization.paper_size, layout)
+        self._after_printing(form, layout, tr("Sent the form to the printer"))
 
     def print_preview(self) -> None:
         """File > Print preview: see the pages as they will print, and print them."""
@@ -1109,22 +1111,22 @@ class FormsPage(LibraryPage[Form]):
         )
         if ready is None:
             return
-        form, organization = ready
+        form, organization, layout = ready
         printer = _printer(form, organization)
         printed = run_print_preview(
             self,
             printer,
             lambda device: render_form(
-                device, form, organization, organization.paper_size
+                device, form, organization, organization.paper_size, layout
             ),
         )
         if printed:
-            self._after_printing(form, organization, tr("Sent the form to the printer"))
+            self._after_printing(form, layout, tr("Sent the form to the printer"))
 
     def _ready_to_print(
         self, save_question: str, check_heading: str
-    ) -> tuple[Form, Organization] | None:
-        """The saved form and the organization, once both are ready to print.
+    ) -> tuple[Form, Organization, FormLayout] | None:
+        """The saved form, the organization and the layout to print, once ready.
 
         ``save_question`` asks to save unsaved changes first, and
         ``check_heading`` introduces the layout problems to confirm.
@@ -1132,6 +1134,8 @@ class FormsPage(LibraryPage[Form]):
         Prints carry the organization in their header and a QR code naming a
         stored version, so the form must be saved and the organization entered.
         Layout problems (a table too wide, say) are shown before going ahead.
+        A version already printed prints from its first printing's layout, so
+        every copy scans alike (``frozen_layout``).
         """
         organization = load_organization(self._connection)
         if organization is None:
@@ -1153,17 +1157,17 @@ class FormsPage(LibraryPage[Form]):
         form = self._current
         if form is None:
             return None
-        warnings = layout_form(form, organization.paper_size).warnings
+        stored = load_printed_layout(self._connection, form.form_id, form.version)
+        layout, frozen = layout_to_print(form, organization.paper_size, stored)
+        warnings = frozen_warnings(layout, form.version) if frozen else layout.warnings
         if warnings and not confirm_despite_problems(self, check_heading, warnings):
             return None
-        return form, organization
+        return form, organization, layout
 
-    def _after_printing(
-        self, form: Form, organization: Organization, done: str
-    ) -> None:
+    def _after_printing(self, form: Form, layout: FormLayout, done: str) -> None:
         # Printed sheets are scanned against this version, so it's kept as it is,
-        # with the exact page templates that went to paper.
-        layout = layout_form(form, organization.paper_size)
+        # with the exact layout and page templates that went to paper (only the
+        # first printing's are kept).
         mark_printed(
             self._connection, form.form_id, form.version, printed_layout(layout)
         )

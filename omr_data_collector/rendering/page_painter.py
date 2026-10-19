@@ -35,6 +35,7 @@ from omr_data_collector.layout.table_layout import BUBBLE_DIAMETER_MM
 from omr_data_collector.layout.text import (
     draw_document,
     draw_text,
+    fitted_document,
     line_height_mm,
     markdown_document,
     plain_document,
@@ -206,7 +207,13 @@ def _paint_block(
     if isinstance(content, TextBlock):
         draw_document(
             painter,
-            markdown_document(content.content, width, BODY_POINT_SIZE, font=font),
+            fitted_document(
+                lambda font: markdown_document(
+                    content.content, width, BODY_POINT_SIZE, font=font
+                ),
+                font,
+                placed.height_mm,
+            ),
             0,
             0,
         )
@@ -219,8 +226,12 @@ def _paint_block(
         if part.instructions_height_mm:
             draw_document(
                 painter,
-                markdown_document(
-                    content.instructions, width, BODY_POINT_SIZE, font=font
+                fitted_document(
+                    lambda font: markdown_document(
+                        content.instructions, width, BODY_POINT_SIZE, font=font
+                    ),
+                    font,
+                    part.instructions_height_mm,
                 ),
                 0,
                 0,
@@ -240,7 +251,13 @@ def _paint_question(
 ) -> None:
     draw_document(
         painter,
-        markdown_document(question.prompt, width, BODY_POINT_SIZE, font=font),
+        fitted_document(
+            lambda font: markdown_document(
+                question.prompt, width, BODY_POINT_SIZE, font=font
+            ),
+            font,
+            geometry.prompt_height_mm,
+        ),
         0,
         0,
     )
@@ -248,8 +265,12 @@ def _paint_question(
         painter.setPen(QPen(MUTED_INK))
         draw_document(
             painter,
-            plain_document(
-                question.example, width, EXAMPLE_POINT_SIZE, font=font, italic=True
+            fitted_document(
+                lambda font: plain_document(
+                    question.example, width, EXAMPLE_POINT_SIZE, font=font, italic=True
+                ),
+                font,
+                geometry.example_height_mm,
             ),
             0,
             geometry.example_top_mm,
