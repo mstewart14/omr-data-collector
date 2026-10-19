@@ -149,9 +149,8 @@ def xsettings_string(data: bytes, name: str) -> str | None:
 
 def _x11_library() -> ctypes.CDLL | None:
     """Xlib, with the signatures of the calls ``_x11_xsettings`` makes; or None."""
-    library = ctypes.util.find_library("X11")
-    if library is None:
-        return None
+    # find_library asks ldconfig, which not every system has on the path.
+    library = ctypes.util.find_library("X11") or "libX11.so.6"
     try:
         x11 = ctypes.CDLL(library)
     except OSError:
