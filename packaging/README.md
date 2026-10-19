@@ -12,6 +12,8 @@ downloads, each on its own system:
 Each is then installed on a fresh machine, which runs
 `omr-data-collector --self-check <report>`. That lays out a one-question form, draws
 it filled in and scans it, so a library missing from the bundle fails the build.
+On Linux it also opens the app on a virtual X11 display and types into it, since
+the self-check runs offscreen and never loads the keyboard libraries.
 
 It runs on pull requests and pushes to `main` that change this folder,
 `pyproject.toml` or `uv.lock`, and on demand from the Actions tab (Run workflow).

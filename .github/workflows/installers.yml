@@ -179,6 +179,54 @@ jobs:
           cat "$RUNNER_TEMP/report.txt"
           exit $status
 
+      # The self-check runs offscreen, so X11's keyboard code never loads. This
+      # opens the app on a virtual display and types into it: libxkbcommon and
+      # libxkbcommon-x11 must come from the same place, or the first key pressed
+      # can crash the app.
+      - name: Type into the app under X11 (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          DISPLAY: ":99"
+        run: |
+          sudo apt-get install -y xvfb xdotool libxkbcommon-x11-0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xkb1
+          Xvfb "$DISPLAY" -screen 0 1280x800x24 &
+          for _ in $(seq 30); do
+            xdotool getmouselocation >/dev/null 2>&1 && break
+            sleep 1
+          done
+          # The app's data goes in a folder of its own, not the runner's.
+          export XDG_DATA_HOME="$RUNNER_TEMP/typing/data"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/typing/config"
+          log="$RUNNER_TEMP/typing.log"
+          ./*.AppImage >"$log" 2>&1 &
+          if ! window=$(timeout 120 xdotool search --sync --onlyvisible --name "OMR Data Collector" | head -n 1); then
+            cat "$log"
+            echo "::error::The app's window didn't open"
+            exit 1
+          fi
+          pid=$(xdotool getwindowpid "$window")
+          sleep 3
+          # With no window manager, keys go to the window under the pointer.
+          xdotool mousemove --window "$window" 100 100
+          xdotool type --delay 100 "Typing test"
+          sleep 5
+          if ! kill -0 "$pid" 2>/dev/null; then
+            cat "$log"
+            echo "::error::The app quit when typed into"
+            exit 1
+          fi
+          core=$(grep -m 1 -o '/[^ ]*/libxkbcommon\.so[^ ]*' "/proc/$pid/maps" || true)
+          x11=$(grep -m 1 -o '/[^ ]*/libxkbcommon-x11\.so[^ ]*' "/proc/$pid/maps" || true)
+          echo "libxkbcommon: ${core:-not loaded}"
+          echo "libxkbcommon-x11: ${x11:-not loaded}"
+          if [ -z "$core" ] || [ -z "$x11" ] || [ "$(dirname "$core")" != "$(dirname "$x11")" ]; then
+            echo "::error::libxkbcommon and libxkbcommon-x11 don't come from the same place"
+            exit 1
+          fi
+          kill "$pid"
+
   release:
     name: Draft the release
     if: startsWith(github.ref, 'refs/tags/v')
