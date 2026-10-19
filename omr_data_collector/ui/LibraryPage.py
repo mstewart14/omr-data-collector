@@ -41,6 +41,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_save_discard_cancel,
     ask_where_to_change,
     confirm_destructive,
+    finish_editing,
     save_revert_buttons,
 )
 
@@ -199,6 +200,7 @@ class LibraryPage(QWidget, Generic[ItemT]):
         Used wherever saving is a step in something else (switching items,
         closing the window); the Save button and Ctrl+S use ``save_from_user``.
         """
+        finish_editing(self)
         item = self._entered()
         other_names = {
             other.name

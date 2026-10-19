@@ -223,6 +223,15 @@ engine bridge.
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact
   version its QR code names with `load_form_version`.
+- **macOS differences** (none show on the Linux dev machine or in CI tests):
+  - Retina screens have a device pixel ratio of 2: draw on a pixmap with
+    `setDevicePixelRatio` in its logical units (`format_icons.format_icon`),
+    never in physical pixels, or the drawing doubles and is cut off.
+  - Clicking a button doesn't take focus from a table cell being typed in, and
+    no shortcut ever does, so the cell's text isn't in the table yet: call
+    `form_helpers.finish_editing(self)` first in every `save` or `accept`
+    that reads a table people type into (never on each change: it would
+    close an editor as soon as it opened).
 - **Tests never show a real dialog**: an autouse fixture in `tests/conftest.py` makes
   unpatched message boxes fail, because offscreen they would wait forever. Patch the
   helper the code calls (e.g. `ask_save_discard_cancel`) in the test.

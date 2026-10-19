@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
+    QAbstractItemView,
     QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
@@ -332,3 +334,22 @@ def save_revert_buttons(
     row.addWidget(revert)
     row.addWidget(save)
     return save, revert, row
+
+
+def finish_editing(parent: QWidget) -> None:
+    """Put what is being typed in any open table or list cell under ``parent`` into it.
+
+    Call when saving or accepting, before reading what was entered. A cell's
+    text only reaches its table when the cell's editor closes, which happens
+    when focus moves away; on macOS clicking a button doesn't move focus, and
+    neither does a shortcut like Ctrl+S anywhere, so without this the last
+    thing typed would be lost. Not for reading on every change: it would close
+    an editor as soon as it opened.
+    """
+    for view in parent.findChildren(QAbstractItemView):
+        if view.state() != QAbstractItemView.State.EditingState:
+            continue
+        for editor in view.viewport().findChildren(QWidget):
+            if editor.parent() is view.viewport() and editor.isVisible():
+                view.commitData(editor)
+                view.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)

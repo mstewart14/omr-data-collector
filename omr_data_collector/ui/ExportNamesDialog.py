@@ -23,7 +23,11 @@ from PySide6.QtWidgets import (
 from omr_data_collector.export.data_export import SHEETS_FILE, ExportNames
 from omr_data_collector.i18n import tr
 from omr_data_collector.ui.accessibility import style_error_label
-from omr_data_collector.ui.form_helpers import move_buttons, ok_cancel_buttons
+from omr_data_collector.ui.form_helpers import (
+    finish_editing,
+    move_buttons,
+    ok_cancel_buttons,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -266,6 +270,7 @@ class ExportNamesDialog(QDialog):
         self._show_error("")
 
     def accept(self) -> None:
+        finish_editing(self)
         names = self.entered()
         problem, key = self._clash(names)
         self._show_error(problem)

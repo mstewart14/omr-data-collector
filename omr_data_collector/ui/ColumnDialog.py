@@ -18,7 +18,11 @@ from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.TableBlock import Column
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
-from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
+from omr_data_collector.ui.form_helpers import (
+    add_field_row,
+    finish_editing,
+    ok_cancel_buttons,
+)
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QLabel
@@ -130,6 +134,7 @@ class ColumnDialog(QDialog):
         return self._column
 
     def accept(self) -> None:
+        finish_editing(self)
         column = self.entered_column()
         errors = column.validation_errors(self._other_names)
         if self._sheet_detail and column.name.casefold() in {

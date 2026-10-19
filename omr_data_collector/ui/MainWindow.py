@@ -25,7 +25,7 @@ from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.AboutDialog import AboutDialog
 from omr_data_collector.ui.accessibility import announce
 from omr_data_collector.ui.CapturePage import CapturePage
-from omr_data_collector.ui.form_helpers import ask_save_discard_cancel
+from omr_data_collector.ui.form_helpers import ask_save_discard_cancel, finish_editing
 from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.OrganizationPage import OrganizationPage
@@ -403,6 +403,8 @@ class MainWindow(QMainWindow):
         announce(self, message)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt override)
+        # A cell still being typed in counts as a change, and is saved with the rest.
+        finish_editing(self)
         unsaved = [
             (index, title, page)
             for index, (title, page) in enumerate(self.pages)

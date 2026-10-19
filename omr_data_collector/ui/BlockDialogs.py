@@ -35,7 +35,11 @@ from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.models.TextBlock import TextBlock
 from omr_data_collector.ui.accessibility import show_field_errors, style_error_label
 from omr_data_collector.ui.AnswerFields import AnswerFields
-from omr_data_collector.ui.form_helpers import add_field_row, ok_cancel_buttons
+from omr_data_collector.ui.form_helpers import (
+    add_field_row,
+    finish_editing,
+    ok_cancel_buttons,
+)
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
 from omr_data_collector.ui.TableFields import TableFields
 
@@ -296,6 +300,7 @@ class BlockContentDialog(QDialog):
         return self._accepted
 
     def accept(self) -> None:
+        finish_editing(self)
         content = self.entered_content()
         errors = content.validation_errors(set())
         # Stays open, on the first problem.

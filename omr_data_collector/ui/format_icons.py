@@ -80,7 +80,9 @@ def format_icon(
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-        painter.scale(pixels / GRID, pixels / GRID)
+        # In the pixmap's own units: with a device pixel ratio set (2 on a
+        # Retina screen), the painter already maps them to its finer pixels.
+        painter.scale(size / GRID, size / GRID)
         DRAWINGS[name](painter, color)
     finally:
         painter.end()
