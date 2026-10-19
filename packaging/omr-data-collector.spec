@@ -19,6 +19,11 @@ ICONS = ROOT / "packaging" / "icons"
 NAME = "omr-data-collector"
 DISPLAY_NAME = "OMR Data Collector"
 GTK_ONLY = ("libqgtk3", "libgtk-3", "libgdk-3", "libgdk_pixbuf", "libatk")
+# Taken from the desktop instead. libxkbcommon-x11 isn't bundled, so Qt loads the
+# system's, and it fills in libxkbcommon's internal structures directly: with the
+# build machine's older libxkbcommon beside a newer system one, the first key
+# pressed under X11 crashes the app.
+FROM_SYSTEM = ("libxkbcommon",)
 VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
 
 a = Analysis(
@@ -49,7 +54,7 @@ if sys.platform.startswith("linux"):
     a.binaries = [
         entry
         for entry in a.binaries
-        if not any(part in Path(entry[0]).name for part in GTK_ONLY)
+        if not any(part in Path(entry[0]).name for part in GTK_ONLY + FROM_SYSTEM)
     ]
 pyz = PYZ(a.pure)
 

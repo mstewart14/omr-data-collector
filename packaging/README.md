@@ -67,7 +67,10 @@ and a Windows code-signing certificate; both slot into the workflow's build job.
 - **Linux** is built on Ubuntu 22.04: an AppImage runs on systems with the same
   or newer C library (glibc 2.35), so building on an older system reaches more.
   Qt's GTK theme plugin is left out, because GTK from the build machine clashes
-  with the desktop's own; Qt draws its own style instead.
+  with the desktop's own; Qt draws its own style instead. `libxkbcommon` is left
+  out too, so it comes from the desktop along with `libxkbcommon-x11`: the two
+  must be the same version, and a mismatch crashes the app on the first key
+  pressed under X11.
 - **Intel Macs** would need a second build on an Intel runner (`macos-15-intel`),
   since OpenCV has no single build for both kinds of Mac.
 - Pinned downloads (appimagetool, its runtime and Inno Setup) are checked against
