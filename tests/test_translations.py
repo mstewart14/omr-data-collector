@@ -45,6 +45,7 @@ from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.OpenFormDialog import OpenFormDialog
 from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
+from omr_data_collector.ui.TextSizeDialog import TextSizeDialog
 
 if TYPE_CHECKING:
     import sqlite3
@@ -170,6 +171,7 @@ def test_every_page_and_menu_is_translatable(
         lambda: BlockPickerDialog(None, BLOCK_KINDS.TABLE, [], can_write_new=False),
         lambda: OpenFormDialog(None, [], set()),
         lambda: LanguageDialog(None, ""),
+        lambda: TextSizeDialog(None, 0),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
         lambda: ExportDialog(None, []),
@@ -188,6 +190,7 @@ def test_every_page_and_menu_is_translatable(
         "table picker",
         "open form",
         "language",
+        "text size",
         "sheet details",
         "sheet detail field",
         "export",

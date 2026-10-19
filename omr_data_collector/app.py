@@ -11,6 +11,11 @@ from omr_data_collector import APP_NAME, app_version, self_check
 from omr_data_collector.constants import DATABASE_FILENAME
 from omr_data_collector.i18n import install_translators, tr
 from omr_data_collector.storage.database import open_database
+from omr_data_collector.ui.app_font import (
+    apply_text_size,
+    remember_desktop_font,
+    saved_text_size,
+)
 from omr_data_collector.ui.app_icon import DESKTOP_FILE_NAME, app_icon
 from omr_data_collector.ui.form_helpers import warn
 from omr_data_collector.ui.MainWindow import MainWindow
@@ -62,6 +67,8 @@ def main() -> int:
         report = sys.argv[2:3]
         return self_check.run(Path(report[0]) if report else None)
 
+    remember_desktop_font()
+    apply_text_size(saved_text_size())
     connection = open_app_database(default_database_path())
     if connection is None:
         return 1

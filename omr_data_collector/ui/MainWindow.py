@@ -24,6 +24,11 @@ from omr_data_collector.i18n import (
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.AboutDialog import AboutDialog
 from omr_data_collector.ui.accessibility import announce
+from omr_data_collector.ui.app_font import (
+    apply_text_size,
+    save_text_size,
+    saved_text_size,
+)
 from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel, finish_editing
 from omr_data_collector.ui.FormsPage import FormsPage
@@ -32,6 +37,7 @@ from omr_data_collector.ui.OrganizationPage import OrganizationPage
 from omr_data_collector.ui.QuestionsPage import QuestionsPage
 from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
+from omr_data_collector.ui.TextSizeDialog import TextSizeDialog, points
 
 if TYPE_CHECKING:
     import sqlite3
@@ -52,6 +58,14 @@ def choose_language(parent: QWidget, current: str) -> str | None:
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen_language()
+
+
+def choose_text_size(parent: QWidget, current: float) -> float | None:
+    """Ask how big the app's text should be: points (0 for the desktop's), or None."""
+    dialog = TextSizeDialog(parent, current)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.chosen_size()
 
 
 # Room for the form editor's pages beside its palette and details.
@@ -292,6 +306,8 @@ class MainWindow(QMainWindow):
         )
         language_action = self.preferences_menu.addAction(tr("&Language…"))
         language_action.triggered.connect(self.change_language)
+        text_size_action = self.preferences_menu.addAction(tr("Text &size…"))
+        text_size_action.triggered.connect(self.change_text_size)
         self.preferences_menu.addSeparator()
         about_action = self.preferences_menu.addAction(
             tr("&About {app}…").format(app=APP_NAME)
@@ -378,6 +394,20 @@ class MainWindow(QMainWindow):
             message = tr(
                 "The app will follow the system language the next time it starts."
             )
+        self.show_status(message)
+
+    def change_text_size(self) -> None:
+        """Preferences > Text size: resize the app's text, straight away."""
+        current = saved_text_size()
+        chosen = choose_text_size(self, current)
+        if chosen is None or chosen == current:
+            return
+        save_text_size(chosen)
+        apply_text_size(chosen)
+        if chosen:
+            message = tr("The app's text is now {size}.").format(size=points(chosen))
+        else:
+            message = tr("The app's text now follows the desktop's size.")
         self.show_status(message)
 
     def menu_mnemonics(self) -> set[str]:

@@ -16,6 +16,7 @@ from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.storage.organization_store import save_organization
+from omr_data_collector.ui import app_font
 from tests.sheets import intake_form
 
 if TYPE_CHECKING:
@@ -51,6 +52,20 @@ def own_preferences(tmp_path: Path) -> None:
     QSettings.setPath(
         QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "config")
     )
+
+
+@pytest.fixture(autouse=True)
+def own_font(qapp: QApplication, mocker: MockerFixture) -> Iterator[None]:
+    """Keep the real desktop's font out of tests, and each test's font to itself.
+
+    ``main()`` and Preferences > Text size change the whole app's font, which
+    every later test would otherwise see.
+    """
+    font = qapp.font()
+    mocker.patch.object(app_font, "desktop_font", return_value=None)
+    mocker.patch.object(app_font, "_desktop", None)
+    yield
+    QApplication.setFont(font)
 
 
 @pytest.fixture(params=["en", *available_languages()])

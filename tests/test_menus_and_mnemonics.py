@@ -23,6 +23,7 @@ from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
+from omr_data_collector.ui.TextSizeDialog import TextSizeDialog
 
 if TYPE_CHECKING:
     import sqlite3
@@ -181,6 +182,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: BlockContentDialog(None, BLOCK_KINDS.TABLE, None),
         lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
         lambda: LanguageDialog(None, ""),
+        lambda: TextSizeDialog(None, 0),
         lambda: AboutDialog(None, "1.2.3"),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
@@ -198,6 +200,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         "table",
         "picker",
         "language",
+        "text size",
         "about",
         "details",
         "field",
@@ -281,6 +284,7 @@ def test_each_library_menu_opens_its_library_first(
     assert menu_texts(window.preferences_menu) == [
         f"&Organization details…\t{section_key(5)}",
         "&Language…",
+        "Text &size…",
         "&About OMR Data Collector…",
     ]
 
