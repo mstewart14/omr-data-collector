@@ -1,6 +1,6 @@
 [project]
 name = "omr-data-collector"
-version = "0.1.11"
+version = "0.1.12"
 description = "Build paper data-collection forms and turn photos of filled-in forms into data."
 readme = "README.md"
 license = "MIT"
