@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFormLayout,
     QLineEdit,
@@ -87,6 +88,15 @@ class ColumnDialog(QDialog):
                 self.form, label_text, widget
             )
             self.field_widgets[key] = widget
+        self.wrap_check = QCheckBox(tr("Wrap a &long heading"))
+        self.wrap_check.setChecked(True)
+        self.wrap_check.setToolTip(
+            tr(
+                "Let the heading take up to three lines, so the column needn't be "
+                "as wide as its name"
+            )
+        )
+        self.form.addRow("", self.wrap_check)
         self.answer_fields = AnswerFields(
             self.form,
             self.field_widgets,
@@ -97,8 +107,10 @@ class ColumnDialog(QDialog):
 
         self.buttons = ok_cancel_buttons(self)
 
-        # A sheet detail's label says it all: no example is printed.
+        # A sheet detail's label says it all: no example is printed, and its
+        # label is on one line beside its answer.
         self.form.setRowVisible(self.example_edit, not sheet_detail)
+        self.form.setRowVisible(self.wrap_check, not sheet_detail)
 
         layout = QVBoxLayout(self)
         layout.addLayout(self.form)
@@ -107,6 +119,7 @@ class ColumnDialog(QDialog):
         focus_chain = [
             self.name_edit,
             self.example_edit,
+            self.wrap_check,
             *self.answer_fields.focus_chain(),
             *self.buttons.buttons(),
         ]
@@ -116,6 +129,7 @@ class ColumnDialog(QDialog):
         if column is not None:
             self.name_edit.setText(column.name)
             self.example_edit.setText(column.example)
+            self.wrap_check.setChecked(column.wrap_heading)
             self.answer_fields.set_spec(column.answer)
         else:
             self.answer_fields.set_spec(AnswerSpec.default(ANSWER_TYPES.YES_NO))
@@ -127,6 +141,7 @@ class ColumnDialog(QDialog):
             name=self.name_edit.text(),
             example=self.example_edit.text(),
             answer=self.answer_fields.spec(),
+            wrap_heading=self.wrap_check.isChecked() or self._sheet_detail,
         ).normalized()
 
     def column(self) -> Column | None:

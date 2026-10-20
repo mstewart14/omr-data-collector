@@ -20,13 +20,18 @@ from omr_data_collector.schemas.table_columns_schema import TABLE_COLUMNS_SCHEMA
 
 @dataclass(frozen=True)
 class Column:
-    """One column of a table block: a heading, an example and how it's answered."""
+    """One column of a table block: a heading, an example and how it's answered.
+
+    A heading wider than its answer wraps onto more lines, unless
+    ``wrap_heading`` is off (layout/table_layout.py).
+    """
 
     name: str
     example: str = ""
     answer: AnswerSpec = field(
         default_factory=lambda: AnswerSpec.default(ANSWER_TYPES.YES_NO)
     )
+    wrap_heading: bool = True
 
     def normalized(self) -> Column:
         return replace(
@@ -155,14 +160,18 @@ class TableBlock:
 
 def columns_to_list(columns: tuple[Column, ...]) -> list[dict[str, Any]]:
     """The JSON form stored in the database and copied into forms."""
-    return [
-        {
+    stored = []
+    for column in columns:
+        data: dict[str, Any] = {
             "name": column.name,
             "example": column.example,
             "answer": column.answer.to_dict(),
         }
-        for column in columns
-    ]
+        # Only when off, so columns from before it was a choice are unchanged.
+        if not column.wrap_heading:
+            data["wrapHeading"] = False
+        stored.append(data)
+    return stored
 
 
 def columns_from_list(data: list[dict[str, Any]]) -> tuple[Column, ...]:
@@ -177,6 +186,7 @@ def columns_from_list(data: list[dict[str, Any]]) -> tuple[Column, ...]:
             name=column["name"],
             example=column["example"],
             answer=AnswerSpec.from_dict(column["answer"]),
+            wrap_heading=column.get("wrapHeading", True),
         )
         for column in data
     )

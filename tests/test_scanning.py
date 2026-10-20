@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import cv2
@@ -21,15 +22,19 @@ from omr_data_collector.layout.markers import marker_centres_mm
 from omr_data_collector.layout.omr_template import (
     PageTemplate,
     page_template,
+    printed_layout,
     with_writing_areas,
 )
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
+from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.rendering.page_photo import FILL_RADIUS_MM
 from omr_data_collector.storage.form_store import (
     load_printed_layout,
+    mark_printed,
+    save_form,
 )
 
 if TYPE_CHECKING:
@@ -459,3 +464,40 @@ def test_pages_printed_before_writing_areas_get_them_where_the_layout_matches() 
 
     assert filled.regions[0].writing == fresh.regions[0].writing
     assert filled.regions[1].writing is None
+
+
+def test_a_table_with_wrapped_headings_scans_back(
+    connection: sqlite3.Connection, organization: Organization, tmp_path: Path
+) -> None:
+    form = intake_form()
+    table = form.blocks[2].content
+    assert isinstance(table, TableBlock)
+    first, *others = table.columns
+    wrapped = replace(
+        table,
+        columns=(
+            replace(first, name="Time the visit started"),
+            *others[:1],
+            replace(others[1], name="Which service did they come in for"),
+        ),
+    )
+    form = save_form(
+        connection,
+        replace(
+            form, blocks=(*form.blocks[:2], replace(form.blocks[2], content=wrapped))
+        ),
+    )
+    layout = layout_form(form, organization.paper_size)
+    mark_printed(connection, form.form_id, form.version, printed_layout(layout))
+    (part,) = [p.table_part for p in layout.pages[0].blocks if p.table_part]
+    assert len(part.layout.columns[2].heading_lines) > 1
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_cell(2, row=0, column=2, choice=2)
+    sheet.fill_cell(2, row=1, column=1, choice=0)
+
+    page = scan_sheet(connection, sheet.photograph(tmp_path / "photo.jpg"), LETTER)
+
+    answers = answers_by_place(page)
+    assert answers[2, 0, 2] == ("referral",)
+    assert answers[2, 1, 1] == ("y",)
+    assert all(not answer.problem for answer in page.answers)

@@ -165,7 +165,13 @@ def _dataclass_from_json(kind: type, data: object, form: Form) -> object:
         if field.name == "block":
             continue
         if field.name not in data:
-            raise _NotALayoutError
+            # Added since some layouts were stored: those keep its default.
+            if (
+                field.default is dataclasses.MISSING
+                and field.default_factory is dataclasses.MISSING
+            ):
+                raise _NotALayoutError
+            continue
         values[field.name] = _from_json(hints[field.name], data[field.name], form)
     if "block" in {field.name for field in dataclasses.fields(kind)}:
         index = values["index"]

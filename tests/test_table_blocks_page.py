@@ -505,3 +505,32 @@ def test_filled_tables_load_and_duplicate_with_the_setting(
 
     copy = next(t for t in list_table_blocks(connection) if t.name == "Log (copy)")
     assert copy.fill_page
+
+
+def test_a_column_wraps_its_heading_unless_told_not_to(qtbot: QtBot) -> None:
+    dialog = ColumnDialog(None, None, set())
+    qtbot.addWidget(dialog)
+    dialog.name_edit.setText("Number of people in the household")
+
+    assert dialog.wrap_check.isChecked()
+    assert dialog.entered_column().wrap_heading
+
+    dialog.wrap_check.setChecked(False)
+
+    assert not dialog.entered_column().wrap_heading
+
+
+def test_editing_a_column_shows_its_wrap_setting(qtbot: QtBot) -> None:
+    column = Column("Number of people in the household", wrap_heading=False)
+    dialog = ColumnDialog(None, column, set())
+    qtbot.addWidget(dialog)
+
+    assert not dialog.wrap_check.isChecked()
+    assert dialog.entered_column() == column.normalized()
+
+
+def test_sheet_details_fields_have_no_wrap_setting(qtbot: QtBot) -> None:
+    dialog = ColumnDialog(None, None, set(), sheet_detail=True)
+    qtbot.addWidget(dialog)
+
+    assert not dialog.wrap_check.isVisibleTo(dialog)

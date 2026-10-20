@@ -15,6 +15,11 @@ TABLE_COLUMNS_SCHEMA = {
             "name": {"type": "string", "maxLength": COLUMN_NAME_MAX_LENGTH},
             "example": {"type": "string"},
             "answer": ANSWER_SPEC_SCHEMA,
+            "wrapHeading": {
+                "description": "Whether a heading wider than its answer wraps "
+                "onto more lines; true when left out",
+                "type": "boolean",
+            },
         },
     },
 }

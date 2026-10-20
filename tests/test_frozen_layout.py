@@ -306,3 +306,20 @@ def test_text_taller_than_its_room_shrinks_to_fit() -> None:
 
     assert text.document_height_mm(fitted) <= full * 0.7
     assert fitted.defaultFont().pointSizeF() < 10
+
+
+def test_a_layout_stored_before_headings_wrapped_still_prints() -> None:
+    form = intake_form()
+    stored = frozen_layout(layout_form(form, LETTER))
+    for page in stored["pages"]:
+        for placed in page["blocks"]:
+            if placed["table_part"] is not None:
+                for column in placed["table_part"]["layout"]["columns"]:
+                    del column["heading_lines"]
+
+    thawed = thawed_layout(stored, form)
+
+    assert thawed is not None
+    (table,) = [p for p in thawed.pages[0].blocks if p.table_part is not None]
+    assert table.table_part is not None
+    assert all(not column.heading_lines for column in table.table_part.layout.columns)

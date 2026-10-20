@@ -34,6 +34,10 @@ CELL_PADDING_MM = 1.5
 HEADER_POINT_SIZE = 8
 CHOICE_LABEL_POINT_SIZE = 7
 LABEL_GAP_MM = 1.0
+# A heading wider than its answer wraps at spaces onto at most this many lines.
+MAX_HEADING_LINES = 3
+# Finding the narrowest width that fits the heading in those lines: close enough.
+HEADING_FIT_MM = 0.1
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,9 @@ class ColumnLayout:
     width_mm: float
     # Distance between bubble centres; 0 for a written column.
     choice_pitch_mm: float
+    # The heading as printed, a line each. Layouts stored before headings
+    # wrapped have none, and print the name on one line.
+    heading_lines: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,12 +95,55 @@ def column_layout(column: Column, *, font: FormFont | None = None) -> ColumnLayo
         content = answer.characters() * WRITTEN_BOX_WIDTH_MM
     else:
         content = len(answer.printed_choices()) * pitch
-    # The heading never wraps, so a column is at least as wide as its name; a
-    # longer example wraps under it instead.
-    heading = text_width_mm(column.name, HEADER_POINT_SIZE, font=font, bold=True)
+    heading = _heading_width(column.name, font)
+    lines = (column.name,)
+    if column.wrap_heading and heading > content:
+        # Only as wide as the answer needs, the heading taking more lines.
+        lines = _wrapped_heading(column.name, content, font)
+        heading = max(_heading_width(line, font) for line in lines)
     return ColumnLayout(
-        width_mm=max(content, heading) + 2 * CELL_PADDING_MM, choice_pitch_mm=pitch
+        width_mm=max(content, heading) + 2 * CELL_PADDING_MM,
+        choice_pitch_mm=pitch,
+        heading_lines=lines,
     )
+
+
+def _heading_width(text: str, font: FormFont) -> float:
+    return text_width_mm(text, HEADER_POINT_SIZE, font=font, bold=True)
+
+
+def _wrapped_heading(name: str, content_mm: float, font: FormFont) -> tuple[str, ...]:
+    """``name`` in at most MAX_HEADING_LINES lines, as narrow as it can be.
+
+    Never narrower than its answer (``content_mm``) or its longest word: a word
+    is never split.
+    """
+    words = name.split()
+    if len(words) < 2:
+        return (name,)
+
+    def wrap(width: float) -> list[str]:
+        lines = [words[0]]
+        for word in words[1:]:
+            joined = f"{lines[-1]} {word}"
+            if _heading_width(joined, font) <= width:
+                lines[-1] = joined
+            else:
+                lines.append(word)
+        return lines
+
+    narrowest = max(content_mm, *(_heading_width(word, font) for word in words))
+    widest = _heading_width(" ".join(words), font)
+    if len(wrap(narrowest)) > MAX_HEADING_LINES:
+        # The narrowest width that keeps it to the lines allowed.
+        while widest - narrowest > HEADING_FIT_MM:
+            middle = (narrowest + widest) / 2
+            if len(wrap(middle)) > MAX_HEADING_LINES:
+                narrowest = middle
+            else:
+                widest = middle
+        narrowest = widest
+    return tuple(wrap(narrowest))
 
 
 def rows_to_print(
@@ -116,14 +166,16 @@ def table_layout(table: TableBlock, *, font: FormFont | None = None) -> TableLay
     has_choices = any(
         column.answer.answer_type in CHOICE_ANSWER_TYPES for column in table.columns
     )
-    header = 2 * CELL_PADDING_MM + line_height_mm(HEADER_POINT_SIZE, font=font)
+    columns = tuple(column_layout(column, font=font) for column in table.columns)
+    line = line_height_mm(HEADER_POINT_SIZE, font=font)
+    header = 2 * CELL_PADDING_MM + heading_line_count(columns) * line
     if has_example:
-        header += line_height_mm(HEADER_POINT_SIZE, font=font)
+        header += line
     if has_choices:
         # Choice labels sit in a line of their own, above their bubbles.
         header += line_height_mm(CHOICE_LABEL_POINT_SIZE, font=font) + LABEL_GAP_MM
     return TableLayout(
-        columns=tuple(column_layout(column, font=font) for column in table.columns),
+        columns=columns,
         header_height_mm=header,
         row_height_mm=ROW_HEIGHT_MM,
         rows=table.rows,
@@ -133,6 +185,11 @@ def table_layout(table: TableBlock, *, font: FormFont | None = None) -> TableLay
 
 # Written boxes in a table row; shorter than a question's so rows stay compact.
 TABLE_BOX_HEIGHT_MM = 6.0
+
+
+def heading_line_count(columns: tuple[ColumnLayout, ...]) -> int:
+    """The lines the headings take: the most any column's heading needs."""
+    return max((len(column.heading_lines) for column in columns), default=1) or 1
 
 
 def cell_bubble_centres_mm(column: Column, layout: ColumnLayout) -> list[float]:

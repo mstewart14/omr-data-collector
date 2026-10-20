@@ -17,6 +17,7 @@ from omr_data_collector.layout.table_layout import (
     WRITTEN_BOX_WIDTH_MM,
     cell_bubble_centres_mm,
     cell_written_marks_mm,
+    heading_line_count,
     line_height_mm,
 )
 from omr_data_collector.layout.text import draw_text
@@ -80,19 +81,22 @@ def _paint_heading(
     inner = column_layout.width_mm - 2 * CELL_PADDING_MM
     font = layout.font
     line = line_height_mm(HEADER_POINT_SIZE, font=font)
-    draw_text(
-        painter,
-        QRectF(x + CELL_PADDING_MM, CELL_PADDING_MM, inner, line),
-        Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
-        column.name,
-        HEADER_POINT_SIZE,
-        font=font,
-        bold=True,
-    )
-    if column.example:
+    for number, heading in enumerate(column_layout.heading_lines or (column.name,)):
         draw_text(
             painter,
-            QRectF(x + CELL_PADDING_MM, CELL_PADDING_MM + line, inner, line),
+            QRectF(x + CELL_PADDING_MM, CELL_PADDING_MM + number * line, inner, line),
+            Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
+            heading,
+            HEADER_POINT_SIZE,
+            font=font,
+            bold=True,
+        )
+    if column.example:
+        # Under the headings, level across the table however many lines each has.
+        top = CELL_PADDING_MM + heading_line_count(layout.columns) * line
+        draw_text(
+            painter,
+            QRectF(x + CELL_PADDING_MM, top, inner, line),
             Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextSingleLine,
             column.example,
             HEADER_POINT_SIZE,
