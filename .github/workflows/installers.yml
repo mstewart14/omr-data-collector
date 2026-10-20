@@ -31,10 +31,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
-      # The oldest macOS the Mac downloads run on (PySide6's and OpenCV's). uv
-      # picks wheels for it, rather than ones for the build machine's newer
-      # macOS; ignored elsewhere.
-      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      # The oldest macOS the Mac downloads run on: PySide6 6.11's own libraries
+      # need macOS 15, whatever its wheels' names say. Checked after the build.
+      MINIMUM_MACOS: "15.0"
     strategy:
       fail-fast: false
       matrix:
@@ -117,7 +116,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           packaging/macos/check_minimum_macos.sh "dist/OMR Data Collector.app" \
-            "$MACOSX_DEPLOYMENT_TARGET"
+            "$MINIMUM_MACOS"
 
       - name: Build the AppImage (Linux)
         if: runner.os == 'Linux'
