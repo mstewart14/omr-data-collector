@@ -30,13 +30,20 @@ jobs:
     name: "Build (${{ matrix.name }})"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # The oldest macOS the Mac downloads run on (PySide6's and OpenCV's). uv
+      # picks wheels for it, rather than ones for the build machine's newer
+      # macOS; ignored elsewhere.
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
     strategy:
       fail-fast: false
       matrix:
         include:
           - { name: Windows, os: windows-latest }
-          # Apple Silicon only; Intel Macs would need a second build.
+          # Apple Silicon. OpenCV has no build for both kinds of Mac, so Intel
+          # Macs get a disk image of their own, built on an Intel Mac.
           - { name: macOS, os: macos-latest }
+          - { name: macOS-Intel, os: macos-15-intel }
           # The oldest supported Ubuntu, so the AppImage runs on older systems too.
           - { name: Linux, os: ubuntu-22.04 }
 
@@ -106,6 +113,12 @@ jobs:
         if: runner.os == 'macOS'
         run: packaging/macos/build_dmg.sh "$VERSION"
 
+      - name: Check the oldest macOS it runs on (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          packaging/macos/check_minimum_macos.sh "dist/OMR Data Collector.app" \
+            "$MACOSX_DEPLOYMENT_TARGET"
+
       - name: Build the AppImage (Linux)
         if: runner.os == 'Linux'
         run: packaging/linux/build_appimage.sh "$VERSION"
@@ -131,6 +144,7 @@ jobs:
         include:
           - { name: Windows, os: windows-latest }
           - { name: macOS, os: macos-latest }
+          - { name: macOS-Intel, os: macos-15-intel }
           # A newer Ubuntu than the build's, with no Python or project files.
           - { name: Linux, os: ubuntu-24.04 }
 

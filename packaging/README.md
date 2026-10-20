@@ -1,12 +1,13 @@
 # Installers
 
-The `Installers` workflow (`.github/workflows/installers.yml`) builds three
+The `Installers` workflow (`.github/workflows/installers.yml`) builds four
 downloads, each on its own system:
 
 | System | Download | Made with |
 | --- | --- | --- |
 | Windows 10 and 11 (64-bit) | `OMR-Data-Collector-<version>-Windows-Setup.exe` | PyInstaller, then Inno Setup |
-| macOS 12 and later, Apple Silicon | `OMR-Data-Collector-<version>-macOS-arm64.dmg` | PyInstaller, then `hdiutil` |
+| macOS 13 and later, Apple Silicon | `OMR-Data-Collector-<version>-macOS-arm64.dmg` | PyInstaller, then `hdiutil` |
+| macOS 13 and later, Intel | `OMR-Data-Collector-<version>-macOS-x86_64.dmg` | PyInstaller, then `hdiutil` |
 | Linux, x86-64 | `OMR-Data-Collector-<version>-Linux-x86_64.AppImage` | PyInstaller, then appimagetool |
 
 Each is then installed on a fresh machine, which runs
@@ -73,8 +74,13 @@ and a Windows code-signing certificate; both slot into the workflow's build job.
   out too, so it comes from the desktop along with `libxkbcommon-x11`: the two
   must be the same version, and a mismatch crashes the app on the first key
   pressed under X11.
-- **Intel Macs** would need a second build on an Intel runner (`macos-15-intel`),
-  since OpenCV has no single build for both kinds of Mac.
+- **Macs** get two disk images, each built on its own kind of Mac
+  (`macos-latest` for Apple Silicon, `macos-15-intel` for Intel), since OpenCV
+  has no single build for both. Both are built for macOS 13 (`MACOSX_DEPLOYMENT_TARGET`, the
+  oldest PySide6 and OpenCV support), so uv picks wheels that run there rather
+  than ones for the build machine's newer macOS, and
+  `packaging/macos/check_minimum_macos.sh` fails the build if anything bundled
+  needs a newer one.
 - Pinned downloads (appimagetool, its runtime and Inno Setup) are checked against
   their SHA-256 sums; change the sum with the version.
 - **Data** isn't in the install folder: the app keeps it in the system's per-user

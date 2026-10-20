@@ -11,7 +11,7 @@ A desktop app (macOS, Windows, Linux) for service providers who collect data on 
 
 ## Installing
 
-Installers for Windows, macOS (Apple Silicon) and Linux go on the
+Installers for Windows, macOS (Apple Silicon and Intel) and Linux go on the
 [Releases](https://github.com/mstewart14/omr-data-collector/releases) page. They
 aren't signed yet, so the first run needs one extra step:
 [packaging/README.md](packaging/README.md#unsigned-for-now) says what.
