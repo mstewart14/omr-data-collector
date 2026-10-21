@@ -23,11 +23,13 @@ Needs [uv](https://docs.astral.sh/uv/) to build on your local system.
 to install uv
 
 on macOS and Linux (in Terminal):
-```curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 on Windows (in PowerShell):
-```powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 On Linux under X11, Qt also needs `libxcb-cursor0` to open windows
