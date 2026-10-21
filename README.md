@@ -13,44 +13,32 @@ A desktop app (macOS, Windows, Linux) for service providers who collect data on 
 
 Installers for Windows, macOS (Apple Silicon and Intel) and Linux go on the
 [Releases](https://github.com/mstewart14/omr-data-collector/releases) page. They
-aren't signed yet, so the first run needs one extra step:
-[packaging/README.md](packaging/README.md#unsigned-for-now) says what.
+aren't signed, so the first run needs one extra step:
+[packaging/README.md](packaging/README.md#unsigned-for-now) says what to do for Windows or Mac.
 
 ## Getting started
 
-Needs [uv](https://docs.astral.sh/uv/). QR codes are read with OpenCV's WeChat reader,
-so no system barcode library is needed.
+Needs [uv](https://docs.astral.sh/uv/) to build on your local system. 
+
+to install uv
+
+on macOS and Linux (in Terminal):
+```curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+on Windows (in PowerShell):
+```powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
 On Linux under X11, Qt also needs `libxcb-cursor0` to open windows
 (`apt install libxcb-cursor0`); without it the app exits with "Could not load the Qt
 platform plugin xcb".
 
-```bash
+On all platforms in a terminal (powershell on windows)
+```
 uv sync
 uv run pre-commit install --install-hooks
 uv run omr-data-collector     # or: uv run python -m omr_data_collector
-```
-
-## Development
-
-Code follows PEP 8 and the conventions of OMRChecker v2, using the same tooling:
-
-- **uv** for the environment and lockfile
-- **ruff** for linting (`select = ["ALL"]` with OMRChecker's ignore list) and formatting
-  (Black-compatible, 88 columns); `ruff.toml` is copied from OMRChecker
-- **pyright** in basic mode
-- **pre-commit** runs all of the above; a quick test on commit, the full suite with
-  coverage on push
-- File names: PascalCase for a module holding one class named after it
-  (`MainWindow.py`), snake_case otherwise (`runner.py`)
-- [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary)
-
-Two deliberate exceptions: methods overriding Qt's own keep Qt's camelCase names
-(`paintEvent`), and the project targets current Python rather than upstream's minimum.
-
-```bash
-uv run pytest                 # all tests
-uv run ruff check --fix && uv run ruff format
-uv run pyright
 ```
 
 ## Accessibility
@@ -108,6 +96,30 @@ Writing translatable text (see `omr_data_collector/i18n.py`):
 `tests/test_translations.py` checks that every page, menu and dialog is
 translatable (under the pseudo-translation), that no prose is left outside `tr()`,
 and that translations keep their placeholders.
+
+## Development
+
+Code follows PEP 8 and the conventions of OMRChecker v2, using the same tooling:
+
+- **uv** for the environment and lockfile
+- **ruff** for linting (`select = ["ALL"]` with OMRChecker's ignore list) and formatting
+  (Black-compatible, 88 columns); `ruff.toml` is copied from OMRChecker
+- **pyright** in basic mode
+- **pre-commit** runs all of the above; a quick test on commit, the full suite with
+  coverage on push
+- File names: PascalCase for a module holding one class named after it
+  (`MainWindow.py`), snake_case otherwise (`runner.py`)
+- [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary)
+
+Two deliberate exceptions: methods overriding Qt's own keep Qt's camelCase names
+(`paintEvent`), and the project targets current Python rather than upstream's minimum.
+
+```bash
+uv run pytest                 # all tests
+uv run ruff check --fix && uv run ruff format
+uv run pyright
+```
+
 
 ## Icon and packaging files
 
