@@ -14,7 +14,7 @@ A desktop app (macOS, Windows, Linux) for service providers who collect data on 
 Installers for Windows, macOS (Apple Silicon and Intel) and Linux go on the
 [Releases](https://github.com/mstewart14/omr-data-collector/releases) page. They
 aren't signed, so the first run needs one extra step:
-[packaging/README.md](packaging/README.md#unsigned-for-now) says what to do for Windows or Mac.
+[packaging/README.md](packaging/README.md#unsigned) says what to do for Windows or Mac.
 
 ## Getting started
 
