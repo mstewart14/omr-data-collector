@@ -50,7 +50,7 @@ leaves out pyzbar and easyocr, which OMRChecker only imports for field types our
 templates never use. Qt stays as separate library files beside the app, as its
 licence (LGPL) asks.
 
-## Unsigned for now
+## Unsigned
 
 The downloads aren't signed by a registered developer yet, so the first time:
 
@@ -63,7 +63,7 @@ The downloads aren't signed by a registered developer yet, so the first time:
   executing file as program" in its properties.
 
 Signing needs an Apple Developer account (for signing and notarizing the Mac app)
-and a Windows code-signing certificate; both slot into the workflow's build job.
+and a Windows code-signing certificate.
 
 ## Notes
 
@@ -77,10 +77,9 @@ and a Windows code-signing certificate; both slot into the workflow's build job.
 - **Macs** get two disk images, each built on its own kind of Mac
   (`macos-latest` for Apple Silicon, `macos-15-intel` for Intel), since OpenCV
   has no single build for both. Both need macOS 15 or later (`MINIMUM_MACOS` in
-  the workflow): PySide6 6.11's own libraries are built for it, though its
-  wheels are labelled for macOS 13. `packaging/macos/check_minimum_macos.sh`
+  the workflow): PySide6 6.11's own libraries are built for it. `packaging/macos/check_minimum_macos.sh`
   reads the oldest macOS each bundled library runs on and fails the build if
-  any needs a newer one, so an update can't quietly drop older Macs.
+  any needs a newer one, so an update won't quietly drop older Macs.
 - Pinned downloads (appimagetool, its runtime and Inno Setup) are checked against
   their SHA-256 sums; change the sum with the version.
 - **Data** isn't in the install folder: the app keeps it in the system's per-user
