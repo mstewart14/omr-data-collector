@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -22,7 +21,6 @@ from omr_data_collector.layout.table_layout import (
 )
 from omr_data_collector.layout.text import draw_text
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
-from omr_data_collector.models.FormFont import STANDARD_SIZE
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
@@ -65,7 +63,7 @@ def paint_table(painter: QPainter, table: TableBlock, layout: TableLayout) -> No
                 x,
                 top + layout.row_height_mm / 2,
                 # Printed separators fill boxes of a fixed size.
-                replace(layout.font, size=STANDARD_SIZE),
+                layout.font.at_standard_size(),
             )
         x += column_layout.width_mm
     painter.restore()

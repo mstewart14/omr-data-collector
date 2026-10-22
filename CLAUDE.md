@@ -84,7 +84,8 @@ engine bridge.
   measured. Never draw form text with a bare `QFont()`: that is the app's own
   font, which follows the desktop and Preferences > Text size
   (`ui/app_font.py`). The header keeps its sizes (its height and QR code are
-  fixed), as do bubbles, boxes and rows, which are millimetres.
+  fixed; `FormFont.at_standard_size()`), as do bubbles, boxes and rows, which
+  are millimetres. Layout functions default to `STANDARD_FONT`, never `None`.
 - **The form editor** (`ui/FormsPage.py`) is a page view: `BlockPalette` to drag
   from, `PageCanvas` drawing the real pages (click, drag to reorder, drop to add),
   and the details panel with the Outline list. Every drag has a keyboard or menu

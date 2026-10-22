@@ -40,7 +40,7 @@ from omr_data_collector.layout.text import (
     text_width_mm,
 )
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
-from omr_data_collector.models.FormFont import FormFont
+from omr_data_collector.models.FormFont import STANDARD_FONT, FormFont
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -329,14 +329,13 @@ def _shifted(geometry: DetailsGeometry, dx: float) -> DetailsGeometry:
 
 
 def header_details_geometry(
-    details: SheetDetails, *, font: FormFont | None = None
+    details: SheetDetails, *, font: FormFont = STANDARD_FONT
 ) -> tuple[DetailsGeometry, float]:
     """Sheet details stacked a field a line, labels in a column, from x = 0.
 
     Returns:
         The geometry, and the width of the box the fields take.
     """
-    font = font if font is not None else FormFont()
     label_width = (
         max(
             (
@@ -378,7 +377,7 @@ def header_details_geometry(
 
 
 def details_geometry(
-    details: SheetDetails, width_mm: float, *, font: FormFont | None = None
+    details: SheetDetails, width_mm: float, *, font: FormFont = STANDARD_FONT
 ) -> DetailsGeometry:
     """Lay a sheet details block's fields along lines ``width_mm`` wide.
 
@@ -386,7 +385,6 @@ def details_geometry(
     new line when the next one doesn't fit. A field is never split: one wider
     than the page runs off its edge.
     """
-    font = font if font is not None else FormFont()
     placed: list[DetailField] = []
     x, line = 0.0, 0
     for index, column in enumerate(details.fields):
@@ -494,10 +492,9 @@ def _detail_lines(
 
 
 def question_geometry(
-    question: Question, width_mm: float, *, font: FormFont | None = None
+    question: Question, width_mm: float, *, font: FormFont = STANDARD_FONT
 ) -> QuestionGeometry:
     """Where a question's parts go, ``width_mm`` wide, its text in ``font``."""
-    font = font if font is not None else FormFont()
     prompt = document_height_mm(
         markdown_document(question.prompt, width_mm, BODY_POINT_SIZE, font=font)
     )

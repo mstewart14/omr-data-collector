@@ -7,7 +7,6 @@ selection and drop markers on top.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -40,7 +39,6 @@ from omr_data_collector.layout.text import (
     markdown_document,
     plain_document,
 )
-from omr_data_collector.models.FormFont import STANDARD_SIZE
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
@@ -114,7 +112,7 @@ def _paint_header(
     width = layout.width_mm
     # The form's typeface, but always the standard size: the header's height and
     # its QR code's place are fixed.
-    font = replace(layout.font, size=STANDARD_SIZE)
+    font = layout.font.at_standard_size()
     qr = QRectF(width - QR_SIZE_MM, 0, QR_SIZE_MM, QR_SIZE_MM)
     if organization is not None:
         payload = build_form_payload(
@@ -208,8 +206,8 @@ def _paint_block(
         draw_document(
             painter,
             fitted_document(
-                lambda font: markdown_document(
-                    content.content, width, BODY_POINT_SIZE, font=font
+                lambda fitted: markdown_document(
+                    content.content, width, BODY_POINT_SIZE, font=fitted
                 ),
                 font,
                 placed.height_mm,
@@ -227,8 +225,8 @@ def _paint_block(
             draw_document(
                 painter,
                 fitted_document(
-                    lambda font: markdown_document(
-                        content.instructions, width, BODY_POINT_SIZE, font=font
+                    lambda fitted: markdown_document(
+                        content.instructions, width, BODY_POINT_SIZE, font=fitted
                     ),
                     font,
                     part.instructions_height_mm,
@@ -252,8 +250,8 @@ def _paint_question(
     draw_document(
         painter,
         fitted_document(
-            lambda font: markdown_document(
-                question.prompt, width, BODY_POINT_SIZE, font=font
+            lambda fitted: markdown_document(
+                question.prompt, width, BODY_POINT_SIZE, font=fitted
             ),
             font,
             geometry.prompt_height_mm,
@@ -266,8 +264,12 @@ def _paint_question(
         draw_document(
             painter,
             fitted_document(
-                lambda font: plain_document(
-                    question.example, width, EXAMPLE_POINT_SIZE, font=font, italic=True
+                lambda fitted: plain_document(
+                    question.example,
+                    width,
+                    EXAMPLE_POINT_SIZE,
+                    font=fitted,
+                    italic=True,
                 ),
                 font,
                 geometry.example_height_mm,
@@ -370,6 +372,6 @@ def draw_printed_character(
             Qt.AlignmentFlag.AlignCenter,
             character,
             PRINTED_SEPARATOR_POINT_SIZE,
-            font=replace(font, size=STANDARD_SIZE),
+            font=font.at_standard_size(),
             bold=True,
         )

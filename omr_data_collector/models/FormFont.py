@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 # The base size every form printed in before forms had a font of their own. The
@@ -36,7 +36,14 @@ class FormFont:
         return self.size / STANDARD_SIZE
 
     def is_standard(self) -> bool:
-        return self == FormFont()
+        return self == STANDARD_FONT
+
+    def at_standard_size(self) -> FormFont:
+        """The same typeface and style, at the standard size.
+
+        For text in something of a fixed size: the header, a date's separators.
+        """
+        return replace(self, size=STANDARD_SIZE)
 
     def to_dict(self) -> dict[str, Any]:
         return {"family": self.family, "style": self.style, "size": self.size}
@@ -47,3 +54,7 @@ class FormFont:
         if data is None:
             return cls()
         return cls(family=data["family"], style=data["style"], size=float(data["size"]))
+
+
+# What a form has before a typeface or size is chosen for it.
+STANDARD_FONT = FormFont()

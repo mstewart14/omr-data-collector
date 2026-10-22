@@ -16,7 +16,7 @@ from omr_data_collector.layout.text import (  # noqa: F401 (MM_PER_POINT re-expo
     text_width_mm,
 )
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
-from omr_data_collector.models.FormFont import FormFont
+from omr_data_collector.models.FormFont import STANDARD_FONT, FormFont
 
 if TYPE_CHECKING:
     from omr_data_collector.models.AnswerSpec import AnswerSpec
@@ -87,8 +87,7 @@ def choice_pitch_mm(answer: AnswerSpec, *, font: FormFont) -> float:
     return max(BUBBLE_PITCH_MM, widest_label + LABEL_GAP_MM)
 
 
-def column_layout(column: Column, *, font: FormFont | None = None) -> ColumnLayout:
-    font = font if font is not None else FormFont()
+def column_layout(column: Column, *, font: FormFont = STANDARD_FONT) -> ColumnLayout:
     answer = column.answer
     pitch = choice_pitch_mm(answer, font=font)
     if answer.answer_type == ANSWER_TYPES.WRITTEN:
@@ -147,7 +146,7 @@ def _wrapped_heading(name: str, content_mm: float, font: FormFont) -> tuple[str,
 
 
 def rows_to_print(
-    table: TableBlock, space_mm: float, *, font: FormFont | None = None
+    table: TableBlock, space_mm: float, *, font: FormFont = STANDARD_FONT
 ) -> int:
     """How many rows the table prints when ``space_mm`` of page height is left.
 
@@ -159,9 +158,8 @@ def rows_to_print(
     return table_layout(table, font=font).rows_per_page(space_mm)
 
 
-def table_layout(table: TableBlock, *, font: FormFont | None = None) -> TableLayout:
+def table_layout(table: TableBlock, *, font: FormFont = STANDARD_FONT) -> TableLayout:
     """The table's sizes in ``font`` (the standard one outside a form)."""
-    font = font if font is not None else FormFont()
     has_example = any(column.example for column in table.columns)
     has_choices = any(
         column.answer.answer_type in CHOICE_ANSWER_TYPES for column in table.columns

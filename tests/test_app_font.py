@@ -199,6 +199,17 @@ def test_a_damaged_setting_falls_back_to_the_desktop() -> None:
     assert saved_text_size() == 0
 
 
+@pytest.mark.parametrize(
+    ("stored", "read"), [("2", 9), ("500", 32), ("inf", 32), ("nan", 0), ("-4", 0)]
+)
+def test_an_edited_setting_is_held_to_the_sizes_offered(
+    stored: str, read: float
+) -> None:
+    app_font.preferences().setValue(app_font.TEXT_SIZE_SETTING, stored)
+
+    assert saved_text_size() == read
+
+
 def test_the_app_uses_the_desktop_font(qapp: QApplication) -> None:
     apply_text_size(0)
 

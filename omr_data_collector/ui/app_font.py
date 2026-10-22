@@ -257,13 +257,18 @@ def desktop_text_font() -> QFont:
 
 
 def saved_text_size() -> float:
-    """The size chosen in Preferences > Text size, in points; 0 for the desktop's."""
+    """The size chosen in Preferences > Text size, in points; 0 for the desktop's.
+
+    Held to the sizes Preferences offers: the setting is a file anyone can edit.
+    """
     value = preferences().value(TEXT_SIZE_SETTING, 0)
     try:
         size = float(value)  # pyright: ignore[reportArgumentType] (an ini value)
     except (TypeError, ValueError):
         return 0
-    return max(0, size)
+    if not size > 0:  # Also "nan".
+        return 0
+    return min(max(size, min(TEXT_SIZES)), max(TEXT_SIZES))
 
 
 def save_text_size(size: float) -> None:
