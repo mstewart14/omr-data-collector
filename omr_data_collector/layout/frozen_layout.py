@@ -1,7 +1,7 @@
 """A printed version's whole layout, kept so every copy prints where the first did.
 
 The first printing of a version stores its page templates for scanning
-(``omr_template.printed_layout``), and with them this: where every block,
+(``printed_layout``), and with them this: where every block,
 bubble, box and table cell went. Printing the version again draws from it
 rather than laying the form out afresh, so a typeface that's missing on another
 computer, or measures a little differently there, can change how the text looks
@@ -9,8 +9,9 @@ but never where anything is, and sheets printed anywhere scan alike.
 
 Blocks are stored by their place in the version's definition, which never
 changes once printed. A stored layout may come from a form file made elsewhere,
-so reading one checks every value, and a layout that doesn't fit the form is
-ignored in favour of a fresh one.
+so reading one checks every value, and that it fits the form: in the form's own
+font, and every field, column and choice it names is one the form has. A layout
+that doesn't fit is ignored in favour of a fresh one.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from PySide6.QtGui import QPageLayout
 from omr_data_collector.i18n import tr
 from omr_data_collector.layout import form_layout, table_layout
 from omr_data_collector.layout.form_layout import FormLayout, layout_form
+from omr_data_collector.layout.omr_template import page_template
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.layout.text import has_family
 from omr_data_collector.models.Form import FormBlock
@@ -53,6 +55,18 @@ class _NotALayoutError(ValueError):
     """A stored layout that isn't one this app wrote, or doesn't fit the form."""
 
 
+def printed_layout(layout: FormLayout) -> dict[str, Any]:
+    """Every page's template, to store when a version is printed.
+
+    With them the whole layout (``frozen_layout``), which later printings of the
+    version draw from, so every copy matches these templates.
+    """
+    return {
+        "pages": [page_template(layout, page).to_dict() for page in layout.pages],
+        FROZEN_LAYOUT_KEY: frozen_layout(layout),
+    }
+
+
 def frozen_layout(layout: FormLayout) -> dict[str, Any]:
     """``layout`` as JSON, its blocks named by their place in the form."""
     return _to_json(layout)
@@ -62,11 +76,35 @@ def thawed_layout(data: object, form: Form) -> FormLayout | None:
     """The layout stored for ``form``'s printed version, or None if unusable."""
     try:
         layout = _from_json(FormLayout, data, form)
-    except (_NotALayoutError, KeyError, TypeError, IndexError):
-        return None
-    if not isinstance(layout, FormLayout) or not layout.pages:
+        if not isinstance(layout, FormLayout) or not _fits(layout, form):
+            return None
+    except (ValueError, KeyError, TypeError, IndexError):
+        # ValueError covers _NotALayoutError, and a table whose columns don't
+        # match the form's (making its template zips them, strictly).
         return None
     return layout
+
+
+def _fits(layout: FormLayout, form: Form) -> bool:
+    """Whether ``layout`` is in ``form``'s font and names only what it has.
+
+    Making each page's template looks up every field, column and choice the
+    layout names, as drawing it does, so one that doesn't fit fails here, not
+    halfway through printing.
+    """
+    tables = [
+        placed.table_part.layout
+        for page in layout.pages
+        for placed in page.blocks
+        if placed.table_part is not None
+    ]
+    if not layout.pages or any(
+        font != form.font for font in [layout.font, *(table.font for table in tables)]
+    ):
+        return False
+    for page in layout.pages:
+        page_template(layout, page)
+    return True
 
 
 def layout_to_print(
@@ -79,7 +117,11 @@ def layout_to_print(
     """
     if stored is not None:
         frozen = thawed_layout(stored.get(FROZEN_LAYOUT_KEY), form)
-        if frozen is not None and _same_paper(frozen, form, paper_size):
+        if (
+            frozen is not None
+            and _same_paper(frozen, form, paper_size)
+            and len(frozen.pages) == len(stored.get("pages", []))
+        ):
             return frozen, True
     return layout_form(form, paper_size), False
 

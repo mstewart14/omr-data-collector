@@ -12,6 +12,8 @@ MIN_SIZE = 8.0
 # bubbles in them stay where the scanner expects.
 MAX_SIZE = 14.0
 SIZES = (8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0)
+# Far longer than any installed font's family or style name.
+NAME_MAX_LENGTH = 200
 
 
 @dataclass(frozen=True)

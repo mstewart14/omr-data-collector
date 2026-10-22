@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from omr_data_collector.layout.form_layout import ANSWER_ROW_HEIGHT_MM
-from omr_data_collector.layout.frozen_layout import FROZEN_LAYOUT_KEY, frozen_layout
 from omr_data_collector.layout.markers import (
     MARKER_DIAMETER_MM,
     marker_centres_mm,
@@ -182,18 +181,6 @@ class PageTemplate:
                 AnswerRegion.from_dict(region) for region in data.get("regions", [])
             ),
         )
-
-
-def printed_layout(layout: FormLayout) -> dict[str, Any]:
-    """Every page's template, to store when a version is printed.
-
-    With them the whole layout (``frozen_layout``), which later printings of the
-    version draw from, so every copy matches these templates.
-    """
-    return {
-        "pages": [page_template(layout, page).to_dict() for page in layout.pages],
-        FROZEN_LAYOUT_KEY: frozen_layout(layout),
-    }
 
 
 def page_template(layout: FormLayout, page: PageLayout) -> PageTemplate:

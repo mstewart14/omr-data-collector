@@ -19,8 +19,11 @@ from omr_data_collector.constants import (
 )
 from omr_data_collector.identity.qr_code import parse_payload, read_qr_codes
 from omr_data_collector.layout.form_layout import layout_form
-from omr_data_collector.layout.frozen_layout import FROZEN_LAYOUT_KEY, thawed_layout
-from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.layout.frozen_layout import (
+    FROZEN_LAYOUT_KEY,
+    printed_layout,
+    thawed_layout,
+)
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.FormFont import FormFont

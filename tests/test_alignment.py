@@ -18,7 +18,8 @@ from omr_data_collector.engine.alignment import (
 )
 from omr_data_collector.engine.scanning import ScanError, find_form_code, scan_sheet
 from omr_data_collector.layout.form_layout import layout_form
-from omr_data_collector.layout.omr_template import TEMPLATE_PX_PER_MM, printed_layout
+from omr_data_collector.layout.frozen_layout import printed_layout
+from omr_data_collector.layout.omr_template import TEMPLATE_PX_PER_MM
 from omr_data_collector.storage.capture_store import add_capture, list_captures
 from omr_data_collector.storage.form_store import (
     load_printed_layout,

@@ -19,7 +19,7 @@ from omr_data_collector import app_version
 from omr_data_collector.constants import ANSWER_TYPES, PAPER_SIZES
 from omr_data_collector.engine.scanning import scan_sheet
 from omr_data_collector.layout.form_layout import layout_form
-from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.layout.frozen_layout import printed_layout
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Organization import Organization

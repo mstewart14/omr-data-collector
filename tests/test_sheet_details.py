@@ -25,7 +25,8 @@ from omr_data_collector.layout.form_layout import (
     details_geometry,
     layout_form,
 )
-from omr_data_collector.layout.omr_template import page_template, printed_layout
+from omr_data_collector.layout.frozen_layout import printed_layout
+from omr_data_collector.layout.omr_template import page_template
 from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.SheetDetails import SheetDetails

@@ -37,8 +37,11 @@ from omr_data_collector.constants import (
     TABLE_BREAKS,
 )
 from omr_data_collector.i18n import tr
-from omr_data_collector.layout.frozen_layout import frozen_warnings, layout_to_print
-from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.layout.frozen_layout import (
+    frozen_warnings,
+    layout_to_print,
+    printed_layout,
+)
 from omr_data_collector.layout.page_setup import page_layout_for
 from omr_data_collector.models.Form import Form, FormBlock, content_id, kind_title
 from omr_data_collector.models.FormFont import STANDARD_SIZE, FormFont

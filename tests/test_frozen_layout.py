@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from PySide6.QtGui import QFontDatabase
@@ -18,9 +18,9 @@ from omr_data_collector.layout.frozen_layout import (
     frozen_layout,
     frozen_warnings,
     layout_to_print,
+    printed_layout,
     thawed_layout,
 )
-from omr_data_collector.layout.omr_template import printed_layout
 from omr_data_collector.layout.text import fitted_document, markdown_document
 from omr_data_collector.models.FormFont import FormFont
 from omr_data_collector.storage.form_store import (
@@ -117,6 +117,16 @@ def test_a_placed_block_is_its_forms_own() -> None:
         assert placed.block is form.blocks[placed.index]
 
 
+def table_part(stored: dict[str, Any]) -> dict[str, Any]:
+    """The stored layout's first table part."""
+    return next(
+        placed["table_part"]
+        for page in stored["pages"]
+        for placed in page["blocks"]
+        if placed["table_part"] is not None
+    )
+
+
 def damaged(change: str) -> object:
     stored = frozen_layout(layout_form(intake_form(), LETTER))
     first = stored["pages"][0]["blocks"][0]
@@ -159,6 +169,26 @@ def test_a_damaged_or_crafted_layout_is_ignored(change: str) -> None:
     assert thawed_layout(damaged(change), intake_form()) is None
 
 
+@pytest.mark.parametrize(
+    "change",
+    ["another font", "a table in another font", "a column more", "a column short"],
+)
+def test_a_layout_that_doesnt_fit_its_form_is_ignored(change: str) -> None:
+    # Each would otherwise stop printing part way, or print what doesn't scan.
+    stored = frozen_layout(layout_form(intake_form(), LETTER))
+    table = table_part(stored)["layout"]
+    if change == "another font":
+        stored["font"]["size"] = 9000.0
+    elif change == "a table in another font":
+        table["font"]["family"] = "Serif"
+    elif change == "a column more":
+        table["columns"].append(table["columns"][0])
+    else:
+        table["columns"].pop()
+
+    assert thawed_layout(stored, intake_form()) is None
+
+
 # --- Which layout prints ----------------------------------------------------------
 
 
@@ -195,6 +225,19 @@ def test_versions_printed_before_layouts_were_kept_are_laid_out_now(
 
     assert not frozen
     assert layout == first
+
+
+def test_a_layout_with_other_pages_than_its_templates_is_laid_out_now(
+    connection: sqlite3.Connection, organization: Organization
+) -> None:
+    form, _ = print_version(connection, organization, FormFont())
+    stored = load_printed_layout(connection, form.form_id, form.version)
+    assert stored is not None
+    stored["pages"].append(stored["pages"][0])
+
+    _, frozen = layout_to_print(form, LETTER, stored)
+
+    assert not frozen
 
 
 def test_other_paper_is_laid_out_for_that_paper(

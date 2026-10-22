@@ -232,7 +232,7 @@ def mark_printed(
 ) -> None:
     """Record that a version has been printed (or saved as a PDF), freezing it.
 
-    ``printed_layout`` (from ``omr_template.printed_layout``) is the OMR template
+    ``printed_layout`` (from ``frozen_layout.printed_layout``) is the OMR template
     of every page as printed; only the first printing's is kept, since every copy
     of the version must scan the same way.
     """

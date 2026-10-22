@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from omr_data_collector.i18n import available_languages, install_translators
 from omr_data_collector.layout.form_layout import layout_form
-from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.layout.frozen_layout import printed_layout
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.storage.form_store import mark_printed, save_form

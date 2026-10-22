@@ -13,7 +13,7 @@ from omr_data_collector.layout.form_layout import (
     layout_form,
     question_geometry,
 )
-from omr_data_collector.layout.omr_template import printed_layout
+from omr_data_collector.layout.frozen_layout import printed_layout
 from omr_data_collector.layout.table_layout import table_layout
 from omr_data_collector.layout.text import (
     has_family,
@@ -115,6 +115,15 @@ def test_text_sizes_outside_the_range_are_refused(size: float) -> None:
     form = replace(intake_form(), font=FormFont(size=size))
 
     assert "font_size" in form.validation_errors(set())
+
+
+@pytest.mark.parametrize("size", [7, 15])
+def test_a_stored_size_outside_the_range_is_refused(size: float) -> None:
+    # A form file from elsewhere is read this way, without the editor's checks.
+    definition = replace(intake_form(), font=FormFont(size=size)).definition()
+
+    with pytest.raises(jsonschema.ValidationError):
+        Form.from_definition(definition, form_id="a" * 32, version=1)
 
 
 def test_saving_keeps_the_font(connection: sqlite3.Connection) -> None:

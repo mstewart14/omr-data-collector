@@ -110,6 +110,9 @@ engine bridge.
   (`layout_to_print`), never a fresh layout: on a computer without the form's
   typeface the text looks different (shrunk to fit its stored room if need be)
   but nothing moves, so every copy scans against the stored templates.
+  A stored layout can come from an imported file, so `thawed_layout` uses one
+  only if it fits the form (`_fits`: the form's own font, and making its page
+  templates finds every field and column it names); otherwise it lays out anew.
 - **Scanning:** every page has four solid corner markers in the margins
   (`layout/markers.py`), so prints are drawn full-page. `layout/omr_template.py`
   builds each page's OMRChecker template from the layout (one field per row of

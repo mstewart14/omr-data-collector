@@ -4,6 +4,7 @@ from omr_data_collector.constants import (
     PAGE_ORIENTATIONS,
     TABLE_BREAKS,
 )
+from omr_data_collector.models.FormFont import MAX_SIZE, MIN_SIZE, NAME_MAX_LENGTH
 
 # One stored version of a form: everything needed to print it again, or to scan
 # sheets printed from it. Keys are camelCase to match OMRChecker's JSON files. Each
@@ -29,15 +30,15 @@ FORM_DEFINITION_SCHEMA = {
                     "description": "An installed font family, or empty for the "
                     "computer's standard font",
                     "type": "string",
-                    "maxLength": 200,
+                    "maxLength": NAME_MAX_LENGTH,
                 },
                 "style": {
                     "description": "One of the family's styles, or empty for its "
                     "regular one",
                     "type": "string",
-                    "maxLength": 200,
+                    "maxLength": NAME_MAX_LENGTH,
                 },
-                "size": {"type": "number", "minimum": 1, "maximum": 100},
+                "size": {"type": "number", "minimum": MIN_SIZE, "maximum": MAX_SIZE},
             },
         },
         "blocks": {
