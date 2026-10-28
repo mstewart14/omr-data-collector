@@ -83,6 +83,7 @@ class TableBlocksPage(LibraryPage[TableBlock]):
             instructions=item.instructions,
             rows=item.rows,
             fill_page=item.fill_page,
+            fit_width=item.fit_width,
             columns=item.columns,
         )
 

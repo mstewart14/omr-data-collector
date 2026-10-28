@@ -680,7 +680,7 @@ class _PageBuilder:
         self.put(PlacedBlock(index, block, self.y, height, question=question))
 
     def _place_table(self, index: int, block: FormBlock, table: TableBlock) -> None:
-        full = table_layout(table, font=self.font)
+        full = table_layout(table, font=self.font, page_width_mm=self.width)
         if full.width_mm > self.width:
             self.warnings.append(
                 tr(

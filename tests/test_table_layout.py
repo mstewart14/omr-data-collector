@@ -13,6 +13,8 @@ from omr_data_collector.constants import (
 from omr_data_collector.layout.table_layout import (
     BUBBLE_PITCH_MM,
     CELL_PADDING_MM,
+    MAX_FIT_SCALE,
+    MIN_FIT_SCALE,
     WRITTEN_BOX_WIDTH_MM,
     cell_bubble_centres_mm,
     cell_written_marks_mm,
@@ -301,3 +303,130 @@ def test_the_wrap_setting_is_stored_only_when_off() -> None:
     assert off.to_dict()["columns"][0]["wrapHeading"] is False
     assert TableBlock.from_dict(off.to_dict()) == off
     assert TableBlock.from_dict(on.to_dict()) == on
+
+
+# --- Fit to page width ------------------------------------------------------------
+
+FREE_TEXT = Column("Name", answer=AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=4))
+YES_NO = Column("Seen", answer=AnswerSpec(ANSWER_TYPES.YES_NO))
+ID_BOXES = Column(
+    "ID",
+    answer=AnswerSpec(
+        ANSWER_TYPES.WRITTEN, data_type=WRITTEN_DATA_TYPES.ID, max_characters=6
+    ),
+)
+
+
+def fitted(table: TableBlock, page_width_mm: float):
+    return table_layout(replace(table, fit_width=True), page_width_mm=page_width_mm)
+
+
+def test_fit_width_is_off_unless_chosen() -> None:
+    table = TableBlock("t", columns=(FREE_TEXT, YES_NO))
+    natural = table_layout(table).width_mm
+
+    assert table_layout(table, page_width_mm=natural + 20).width_mm == natural
+
+
+def test_fit_width_stretches_a_little_narrow_table_to_the_margins() -> None:
+    table = TableBlock("t", columns=(FREE_TEXT, YES_NO, ID_BOXES))
+    natural = table_layout(table)
+    room = natural.width_mm * 1.2
+
+    layout = fitted(table, room)
+
+    assert layout.width_mm == pytest.approx(room)
+    assert all(
+        wide.width_mm > narrow.width_mm
+        for wide, narrow in zip(layout.columns, natural.columns, strict=True)
+    )
+
+
+def test_fit_width_squeezes_a_little_wide_table_onto_the_page() -> None:
+    table = TableBlock("t", columns=(FREE_TEXT, YES_NO, ID_BOXES))
+    natural = table_layout(table).width_mm
+    room = natural * 0.9
+
+    layout = fitted(table, room)
+
+    assert layout.width_mm == pytest.approx(room, abs=0.5)
+    assert layout.width_mm <= room
+
+
+def test_fit_width_stretches_no_more_than_half_again() -> None:
+    table = TableBlock("t", columns=(FREE_TEXT, YES_NO))
+    natural = table_layout(table).width_mm
+
+    layout = fitted(table, natural * 3)
+
+    assert layout.width_mm == pytest.approx(natural * MAX_FIT_SCALE)
+
+
+def test_fit_width_squeezes_no_more_than_a_fifth() -> None:
+    table = TableBlock("t", columns=(FREE_TEXT, YES_NO, ID_BOXES))
+    natural = table_layout(table)
+
+    layout = fitted(table, natural.width_mm / 2)
+
+    assert layout.width_mm > natural.width_mm / 2
+    assert layout.width_mm >= natural.width_mm * MIN_FIT_SCALE - 0.01
+
+
+def test_squeezed_boxes_shrink_but_stretched_ones_stay_full_size() -> None:
+    table = TableBlock("t", columns=(ID_BOXES,))
+    natural = table_layout(table).width_mm
+
+    squeezed = fitted(table, natural * 0.9).columns[0]
+    stretched = fitted(table, natural * 1.3).columns[0]
+
+    assert squeezed.box_width_mm < WRITTEN_BOX_WIDTH_MM
+    assert squeezed.box_width_mm >= WRITTEN_BOX_WIDTH_MM * MIN_FIT_SCALE
+    assert stretched.box_width_mm == WRITTEN_BOX_WIDTH_MM
+    marks = cell_written_marks_mm(ID_BOXES, squeezed)
+    assert marks[1][0] - marks[0][0] == pytest.approx(squeezed.box_width_mm)
+
+
+def test_squeezing_never_crowds_choice_labels() -> None:
+    labels = Column(
+        "Mood",
+        answer=AnswerSpec(
+            ANSWER_TYPES.ONE_CHOICE, choices=choices("Happy", "Grumpy", "Sleepy")
+        ),
+    )
+    natural = column_layout(labels)
+
+    squeezed = column_layout(labels, scale=MIN_FIT_SCALE)
+
+    assert squeezed.choice_pitch_mm == natural.choice_pitch_mm
+
+
+def test_stretched_bubbles_spread_across_their_wider_cell() -> None:
+    rating = Column(
+        "Rating",
+        answer=AnswerSpec(ANSWER_TYPES.ONE_CHOICE, choices=choices("1", "2", "3")),
+    )
+    table = TableBlock("t", columns=(rating,))
+    natural = table_layout(table).columns[0]
+    stretched = fitted(table, natural.width_mm * 1.4).columns[0]
+
+    narrow = cell_bubble_centres_mm(rating, natural)
+    wide = cell_bubble_centres_mm(rating, stretched)
+
+    assert wide[-1] - wide[0] > narrow[-1] - narrow[0]
+
+
+def test_summary_says_when_stretching_stops_short_of_the_margin() -> None:
+    table = TableBlock("t", fit_width=True, columns=(YES_NO,))
+
+    summary = fit_summary(table, PAPER_SIZES.LETTER, PAGE_ORIENTATIONS.LANDSCAPE)
+
+    assert "without reaching the right margin" in summary
+
+
+def test_fit_width_round_trips_and_defaults_off_for_older_forms() -> None:
+    table = TableBlock("t", fit_width=True, columns=(YES_NO,))
+    data = table.to_dict()
+
+    assert TableBlock.from_dict(data).fit_width
+    del data["fitWidth"]
+    assert not TableBlock.from_dict(data).fit_width

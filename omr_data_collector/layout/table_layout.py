@@ -6,7 +6,7 @@ numbers, so what is previewed is what is printed and scanned.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from omr_data_collector.constants import ANSWER_TYPES
@@ -38,6 +38,13 @@ LABEL_GAP_MM = 1.0
 MAX_HEADING_LINES = 3
 # Finding the narrowest width that fits the heading in those lines: close enough.
 HEADING_FIT_MM = 0.1
+# A table that fits the page's width (TableBlock.fit_width) is scaled by no less
+# and no more than these, so the change is an adjustment, not a new design. At
+# the least, bubbles are still 5.6 mm apart and boxes 4 mm wide.
+MIN_FIT_SCALE = 0.8
+MAX_FIT_SCALE = 1.5
+# Finding the scale that fits: close enough, the rest shared out among columns.
+FIT_SCALE_PRECISION = 0.001
 
 
 @dataclass(frozen=True)
@@ -48,6 +55,8 @@ class ColumnLayout:
     # The heading as printed, a line each. Layouts stored before headings
     # wrapped have none, and print the name on one line.
     heading_lines: tuple[str, ...] = ()
+    # Narrower in a table squeezed to fit the page's width; never wider.
+    box_width_mm: float = WRITTEN_BOX_WIDTH_MM
 
 
 @dataclass(frozen=True)
@@ -73,8 +82,11 @@ class TableLayout:
         return max(int(room // self.row_height_mm), 0)
 
 
-def choice_pitch_mm(answer: AnswerSpec, *, font: FormFont) -> float:
-    """Bubble spacing: the standard pitch, or wider if a choice's label needs it."""
+def choice_pitch_mm(answer: AnswerSpec, *, font: FormFont, scale: float = 1.0) -> float:
+    """Bubble spacing: the standard pitch, or wider if a choice's label needs it.
+
+    ``scale`` stretches or squeezes it, but never closer than the labels need.
+    """
     if answer.answer_type not in CHOICE_ANSWER_TYPES:
         return 0
     widest_label = max(
@@ -84,14 +96,22 @@ def choice_pitch_mm(answer: AnswerSpec, *, font: FormFont) -> float:
         ),
         default=0,
     )
-    return max(BUBBLE_PITCH_MM, widest_label + LABEL_GAP_MM)
+    label_room = widest_label + LABEL_GAP_MM
+    return max(max(BUBBLE_PITCH_MM, label_room) * scale, label_room)
 
 
-def column_layout(column: Column, *, font: FormFont = STANDARD_FONT) -> ColumnLayout:
+def column_layout(
+    column: Column, *, font: FormFont = STANDARD_FONT, scale: float = 1.0
+) -> ColumnLayout:
+    """The column's sizes, its answer stretched or squeezed by ``scale``.
+
+    Boxes for written characters shrink with it but never grow: a wider cell
+    centres them.
+    """
     answer = column.answer
-    pitch = choice_pitch_mm(answer, font=font)
+    pitch = choice_pitch_mm(answer, font=font, scale=scale)
     if answer.answer_type == ANSWER_TYPES.WRITTEN:
-        content = answer.characters() * WRITTEN_BOX_WIDTH_MM
+        content = answer.characters() * WRITTEN_BOX_WIDTH_MM * scale
     else:
         content = len(answer.printed_choices()) * pitch
     heading = _heading_width(column.name, font)
@@ -104,6 +124,7 @@ def column_layout(column: Column, *, font: FormFont = STANDARD_FONT) -> ColumnLa
         width_mm=max(content, heading) + 2 * CELL_PADDING_MM,
         choice_pitch_mm=pitch,
         heading_lines=lines,
+        box_width_mm=WRITTEN_BOX_WIDTH_MM * min(scale, 1.0),
     )
 
 
@@ -146,7 +167,11 @@ def _wrapped_heading(name: str, content_mm: float, font: FormFont) -> tuple[str,
 
 
 def rows_to_print(
-    table: TableBlock, space_mm: float, *, font: FormFont = STANDARD_FONT
+    table: TableBlock,
+    space_mm: float,
+    *,
+    font: FormFont = STANDARD_FONT,
+    page_width_mm: float | None = None,
 ) -> int:
     """How many rows the table prints when ``space_mm`` of page height is left.
 
@@ -155,16 +180,29 @@ def rows_to_print(
     """
     if not table.fill_page:
         return table.rows
-    return table_layout(table, font=font).rows_per_page(space_mm)
+    layout = table_layout(table, font=font, page_width_mm=page_width_mm)
+    return layout.rows_per_page(space_mm)
 
 
-def table_layout(table: TableBlock, *, font: FormFont = STANDARD_FONT) -> TableLayout:
-    """The table's sizes in ``font`` (the standard one outside a form)."""
+def table_layout(
+    table: TableBlock,
+    *,
+    font: FormFont = STANDARD_FONT,
+    page_width_mm: float | None = None,
+) -> TableLayout:
+    """The table's sizes in ``font`` (the standard one outside a form).
+
+    A table that fits the page's width is stretched or squeezed to
+    ``page_width_mm``, within MIN_FIT_SCALE and MAX_FIT_SCALE.
+    """
     has_example = any(column.example for column in table.columns)
     has_choices = any(
         column.answer.answer_type in CHOICE_ANSWER_TYPES for column in table.columns
     )
-    columns = tuple(column_layout(column, font=font) for column in table.columns)
+    if table.fit_width and page_width_mm is not None and table.columns:
+        columns = _fitted_columns(table.columns, page_width_mm, font)
+    else:
+        columns = tuple(column_layout(column, font=font) for column in table.columns)
     line = line_height_mm(HEADER_POINT_SIZE, font=font)
     header = 2 * CELL_PADDING_MM + heading_line_count(columns) * line
     if has_example:
@@ -178,6 +216,48 @@ def table_layout(table: TableBlock, *, font: FormFont = STANDARD_FONT) -> TableL
         row_height_mm=ROW_HEIGHT_MM,
         rows=table.rows,
         font=font,
+    )
+
+
+def _fitted_columns(
+    columns: tuple[Column, ...], width_mm: float, font: FormFont
+) -> tuple[ColumnLayout, ...]:
+    """The columns scaled to come as close to ``width_mm`` as the limits allow.
+
+    The largest scale that doesn't overflow, then whatever room a heading
+    kept from being used (headings wrap in steps) shared among the columns by
+    width, up to the most stretch allowed.
+    """
+
+    def scaled(scale: float) -> tuple[ColumnLayout, ...]:
+        return tuple(
+            column_layout(column, font=font, scale=scale) for column in columns
+        )
+
+    def total(layouts: tuple[ColumnLayout, ...]) -> float:
+        return sum(layout.width_mm for layout in layouts)
+
+    natural = total(scaled(1.0))
+    if total(scaled(MAX_FIT_SCALE)) <= width_mm:
+        low = MAX_FIT_SCALE
+    elif total(scaled(MIN_FIT_SCALE)) >= width_mm:
+        return scaled(MIN_FIT_SCALE)
+    else:
+        low, high = MIN_FIT_SCALE, MAX_FIT_SCALE
+        while high - low > FIT_SCALE_PRECISION:
+            middle = (low + high) / 2
+            if total(scaled(middle)) <= width_mm:
+                low = middle
+            else:
+                high = middle
+    layouts = scaled(low)
+    used = total(layouts)
+    room = min(width_mm, natural * MAX_FIT_SCALE) - used
+    if room <= 0:
+        return layouts
+    return tuple(
+        replace(layout, width_mm=layout.width_mm + room * layout.width_mm / used)
+        for layout in layouts
     )
 
 
@@ -212,7 +292,6 @@ def cell_written_marks_mm(
     if not cells:
         return []
     inner = layout.width_mm - 2 * CELL_PADDING_MM
-    left = CELL_PADDING_MM + (inner - len(cells) * WRITTEN_BOX_WIDTH_MM) / 2
-    return [
-        (left + index * WRITTEN_BOX_WIDTH_MM, cell) for index, cell in enumerate(cells)
-    ]
+    box = layout.box_width_mm
+    left = CELL_PADDING_MM + (inner - len(cells) * box) / 2
+    return [(left + index * box, cell) for index, cell in enumerate(cells)]

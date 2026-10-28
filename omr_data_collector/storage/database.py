@@ -140,6 +140,10 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    [
+        # 1 when the table's columns stretch or squeeze to the page's width.
+        "ALTER TABLE table_block ADD COLUMN fit_width INTEGER NOT NULL DEFAULT 0",
+    ],
 ]
 
 

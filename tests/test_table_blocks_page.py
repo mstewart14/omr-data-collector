@@ -381,6 +381,7 @@ def test_tab_order_follows_the_screen(
         page.table_fields.remove_column_button,
         page.table_fields.move_left_button,
         page.table_fields.move_right_button,
+        page.table_fields.fit_width_check,
         page.table_fields.preview_orientation_combo,
         page.revert_button,
         page.save_button,
@@ -534,3 +535,22 @@ def test_sheet_details_fields_have_no_wrap_setting(qtbot: QtBot) -> None:
     qtbot.addWidget(dialog)
 
     assert not dialog.wrap_check.isVisibleTo(dialog)
+
+
+def test_fit_to_page_width_is_saved_and_previewed(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    save_table_block(connection, TableBlock(name="t", columns=(TIME,)))
+    page = make_page(qtbot, connection)
+    before = page.table_fields.preview_summary.text()
+
+    page.table_fields.fit_width_check.setChecked(True)
+
+    assert page.has_unsaved_changes()
+    assert page.table_fields.preview_summary.text() != before
+    page.save()
+    (saved,) = list_table_blocks(connection)
+    assert saved.fit_width
+    page.duplicate_item()
+    copy = next(t for t in list_table_blocks(connection) if t.name == "t (copy)")
+    assert copy.fit_width

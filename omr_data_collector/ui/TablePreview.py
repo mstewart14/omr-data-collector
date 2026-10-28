@@ -33,8 +33,8 @@ def fit_summary(table: TableBlock, paper_size: str, orientation: str) -> str:
     page = page_name(paper_size, orientation)
     if not table.columns:
         return tr("Add columns to preview the table on {page}.").format(page=page)
-    layout = table_layout(table)
     printable_width, printable_height = printable_size_mm(paper_size, orientation)
+    layout = table_layout(table, page_width_mm=printable_width)
     width = round(layout.width_mm)
     room = round(printable_width)
     if layout.width_mm > printable_width:
@@ -50,6 +50,13 @@ def fit_summary(table: TableBlock, paper_size: str, orientation: str) -> str:
                 page=page, width=width, room=room
             )
         ]
+        if table.fit_width and width < room:
+            sentences.append(
+                tr(
+                    "Its columns are stretched as far as they go, half as wide "
+                    "again, without reaching the right margin."
+                )
+            )
     per_page = layout.rows_per_page(printable_height)
     if table.fill_page:
         sentences.append(
@@ -126,14 +133,16 @@ class TablePreview(QWidget):
             self._paint_page(painter, page_size.width(), page_size.height())
             if self._table is not None and self._table.columns:
                 painter.translate(PAGE_MARGIN_MM, PAGE_MARGIN_MM)
-                layout = table_layout(self._table)
                 # The first page only: rows that don't fit continue on the next
                 # page, as the summary says.
-                _, printable_height = printable_size_mm(
+                printable_width, printable_height = printable_size_mm(
                     self._paper_size, self._orientation
                 )
+                layout = table_layout(self._table, page_width_mm=printable_width)
                 # A table that fills its page is previewed from the top of one.
-                rows = rows_to_print(self._table, printable_height)
+                rows = rows_to_print(
+                    self._table, printable_height, page_width_mm=printable_width
+                )
                 shown = min(rows, layout.rows_per_page(printable_height))
                 paint_table(painter, self._table, replace(layout, rows=shown))
         finally:

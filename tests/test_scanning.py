@@ -25,6 +25,12 @@ from omr_data_collector.layout.omr_template import (
     page_template,
     with_writing_areas,
 )
+from omr_data_collector.layout.table_layout import (
+    CELL_PADDING_MM,
+    WRITTEN_BOX_WIDTH_MM,
+    column_layout,
+    table_layout,
+)
 from omr_data_collector.models.AnswerSpec import AnswerSpec
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Question import Question
@@ -491,6 +497,57 @@ def test_a_table_with_wrapped_headings_scans_back(
     mark_printed(connection, form.form_id, form.version, printed_layout(layout))
     (part,) = [p.table_part for p in layout.pages[0].blocks if p.table_part]
     assert len(part.layout.columns[2].heading_lines) > 1
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_cell(2, row=0, column=2, choice=2)
+    sheet.fill_cell(2, row=1, column=1, choice=0)
+
+    page = scan_sheet(connection, sheet.photograph(tmp_path / "photo.jpg"), LETTER)
+
+    answers = answers_by_place(page)
+    assert answers[2, 0, 2] == ("referral",)
+    assert answers[2, 1, 1] == ("y",)
+    assert all(not answer.problem for answer in page.answers)
+
+
+@pytest.mark.parametrize("natural_share", [0.8, 1.1])
+def test_a_table_fitted_to_the_page_width_scans_back(
+    connection: sqlite3.Connection,
+    organization: Organization,
+    tmp_path: Path,
+    natural_share: float,
+) -> None:
+    # Stretched from 80% of the page's width, or squeezed from 110%: the
+    # template is made from the fitted layout, so bubbles are found either way.
+    form = intake_form()
+    table = form.blocks[2].content
+    assert isinstance(table, TableBlock)
+    room = layout_form(form, organization.paper_size).width_mm
+    natural = table_layout(table).width_mm
+    # A free-text column takes up the difference: 5 mm a character.
+    written = next(
+        index
+        for index, column in enumerate(table.columns)
+        if column.answer.answer_type == ANSWER_TYPES.WRITTEN
+    )
+    others = natural - column_layout(table.columns[written]).width_mm
+    characters = round(
+        (room * natural_share - others - 2 * CELL_PADDING_MM) / WRITTEN_BOX_WIDTH_MM
+    )
+    answer = AnswerSpec(ANSWER_TYPES.WRITTEN, max_characters=characters)
+    column = table.columns[written]
+    columns = list(table.columns)
+    columns[written] = replace(column, answer=answer)
+    fitted = replace(table, fit_width=True, columns=tuple(columns))
+    form = save_form(
+        connection,
+        replace(
+            form, blocks=(*form.blocks[:2], replace(form.blocks[2], content=fitted))
+        ),
+    )
+    layout = layout_form(form, organization.paper_size)
+    mark_printed(connection, form.form_id, form.version, printed_layout(layout))
+    (part,) = [p.table_part for p in layout.pages[0].blocks if p.table_part]
+    assert part.layout.width_mm == pytest.approx(room, abs=0.5)
     sheet = Sheet(form, organization, layout)
     sheet.fill_cell(2, row=0, column=2, choice=2)
     sheet.fill_cell(2, row=1, column=1, choice=0)

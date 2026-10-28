@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 def list_table_blocks(connection: sqlite3.Connection) -> list[TableBlock]:
     """Every saved table, sorted by name ignoring case."""
     rows = connection.execute(
-        "SELECT table_block_id, name, instructions, row_count, fill_page, columns"
-        " FROM table_block ORDER BY name COLLATE NOCASE"
+        "SELECT table_block_id, name, instructions, row_count, fill_page,"
+        " fit_width, columns FROM table_block ORDER BY name COLLATE NOCASE"
     ).fetchall()
     return [
         TableBlock(
@@ -26,6 +26,7 @@ def list_table_blocks(connection: sqlite3.Connection) -> list[TableBlock]:
             instructions=row["instructions"],
             rows=row["row_count"],
             fill_page=bool(row["fill_page"]),
+            fit_width=bool(row["fit_width"]),
             columns=columns_from_list(json.loads(row["columns"])),
         )
         for row in rows
@@ -41,12 +42,14 @@ def save_table_block(connection: sqlite3.Connection, table: TableBlock) -> None:
     with connection:
         connection.execute(
             "INSERT INTO table_block"
-            " (table_block_id, name, instructions, row_count, fill_page, columns)"
+            " (table_block_id, name, instructions, row_count, fill_page,"
+            " fit_width, columns)"
             " VALUES (:table_block_id, :name, :instructions, :row_count,"
-            " :fill_page, :columns)"
+            " :fill_page, :fit_width, :columns)"
             " ON CONFLICT(table_block_id) DO UPDATE SET"
             " name = excluded.name, instructions = excluded.instructions,"
             " row_count = excluded.row_count, fill_page = excluded.fill_page,"
+            " fit_width = excluded.fit_width,"
             " columns = excluded.columns,"
             " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
             {
@@ -55,6 +58,7 @@ def save_table_block(connection: sqlite3.Connection, table: TableBlock) -> None:
                 "instructions": table.instructions,
                 "row_count": table.rows,
                 "fill_page": int(table.fill_page),
+                "fit_width": int(table.fit_width),
                 "columns": json.dumps(columns_to_list(table.columns)),
             },
         )

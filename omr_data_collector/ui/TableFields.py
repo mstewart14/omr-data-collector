@@ -144,6 +144,13 @@ class TableFields:
         self.fill_page_check.setToolTip(
             tr("Print as many rows as fit below the table on its page")
         )
+        self.fit_width_check = QCheckBox(tr("Stretch or squee&ze to fit the page"))
+        self.fit_width_check.setToolTip(
+            tr(
+                "Widen or narrow the columns a little so the table spans the page "
+                "from margin to margin"
+            )
+        )
         self.column_list = QListWidget()
         self.column_list.setMinimumHeight(
             self.column_list.fontMetrics().lineSpacing() * COLUMN_ROWS_VISIBLE
@@ -182,6 +189,7 @@ class TableFields:
             actions_layout.addWidget(button)
         actions_layout.addStretch()
         form.addRow("", column_actions)
+        form.addRow("", self.fit_width_check)
 
         self.preview_orientation_combo = QComboBox()
         for value, name in orientation_names().items():
@@ -204,6 +212,7 @@ class TableFields:
             self.fill_page_check,
             self.column_list,
             *self.column_buttons,
+            self.fit_width_check,
             self.preview_orientation_combo,
         ]
 
@@ -212,12 +221,19 @@ class TableFields:
     ) -> None:
         """Show ``table`` (a new one's defaults if None), previewed in ``orientation``."""
         self.text_fields.set_markdown(table.instructions if table is not None else "")
-        with QSignalBlocker(self.rows_spin), QSignalBlocker(self.fill_page_check):
+        with (
+            QSignalBlocker(self.rows_spin),
+            QSignalBlocker(self.fill_page_check),
+            QSignalBlocker(self.fit_width_check),
+        ):
             self.rows_spin.setValue(
                 table.rows if table is not None else DEFAULT_TABLE_ROWS
             )
             self.fill_page_check.setChecked(
                 table.fill_page if table is not None else False
+            )
+            self.fit_width_check.setChecked(
+                table.fit_width if table is not None else False
             )
         self._columns = list(table.columns) if table is not None else []
         self._fill_column_list(0 if self._columns else -1)
@@ -233,6 +249,7 @@ class TableFields:
             instructions=self.text_fields.markdown(),
             rows=self.rows_spin.value(),
             fill_page=self.fill_page_check.isChecked(),
+            fit_width=self.fit_width_check.isChecked(),
             columns=tuple(self._columns),
             table_block_id=table_block_id,
         ).normalized()
@@ -295,6 +312,7 @@ class TableFields:
     def _connect(self) -> None:
         self.rows_spin.valueChanged.connect(self._on_change)
         self.fill_page_check.toggled.connect(self._on_change)
+        self.fit_width_check.toggled.connect(self._on_change)
         self.add_column_button.clicked.connect(self.add_column)
         self.edit_column_button.clicked.connect(self.edit_selected_column)
         self.remove_column_button.clicked.connect(self.remove_selected_column)

@@ -71,13 +71,15 @@ class TableBlock:
     Covers wiki stories 30001-30010. ``instructions`` is Markdown, like a text
     block's content. With ``fill_page`` the table gets as many rows as fit below
     where it is placed on its page, worked out when a form is laid out; ``rows``
-    is kept for when it's turned off.
+    is kept for when it's turned off. With ``fit_width`` its columns are
+    stretched or squeezed, a little, to the page's width (``table_layout``).
     """
 
     name: str
     instructions: str = ""
     rows: int = DEFAULT_TABLE_ROWS
     fill_page: bool = False
+    fit_width: bool = False
     columns: tuple[Column, ...] = ()
     table_block_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -89,6 +91,7 @@ class TableBlock:
             "instructions": self.instructions,
             "rows": self.rows,
             "fillPage": self.fill_page,
+            "fitWidth": self.fit_width,
             "columns": columns_to_list(self.columns),
         }
 
@@ -99,6 +102,8 @@ class TableBlock:
             instructions=data["instructions"],
             rows=data["rows"],
             fill_page=data["fillPage"],
+            # Absent from forms saved before tables could fit the page's width.
+            fit_width=data.get("fitWidth", False),
             columns=columns_from_list(data["columns"]),
             table_block_id=data["id"],
         )

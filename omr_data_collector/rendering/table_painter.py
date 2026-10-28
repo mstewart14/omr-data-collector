@@ -13,7 +13,6 @@ from omr_data_collector.layout.table_layout import (
     CHOICE_LABEL_POINT_SIZE,
     HEADER_POINT_SIZE,
     TABLE_BOX_HEIGHT_MM,
-    WRITTEN_BOX_WIDTH_MM,
     cell_bubble_centres_mm,
     cell_written_marks_mm,
     heading_line_count,
@@ -133,7 +132,7 @@ def _paint_cell(  # noqa: PLR0913 (one cell: its column, place and font)
         rect = QRectF(
             x + left,
             middle - TABLE_BOX_HEIGHT_MM / 2,
-            WRITTEN_BOX_WIDTH_MM,
+            column_layout.box_width_mm,
             TABLE_BOX_HEIGHT_MM,
         )
         if printed:
