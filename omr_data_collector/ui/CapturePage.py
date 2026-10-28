@@ -33,7 +33,6 @@ from PySide6.QtWidgets import (
 )
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
-from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.export.data_export import (
     SHEETS_FILE,
     collect,
@@ -112,6 +111,24 @@ if TYPE_CHECKING:
 IMAGE_PATTERNS = "*.jpg *.jpeg *.png *.tif *.tiff *.bmp"
 NAME_COLUMN, VALUE_COLUMN, NOTE_COLUMN = 0, 1, 2
 CLOSE_UP_HEIGHT = 140
+
+
+def _read_capture(
+    connection: sqlite3.Connection,
+    capture: Capture,
+    paper_size: str,
+    *,
+    reframe: bool = False,
+) -> Capture:
+    """``engine.reading.read_capture``, imported only when a sheet is read.
+
+    Importing it loads OMRChecker, which would hold up opening the app; it's
+    loaded in the background instead (see ``engine_preload``), so this usually
+    finds it already there.
+    """
+    from omr_data_collector.engine.reading import read_capture  # noqa: PLC0415
+
+    return read_capture(connection, capture, paper_size, reframe=reframe)
 
 
 def status_text(capture: Capture) -> str:
@@ -429,7 +446,7 @@ class CapturePage(QWidget):
                 )
             )
             progress.setValue(number)
-            results.append(read_capture(self._connection, capture, paper_size))
+            results.append(_read_capture(self._connection, capture, paper_size))
         progress.setValue(len(waiting))
         read = [
             capture for capture in results if capture.status == CAPTURE_STATUSES.READ
@@ -472,7 +489,7 @@ class CapturePage(QWidget):
         paper_size = paper_size_of(load_organization(self._connection))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            result = read_capture(self._connection, capture, paper_size, reframe=True)
+            result = _read_capture(self._connection, capture, paper_size, reframe=True)
         finally:
             QApplication.restoreOverrideCursor()
         self.reload(select=result.capture_id)

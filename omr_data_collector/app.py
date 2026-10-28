@@ -3,12 +3,14 @@ from __future__ import annotations
 import sqlite3
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from omr_data_collector import APP_NAME, app_version, self_check
+from omr_data_collector import APP_NAME, app_version
 from omr_data_collector.constants import DATABASE_FILENAME
+from omr_data_collector.engine_preload import preload_engine_later
 from omr_data_collector.i18n import install_translators, tr
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.ui.app_font import (
@@ -18,7 +20,14 @@ from omr_data_collector.ui.app_font import (
 )
 from omr_data_collector.ui.app_icon import DESKTOP_FILE_NAME, app_icon
 from omr_data_collector.ui.form_helpers import warn
-from omr_data_collector.ui.MainWindow import MainWindow
+from omr_data_collector.ui.startup_splash import show_startup_splash, show_step
+
+# The main window and self_check bring in OpenCV and the rest of the app, so
+# they're imported only once the splash window is showing. The scanning engine
+# (OMRChecker and its libraries, the slowest part) loads after the window opens:
+# see engine_preload.
+if TYPE_CHECKING:
+    from omr_data_collector.ui.MainWindow import MainWindow
 
 
 def default_database_path() -> Path:
@@ -56,6 +65,13 @@ def open_app_database(path: Path) -> sqlite3.Connection | None:
         return None
 
 
+def main_window_class() -> type[MainWindow]:
+    """The main window's class, loading the rest of the app with it (slow)."""
+    from omr_data_collector.ui.MainWindow import MainWindow  # noqa: PLC0415
+
+    return MainWindow
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -64,17 +80,26 @@ def main() -> int:
     app.setDesktopFileName(DESKTOP_FILE_NAME)
     install_translators(app)
     if SELF_CHECK_FLAG in sys.argv[1:2]:
+        from omr_data_collector import self_check  # noqa: PLC0415
+
         report = sys.argv[2:3]
         return self_check.run(Path(report[0]) if report else None)
 
     remember_desktop_font()
     apply_text_size(saved_text_size())
+    # Opened first (it's quick) so a message about it isn't hidden by the splash,
+    # which stays on top.
     connection = open_app_database(default_database_path())
     if connection is None:
         return 1
     try:
-        window = MainWindow(connection)
+        splash = show_startup_splash()
+        window_class = main_window_class()
+        show_step(splash, tr("Opening your forms…"))
+        window = window_class(connection)
         window.show()
+        splash.finish(window)
+        preload_engine_later()
         return app.exec()
     finally:
         connection.close()
