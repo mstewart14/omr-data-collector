@@ -76,6 +76,16 @@ engine bridge.
   against a fixed 72-dpi reference. `rendering/` draws from those layouts (the
   editor now, printing next) and the OMRChecker template must read the same
   layouts, never compute its own, so what is seen is what is printed and scanned.
+  A table with `fit_width` is stretched or squeezed to the page's width, between
+  `MIN_FIT_SCALE` and `MAX_FIT_SCALE` (`_fitted_columns`); its boxes shrink with
+  it but never grow (`ColumnLayout.box_width_mm`), so pass `page_width_mm` to
+  `table_layout` wherever the page is known.
+- **Startup:** `app.main` shows `ui/startup_splash.py` before importing the main
+  window, and the scanning engine (OMRChecker, pandas, SciPy) is never imported
+  at module level outside `engine/` and `self_check`: `engine_preload` loads it
+  on a thread a second after the window opens, and `CapturePage._read_capture`
+  imports it when a sheet is read. `tests/test_app.py` fails if the splash's or
+  the main window's imports pull it in.
 - **Fonts:** each form has a `FormFont` (typeface, style, base size 8-14 pt;
   `""` = the computer's standard font, `text.standard_family()`), set in its
   form details. Every text helper in `layout/text.py` takes the form's font and
