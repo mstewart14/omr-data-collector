@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from omr_data_collector import APP_NAME, app, engine_preload
 from omr_data_collector.constants import DATABASE_FILENAME
 from omr_data_collector.engine_preload import start_engine_preload
+from omr_data_collector.ui import startup_splash
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.startup_splash import show_startup_splash, show_step
 
@@ -146,3 +147,17 @@ def test_splash_names_itself_and_says_what_is_happening(qtbot: QtBot) -> None:
     assert splash.accessibleDescription()
     assert splash.message() == "Opening your forms…"
     assert not splash.pixmap().isNull()
+
+
+def test_splash_shows_the_version_and_the_code_link(mocker: MockerFixture) -> None:
+    mocker.patch.object(startup_splash, "app_version", return_value="1.2.3")
+
+    details = startup_splash.splash_details()
+
+    assert details == ["Version 1.2.3", "github.com/mstewart14/omr-data-collector"]
+
+
+def test_splash_without_a_recorded_version_says_so(mocker: MockerFixture) -> None:
+    mocker.patch.object(startup_splash, "app_version", return_value="")
+
+    assert startup_splash.splash_details()[0] == "Version unknown"
