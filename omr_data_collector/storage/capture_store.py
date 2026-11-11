@@ -6,13 +6,14 @@ import hashlib
 import json
 import shutil
 import uuid
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from omr_data_collector.models.Capture import Capture, CapturedAnswer
+from omr_data_collector.storage.database import database_file
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
 CAPTURES_DIR_NAME = "captures"
 CAPTURE_COLUMNS = (
@@ -31,10 +32,7 @@ class DuplicateCaptureError(Exception):
 
 def captures_dir(connection: sqlite3.Connection) -> Path:
     """The folder of captured images: ``captures`` beside the database file."""
-    row = connection.execute(
-        "SELECT file FROM pragma_database_list WHERE name = 'main'"
-    ).fetchone()
-    return Path(row["file"]).parent / CAPTURES_DIR_NAME
+    return database_file(connection).parent / CAPTURES_DIR_NAME
 
 
 def image_path(connection: sqlite3.Connection, capture: Capture) -> Path:

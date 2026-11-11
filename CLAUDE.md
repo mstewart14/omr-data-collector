@@ -188,6 +188,18 @@ engine bridge.
   export. `Capture.looks_like` warns when two pictures seem to be one sheet
   (same page, every bubble alike, no typed value different): only a warning,
   since people can mark a short form alike.
+- **PDF scans and the scanner folder** (wiki 60010-60015): Add images takes
+  PDFs, each page drawn at 300 dpi on white (`storage/pdf_pages.py`, Qt's PDF
+  module imported only then) and added as "<file>, page N". The scanner
+  folder (`scanner_folder.py`, Preferences > Scanner folder, kept in the
+  person's own `preferences()`) is checked every few minutes while the app is
+  open by `ui/scanner_watch.ScannerWatch`, on a thread with its own database
+  connection: files unchanged for `SETTLE_SECONDS` are added, read if chosen
+  (`engine/reading` reads one sheet at a time, so this never runs alongside
+  Read waiting sheets), then moved into the folder's "Added" (or "Couldn't
+  add") folder. Results reach the window as the `checked` signal; the Capture
+  page then calls `refresh_sheets`, which never discards what's being typed
+  on the sheet shown. One computer per scanner folder.
 - **Export** (`export/data_export.py`, Capture > Export data): a form's saved
   captures, from every version, as a sheets CSV (sheet columns, sheet details,
   questions) plus a CSV per table (one row per filled row: something marked or

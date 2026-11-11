@@ -21,6 +21,11 @@ from omr_data_collector.i18n import (
     saved_language,
     tr,
 )
+from omr_data_collector.scanner_folder import (
+    ScannerSettings,
+    check_summary,
+    save_scanner_settings,
+)
 from omr_data_collector.storage.organization_store import load_organization
 from omr_data_collector.ui.AboutDialog import AboutDialog
 from omr_data_collector.ui.accessibility import announce
@@ -36,6 +41,8 @@ from omr_data_collector.ui.FormsPage import FormsPage
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.OrganizationPage import OrganizationPage
 from omr_data_collector.ui.QuestionsPage import QuestionsPage
+from omr_data_collector.ui.scanner_watch import ScannerWatch
+from omr_data_collector.ui.ScannerFolderDialog import ScannerFolderDialog
 from omr_data_collector.ui.TableBlocksPage import TableBlocksPage
 from omr_data_collector.ui.TextBlocksPage import TextBlocksPage
 from omr_data_collector.ui.TextSizeDialog import TextSizeDialog
@@ -47,6 +54,7 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QCloseEvent
     from PySide6.QtWidgets import QWidget
 
+    from omr_data_collector.scanner_folder import FolderCheck
     from omr_data_collector.ui.LibraryPage import LibraryPage
 
 STATUS_MESSAGE_TIMEOUT_MS = 5000
@@ -67,6 +75,16 @@ def choose_text_size(parent: QWidget, current: float) -> float | None:
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen_size()
+
+
+def choose_scanner_settings(
+    parent: QWidget, current: ScannerSettings
+) -> ScannerSettings | None:
+    """Ask for the scanner folder's settings; None if cancelled."""
+    dialog = ScannerFolderDialog(parent, current)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.chosen_settings()
 
 
 # Room for the form editor's pages beside its palette and details.
@@ -128,6 +146,10 @@ class MainWindow(QMainWindow):
             )
             self.section_shortcuts.append(shortcut)
         self.setCentralWidget(self.stack)
+        # Started by start_scanner_watch once the window shows.
+        self.scanner_watch = ScannerWatch(connection, self)
+        self.scanner_watch.checked.connect(self._on_scanner_checked)
+        self.capture_page.check_scanner_requested.connect(self.check_scanner_now)
         self._build_menus()
         self.forms_page.organization_needed.connect(
             lambda: self.open_section(
@@ -293,6 +315,7 @@ class MainWindow(QMainWindow):
             (tr("&Read waiting sheets"), self.capture_page.read_waiting),
             (tr("Read it any&way"), self.capture_page.read_anyway),
             (tr("&Export data…"), self.capture_page.export_data),
+            (tr("Check scanner folder &now"), self.check_scanner_now),
         ):
             action = self.capture_menu.addAction(text)
             action.triggered.connect(
@@ -309,6 +332,10 @@ class MainWindow(QMainWindow):
         language_action.triggered.connect(self.change_language)
         text_size_action = self.preferences_menu.addAction(tr("Text &size…"))
         text_size_action.triggered.connect(self.change_text_size)
+        scanner_action = self.preferences_menu.addAction(tr("Scanner &folder…"))
+        scanner_action.triggered.connect(self.change_scanner_folder)
+        check_action = self.preferences_menu.addAction(tr("Check scanner folder &now"))
+        check_action.triggered.connect(self.check_scanner_now)
         self.preferences_menu.addSeparator()
         about_action = self.preferences_menu.addAction(
             tr("&About {app}…").format(app=APP_NAME)
@@ -411,6 +438,49 @@ class MainWindow(QMainWindow):
             message = tr("The app's text now follows the desktop's size.")
         self.show_status(message)
 
+    def start_scanner_watch(self) -> None:
+        """Begin checking the scanner folder, if one is chosen (wiki 60012)."""
+        self.scanner_watch.start()
+        self._show_scanner_folder()
+
+    def change_scanner_folder(self) -> None:
+        """Preferences > Scanner folder: where scans arrive, and how often to look."""
+        chosen = choose_scanner_settings(self, self.scanner_watch.settings)
+        if chosen is None:
+            return
+        save_scanner_settings(chosen)
+        # A newly chosen folder is checked at once.
+        self.scanner_watch.apply(chosen)
+        self._show_scanner_folder()
+        if chosen.enabled:
+            message = tr(
+                "Scans saved in {folder} will be added every %n minute(s) while "
+                "the app is open.",
+                None,
+                chosen.check_minutes,
+            ).format(folder=chosen.folder)
+        else:
+            message = tr("No scanner folder: scans are added by hand.")
+        self.show_status(message)
+
+    def check_scanner_now(self) -> None:
+        """Check the scanner folder at once; the result comes as a status message."""
+        problem = self.scanner_watch.check_now()
+        self.show_status(problem or tr("Checking the scanner folder…"))
+
+    def _show_scanner_folder(self) -> None:
+        settings = self.scanner_watch.settings
+        self.capture_page.show_scanner_folder(
+            settings.folder if settings.enabled else "", settings.check_minutes
+        )
+
+    def _on_scanner_checked(self, result: FolderCheck, asked: bool) -> None:  # noqa: FBT001 (a signal's arguments)
+        if result.added:
+            self.capture_page.refresh_sheets()
+        message = check_summary(result, asked=asked)
+        if message:
+            self.show_status(message)
+
     def menu_mnemonics(self) -> set[str]:
         """The menu bar's Alt+letter keys, in the language shown.
 
@@ -434,6 +504,11 @@ class MainWindow(QMainWindow):
         announce(self, message)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt override)
+        self._ask_before_closing(event)
+        if event.isAccepted():
+            self.scanner_watch.stop()
+
+    def _ask_before_closing(self, event: QCloseEvent) -> None:
         # A cell still being typed in counts as a change, and is saved with the rest.
         finish_editing(self)
         unsaved = [

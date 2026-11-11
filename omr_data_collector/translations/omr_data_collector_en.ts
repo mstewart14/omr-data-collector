@@ -234,6 +234,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Scans saved in {folder} are added every %n minute(s) while the app is open.</source>
+            <translation>
+                <numerusform>Scans saved in {folder} are added every %n minute while the app is open.</numerusform>
+                <numerusform>Scans saved in {folder} are added every %n minutes while the app is open.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Added %n image(s). Read waiting sheets reads them.</source>
             <translation>
                 <numerusform>Added %n image. Read waiting sheets reads them.</numerusform>
@@ -255,10 +262,31 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Added %n sheet(s) from the scanner folder.</source>
+            <translation>
+                <numerusform>Added %n sheet from the scanner folder.</numerusform>
+                <numerusform>Added %n sheets from the scanner folder.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Read %n of them.</source>
+            <translation>
+                <numerusform>Read %n of them.</numerusform>
+                <numerusform>Read %n of them.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>%n couldn't be read; choose one to see why.</source>
             <translation>
                 <numerusform>%n couldn't be read; choose one to see why.</numerusform>
                 <numerusform>%n couldn't be read; choose one to see why.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>%n scan(s) may still be being saved; they will be added in a minute or so.</source>
+            <translation>
+                <numerusform>%n scan may still be being saved; they will be added in a minute or so.</numerusform>
+                <numerusform>%n scans may still be being saved; they will be added in a minute or so.</numerusform>
             </translation>
         </message>
         <message numerus="yes">
@@ -301,6 +329,13 @@
             <translation>
                 <numerusform>{name} (%n checked sheet)</numerusform>
                 <numerusform>{name} (%n checked sheets)</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Scans saved in {folder} will be added every %n minute(s) while the app is open.</source>
+            <translation>
+                <numerusform>Scans saved in {folder} will be added every %n minute while the app is open.</numerusform>
+                <numerusform>Scans saved in {folder} will be added every %n minutes while the app is open.</numerusform>
             </translation>
         </message>
     </context>

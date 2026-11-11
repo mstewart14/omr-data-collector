@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage, QPainter
+
+from omr_data_collector.i18n import tr
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,6 +26,9 @@ if TYPE_CHECKING:
 PAGE_DPI = 300
 MAX_PAGE_PIXELS = 6000
 POINTS_PER_INCH = 72
+# The files that can be added as sheets: pictures, and PDF scans.
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")
+SCAN_SUFFIXES = (*IMAGE_SUFFIXES, ".pdf")
 
 
 class PdfError(Exception):
@@ -37,6 +43,27 @@ class PdfPage:
 
 def is_pdf(path: Path) -> bool:
     return path.suffix.lower() == ".pdf"
+
+
+def is_scan(path: Path) -> bool:
+    """Whether ``path`` is named as a picture or PDF that can be added as sheets."""
+    return path.suffix.lower() in SCAN_SUFFIXES
+
+
+def images_to_add(path: Path, pages_dir: Path) -> list[tuple[Path, str]]:
+    """The images to add for ``path``, each with its name: a PDF's pages, or itself.
+
+    A PDF's pages are drawn into a folder of their own in ``pages_dir``.
+
+    Raises:
+        PdfError: ``path`` is a PDF that couldn't be opened.
+    """
+    if not is_pdf(path):
+        return [(path, path.name)]
+    return [
+        (page.image, tr("{file}, page {page}").format(file=path.name, page=page.number))
+        for page in pdf_page_images(path, pages_dir / uuid4().hex)
+    ]
 
 
 def pdf_page_images(pdf: Path, out_dir: Path) -> list[PdfPage]:

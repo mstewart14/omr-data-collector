@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,11 @@ if TYPE_CHECKING:
 
     from omr_data_collector.engine.scanning import ScannedPage
 
+# One sheet is read at a time: the scanner folder reads on a thread of its own
+# (scanner_folder) while Read waiting sheets reads on the window's, and
+# OMRChecker isn't made to run twice at once.
+_READING = threading.Lock()
+
 
 def read_capture(
     connection: sqlite3.Connection,
@@ -35,13 +41,14 @@ def read_capture(
     page from its QR code ("Read it anyway"; see ``scan_sheet``).
     """
     try:
-        scanned = scan_sheet(
-            connection,
-            image_path(connection, capture),
-            paper_size,
-            page_image=page_image_path(connection, capture),
-            reframe=reframe,
-        )
+        with _READING:
+            scanned = scan_sheet(
+                connection,
+                image_path(connection, capture),
+                paper_size,
+                page_image=page_image_path(connection, capture),
+                reframe=reframe,
+            )
     except ScanError as error:
         updated = replace(
             capture,

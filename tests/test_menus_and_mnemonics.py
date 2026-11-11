@@ -12,6 +12,7 @@ from omr_data_collector.constants import BLOCK_KINDS
 from omr_data_collector.export.data_export import ExportNames, OutputFile
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TextBlock import TextBlock
+from omr_data_collector.scanner_folder import ScannerSettings
 from omr_data_collector.storage.question_store import list_questions
 from omr_data_collector.storage.text_block_store import save_text_block
 from omr_data_collector.ui.AboutDialog import AboutDialog
@@ -22,6 +23,7 @@ from omr_data_collector.ui.ExportNamesDialog import ExportNamesDialog
 from omr_data_collector.ui.form_helpers import ask_new_or_keep_working
 from omr_data_collector.ui.LanguageDialog import LanguageDialog
 from omr_data_collector.ui.MainWindow import MainWindow
+from omr_data_collector.ui.ScannerFolderDialog import ScannerFolderDialog
 from omr_data_collector.ui.SheetDetailsDialog import SheetDetailsDialog
 from omr_data_collector.ui.TextSizeDialog import TextSizeDialog
 
@@ -160,6 +162,8 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
     window = make_window(qtbot, connection)
     title, page = window.pages[section]
     menu_letters = window.menu_mnemonics()
+    # Its Check scanner folder now button shows only once a folder is chosen.
+    window.capture_page.show_scanner_folder("/scans", 10)
 
     for state in states(page):
         letters = mnemonics_in(page)
@@ -183,6 +187,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         lambda: BlockPickerDialog(None, BLOCK_KINDS.QUESTION, [], can_write_new=True),
         lambda: LanguageDialog(None, ""),
         lambda: TextSizeDialog(None, 0),
+        lambda: ScannerFolderDialog(None, ScannerSettings(folder="/scans")),
         lambda: AboutDialog(None, "1.2.3"),
         lambda: SheetDetailsDialog(None, SheetDetails(name="Sheet details")),
         lambda: ColumnDialog(None, None, set(), sheet_detail=True),
@@ -201,6 +206,7 @@ def test_each_page_has_unique_mnemonics_clear_of_the_menus(
         "picker",
         "language",
         "text size",
+        "scanner folder",
         "about",
         "details",
         "field",
@@ -285,6 +291,8 @@ def test_each_library_menu_opens_its_library_first(
         f"&Organization details…\t{section_key(5)}",
         "&Language…",
         "Text &size…",
+        "Scanner &folder…",
+        "Check scanner folder &now",
         "&About OMR Data Collector…",
     ]
 

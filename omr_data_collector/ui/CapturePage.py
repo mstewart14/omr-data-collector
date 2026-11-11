@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QLocale, QObject, QStandardPaths, Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -77,7 +76,11 @@ from omr_data_collector.storage.form_store import (
     load_printed_layout,
 )
 from omr_data_collector.storage.organization_store import load_organization
-from omr_data_collector.storage.pdf_pages import PdfError, is_pdf, pdf_page_images
+from omr_data_collector.storage.pdf_pages import (
+    SCAN_SUFFIXES,
+    PdfError,
+    images_to_add,
+)
 from omr_data_collector.ui.accessibility import (
     announce,
     band_color,
@@ -111,7 +114,7 @@ if TYPE_CHECKING:
     from omr_data_collector.models.Capture import Capture, CapturedAnswer
     from omr_data_collector.models.Form import Form
 
-IMAGE_PATTERNS = "*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.pdf"
+IMAGE_PATTERNS = " ".join(f"*{suffix}" for suffix in SCAN_SUFFIXES)
 NAME_COLUMN, VALUE_COLUMN, NOTE_COLUMN = 0, 1, 2
 CLOSE_UP_HEIGHT = 140
 
@@ -276,20 +279,6 @@ def same_file(one: Path, other: Path) -> bool:
     return str(one).casefold() == str(other).casefold()
 
 
-def _images_in(path: Path, pages_dir: Path) -> list[tuple[Path, str]]:
-    """The images to add for ``path``, each with its name: a PDF's pages, or itself.
-
-    Raises:
-        PdfError: ``path`` is a PDF that couldn't be opened.
-    """
-    if not is_pdf(path):
-        return [(path, path.name)]
-    return [
-        (page.image, tr("{file}, page {page}").format(file=path.name, page=page.number))
-        for page in pdf_page_images(path, pages_dir / uuid4().hex)
-    ]
-
-
 def choose_images(parent: QWidget) -> list[Path]:
     """Ask which photos or scans (images or PDFs) to add; none if cancelled."""
     names, _ = QFileDialog.getOpenFileNames(
@@ -310,6 +299,8 @@ class CapturePage(QWidget):
     """
 
     status_message = Signal(str)
+    # Check scanner folder now: the main window's ScannerWatch does the checking.
+    check_scanner_requested = Signal()
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
@@ -345,7 +336,8 @@ class CapturePage(QWidget):
         self.initial_focus: QWidget = self.sheet_list
         QWidget.setTabOrder(self.sheet_list, self.add_button)
         for before, after in (
-            (self.add_button, self.read_button),
+            (self.add_button, self.check_scanner_button),
+            (self.check_scanner_button, self.read_button),
             (self.read_button, self.read_anyway_button),
             (self.read_anyway_button, self.remove_button),
             (self.remove_button, self.export_button),
@@ -378,12 +370,7 @@ class CapturePage(QWidget):
         self._captures = list_captures(self._connection)
         keep = select or (self._current.capture_id if self._current else None)
         self.sheet_list.blockSignals(True)  # noqa: FBT003 (Qt API is positional)
-        self.sheet_list.clear()
-        for capture in self._captures:
-            item = QListWidgetItem(status_text(capture))
-            item.setData(Qt.ItemDataRole.UserRole, capture.capture_id)
-            self.sheet_list.addItem(item)
-        self.empty_note.setVisible(not self._captures)
+        self._fill_sheet_list()
         ids = [capture.capture_id for capture in self._captures]
         # The sheet is chosen here, not by the person: selecting it mustn't run
         # _on_sheet_chosen, which would ask about leaving the sheet shown.
@@ -399,6 +386,56 @@ class CapturePage(QWidget):
         self._show(shown)
         self._update_buttons()
 
+    def refresh_sheets(self) -> None:
+        """Show sheets added or read elsewhere (the scanner folder; wiki 60012).
+
+        The sheet being checked stays as it is, with anything typed on it: it's
+        only shown afresh if it has changed and nothing on it is unsaved.
+        """
+        stored = {
+            capture.capture_id: capture for capture in list_captures(self._connection)
+        }
+        current = self._current
+        if (
+            current is None
+            or current.capture_id not in stored
+            or (
+                stored[current.capture_id] != current and not self.has_unsaved_changes()
+            )
+        ):
+            self.reload()
+            return
+        self._captures = list(stored.values())
+        self.sheet_list.blockSignals(True)  # noqa: FBT003 (Qt API is positional)
+        self._fill_sheet_list()
+        self.sheet_list.blockSignals(False)  # noqa: FBT003
+        self._select_current()
+        self._update_buttons()
+
+    def show_scanner_folder(self, folder: str, check_minutes: int) -> None:
+        """Say which scanner folder is checked, and how often; nothing if none."""
+        if folder:
+            self.scanner_note.setText(
+                tr(
+                    "Scans saved in {folder} are added every %n minute(s) while "
+                    "the app is open.",
+                    None,
+                    check_minutes,
+                ).format(folder=folder)
+            )
+        self.scanner_note.setVisible(bool(folder))
+        self.check_scanner_button.setVisible(bool(folder))
+        self.check_scanner_button.setAccessibleDescription(self.scanner_note.text())
+
+    def _fill_sheet_list(self) -> None:
+        """List ``self._captures``, with signals already blocked by the caller."""
+        self.sheet_list.clear()
+        for capture in self._captures:
+            item = QListWidgetItem(status_text(capture))
+            item.setData(Qt.ItemDataRole.UserRole, capture.capture_id)
+            self.sheet_list.addItem(item)
+        self.empty_note.setVisible(not self._captures)
+
     def add_images(self) -> None:
         """Add images: each is copied in, waiting to be read (wiki 60001-60002)."""
         paths = choose_images(self)
@@ -413,7 +450,7 @@ class CapturePage(QWidget):
             with TemporaryDirectory() as pages_dir:
                 for path in paths:
                     try:
-                        images = _images_in(path, Path(pages_dir))
+                        images = images_to_add(path, Path(pages_dir))
                     except PdfError:
                         failed.append(path.name)
                         continue
@@ -799,12 +836,20 @@ class CapturePage(QWidget):
         )
         self.photo_tip.setWordWrap(True)
         self.add_button.setAccessibleDescription(self.photo_tip.text())
+        # Shown once a scanner folder is chosen (show_scanner_folder).
+        self.scanner_note = QLabel()
+        self.scanner_note.setWordWrap(True)
+        self.check_scanner_button = QPushButton(tr("Chec&k scanner folder now"))
+        self.check_scanner_button.clicked.connect(self.check_scanner_requested)
         layout = QVBoxLayout(box)
         layout.addWidget(list_label)
         layout.addWidget(self.sheet_list)
         layout.addWidget(self.empty_note)
         layout.addWidget(self.add_button)
         layout.addWidget(self.photo_tip)
+        layout.addWidget(self.scanner_note)
+        layout.addWidget(self.check_scanner_button)
+        self.show_scanner_folder("", 0)
         for button in (
             self.read_button,
             self.read_anyway_button,

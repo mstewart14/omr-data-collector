@@ -98,6 +98,7 @@ def main() -> int:
         show_step(splash, tr("Opening your forms…"))
         window = window_class(connection)
         window.show()
+        window.start_scanner_watch()
         splash.finish(window)
         preload_engine_later()
         return app.exec()

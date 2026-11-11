@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from omr_data_collector.i18n import tr
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # Each entry upgrades the schema by one version; SQLite's user_version records how
 # many have run. Append new migrations, never edit old ones: databases in the field
@@ -155,6 +152,14 @@ def open_database(path: Path) -> sqlite3.Connection:
     connection.execute("PRAGMA foreign_keys = ON")
     migrate(connection)
     return connection
+
+
+def database_file(connection: sqlite3.Connection) -> Path:
+    """The file ``connection`` has open: to open another connection to it."""
+    row = connection.execute(
+        "SELECT file FROM pragma_database_list WHERE name = 'main'"
+    ).fetchone()
+    return Path(row[0])
 
 
 def migrate(connection: sqlite3.Connection) -> None:
