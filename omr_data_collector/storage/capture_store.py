@@ -54,8 +54,12 @@ def file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def add_capture(connection: sqlite3.Connection, source: Path) -> Capture:
+def add_capture(
+    connection: sqlite3.Connection, source: Path, name: str | None = None
+) -> Capture:
     """Copy the image at ``source`` into the captures folder, waiting to be read.
+
+    ``name`` is what to call it (a PDF's page, say); by default its file name.
 
     Raises:
         DuplicateCaptureError: The same image (byte for byte) was added before.
@@ -72,7 +76,7 @@ def add_capture(connection: sqlite3.Connection, source: Path) -> Capture:
     capture = Capture(
         capture_id=capture_id,
         file_name=f"{capture_id}{source.suffix.lower()}",
-        original_name=source.name,
+        original_name=source.name if name is None else name,
         content_hash=content_hash,
     )
     destination = image_path(connection, capture)

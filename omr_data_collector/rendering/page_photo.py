@@ -2,20 +2,22 @@
 
 For the installer self-check (``self_check``) and the tests that scan sheets:
 the page on a grey background at a chosen resolution, with bubbles filled in
-as a pen would.
+as a pen would, and pictures put in a PDF as a phone scanning app saves them.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtCore import QMarginsF, QPointF, QSizeF, Qt
+from PySide6.QtGui import QColor, QImage, QPageSize, QPainter, QPdfWriter
 
 from omr_data_collector.layout.page_setup import PAGE_MARGIN_MM
 from omr_data_collector.rendering.page_painter import paint_page
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from omr_data_collector.layout.form_layout import FormLayout, PageLayout
     from omr_data_collector.models.Form import Form
     from omr_data_collector.models.Organization import Organization
@@ -79,3 +81,34 @@ def fill_bubble(
     mark begun but not finished does.
     """
     painter.drawEllipse(QPointF(x_mm, y_mm), radius_mm, radius_mm)
+
+
+def save_as_pdf(path: Path, *pictures: Path, dpi: int = 300) -> Path:
+    """Put each picture on a page of its own size in a PDF, as scanning apps do.
+
+    At ``dpi``, so a page drawn back at that resolution is the picture's size.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = QPdfWriter(str(path))
+    writer.setResolution(dpi)
+    painter = QPainter()
+    for number, picture in enumerate(pictures):
+        image = QImage(str(picture))
+        if image.isNull():
+            msg = f"couldn't open {picture}"
+            raise OSError(msg)
+        writer.setPageSize(
+            QPageSize(
+                QSizeF(image.width() / dpi, image.height() / dpi), QPageSize.Unit.Inch
+            )
+        )
+        writer.setPageMargins(QMarginsF(0, 0, 0, 0))
+        if number == 0:
+            if not painter.begin(writer):
+                msg = f"couldn't write {path}"
+                raise OSError(msg)
+        else:
+            writer.newPage()
+        painter.drawImage(0, 0, image)
+    painter.end()
+    return path

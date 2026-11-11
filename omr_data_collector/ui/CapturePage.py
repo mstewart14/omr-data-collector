@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QLocale, QObject, QStandardPaths, Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -75,6 +77,7 @@ from omr_data_collector.storage.form_store import (
     load_printed_layout,
 )
 from omr_data_collector.storage.organization_store import load_organization
+from omr_data_collector.storage.pdf_pages import PdfError, is_pdf, pdf_page_images
 from omr_data_collector.ui.accessibility import (
     announce,
     band_color,
@@ -108,7 +111,7 @@ if TYPE_CHECKING:
     from omr_data_collector.models.Capture import Capture, CapturedAnswer
     from omr_data_collector.models.Form import Form
 
-IMAGE_PATTERNS = "*.jpg *.jpeg *.png *.tif *.tiff *.bmp"
+IMAGE_PATTERNS = "*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.pdf"
 NAME_COLUMN, VALUE_COLUMN, NOTE_COLUMN = 0, 1, 2
 CLOSE_UP_HEIGHT = 140
 
@@ -273,13 +276,27 @@ def same_file(one: Path, other: Path) -> bool:
     return str(one).casefold() == str(other).casefold()
 
 
+def _images_in(path: Path, pages_dir: Path) -> list[tuple[Path, str]]:
+    """The images to add for ``path``, each with its name: a PDF's pages, or itself.
+
+    Raises:
+        PdfError: ``path`` is a PDF that couldn't be opened.
+    """
+    if not is_pdf(path):
+        return [(path, path.name)]
+    return [
+        (page.image, tr("{file}, page {page}").format(file=path.name, page=page.number))
+        for page in pdf_page_images(path, pages_dir / uuid4().hex)
+    ]
+
+
 def choose_images(parent: QWidget) -> list[Path]:
-    """Ask which photos or scans to add; none if cancelled."""
+    """Ask which photos or scans (images or PDFs) to add; none if cancelled."""
     names, _ = QFileDialog.getOpenFileNames(
         parent,
         tr("Add images of filled-in sheets"),
         "",
-        tr("Images ({patterns})").format(patterns=IMAGE_PATTERNS),
+        tr("Images and PDF scans ({patterns})").format(patterns=IMAGE_PATTERNS),
     )
     return [Path(name) for name in names]
 
@@ -390,13 +407,25 @@ class CapturePage(QWidget):
         added: list[Capture] = []
         duplicates: list[str] = []
         failed: list[str] = []
-        for path in paths:
-            try:
-                added.append(add_capture(self._connection, path))
-            except DuplicateCaptureError:
-                duplicates.append(path.name)
-            except OSError:
-                failed.append(path.name)
+        # Drawing a PDF's pages takes a moment.
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            with TemporaryDirectory() as pages_dir:
+                for path in paths:
+                    try:
+                        images = _images_in(path, Path(pages_dir))
+                    except PdfError:
+                        failed.append(path.name)
+                        continue
+                    for image, name in images:
+                        try:
+                            added.append(add_capture(self._connection, image, name))
+                        except DuplicateCaptureError:
+                            duplicates.append(name)
+                        except OSError:
+                            failed.append(name)
+        finally:
+            QApplication.restoreOverrideCursor()
         self.reload(select=added[0].capture_id if added else None)
         messages = []
         if added:

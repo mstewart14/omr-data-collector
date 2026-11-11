@@ -8,12 +8,13 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage, QImageIOHandler, QImageWriter
-from PySide6.QtWidgets import QMessageBox, QTableWidgetItem
+from PySide6.QtWidgets import QApplication, QMessageBox, QTableWidgetItem
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.layout.omr_template import page_template
 from omr_data_collector.models.Capture import Capture, CapturedAnswer
+from omr_data_collector.rendering.page_photo import save_as_pdf
 from omr_data_collector.storage.capture_store import (
     DuplicateCaptureError,
     add_capture,
@@ -287,6 +288,34 @@ def test_added_images_wait_to_be_read(
     ]
     assert page.read_button.isEnabled()
     assert not page.save_button.isEnabled()
+
+
+def test_a_pdf_scan_adds_each_page_as_a_sheet(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    photo: Path,
+    blank_image: Path,
+) -> None:
+    page = make_page(qtbot, connection)
+    scan = save_as_pdf(photo.parent / "scan.pdf", photo, blank_image)
+    broken = photo.parent / "broken.pdf"
+    broken.write_text("not a PDF")
+
+    messages = add_through_page(page, mocker, scan, broken)
+
+    assert [page.sheet_list.item(row).text() for row in range(2)] == [
+        "scan.pdf, page 1: waiting to be read",
+        "scan.pdf, page 2: waiting to be read",
+    ]
+    assert messages == [
+        "Added 2 images. Read waiting sheets reads them. Couldn't open: broken.pdf."
+    ]
+    assert QApplication.overrideCursor() is None
+
+    again = add_through_page(page, mocker, scan)
+
+    assert again == ["Already added, so skipped: scan.pdf, page 1, scan.pdf, page 2."]
 
 
 def test_reading_shows_the_sheets_answers_to_check(
