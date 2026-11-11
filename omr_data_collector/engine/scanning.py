@@ -69,6 +69,10 @@ OMR_CONFIG = {"outputs": {"show_image_level": 0, "save_image_level": 0}}
 QR_MAX_WIDTH = 2000
 # If the code isn't found at the first size, it gets another try this wide.
 QR_RETRY_WIDTH = 1200
+# A last try for a wider picture, closer to its own size: a soft scan's small
+# code (a phone scanning app's PDF page) may read only at about full size.
+# Capped well below the sizes that can run for minutes.
+QR_LAST_WIDTH = 3000
 # The first step of straightening, finding the sheet's edges against what it
 # lies on, fails on a scan (no background) or a cluttered one; the page is then
 # straightened on its corner markers alone.
@@ -153,6 +157,8 @@ def find_form_code(image: np.ndarray) -> FoundCode:
     sizes = [min(width, QR_MAX_WIDTH)]
     if width > QR_RETRY_WIDTH:
         sizes.append(QR_RETRY_WIDTH)
+    if width > QR_MAX_WIDTH:
+        sizes.append(min(width, QR_LAST_WIDTH))
     if width < QR_MAX_WIDTH:
         # Codes whose squares are only a few pixels wide are often missed;
         # enlarged, a small or soft photo's code often reads.

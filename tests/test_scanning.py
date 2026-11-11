@@ -12,8 +12,13 @@ import pytest
 from PySide6.QtGui import QColor
 
 from omr_data_collector.constants import ANSWER_TYPES
+from omr_data_collector.engine import scanning
 from omr_data_collector.engine.scanning import (
+    QR_LAST_WIDTH,
+    QR_MAX_WIDTH,
+    QR_RETRY_WIDTH,
     ScanError,
+    find_form_code,
     read_sheet_identity,
     scan_sheet,
 )
@@ -46,6 +51,8 @@ from omr_data_collector.storage.form_store import (
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+    from pytest_mock import MockerFixture
 
     from omr_data_collector.layout.form_layout import (
         FormLayout,
@@ -558,3 +565,24 @@ def test_a_table_fitted_to_the_page_width_scans_back(
     assert answers[2, 0, 2] == ("referral",)
     assert answers[2, 1, 1] == ("y",)
     assert all(not answer.problem for answer in page.answers)
+
+
+def test_a_wide_scans_qr_code_gets_a_last_try_near_full_size(
+    mocker: MockerFixture,
+) -> None:
+    """A phone scanning app's PDF page: its soft, small code read only at 2550 px."""
+    tried: list[int] = []
+
+    def not_found(gray: np.ndarray, _scale: float = 1.0) -> None:
+        tried.append(gray.shape[1])
+
+    mocker.patch.object(scanning, "_form_code_in", side_effect=not_found)
+
+    with pytest.raises(ScanError):
+        find_form_code(np.full((2072, 2550), 255, dtype=np.uint8))
+    assert tried == [QR_MAX_WIDTH, QR_RETRY_WIDTH, 2550]
+
+    tried.clear()
+    with pytest.raises(ScanError):
+        find_form_code(np.full((3000, 4000), 255, dtype=np.uint8))
+    assert tried[-1] == QR_LAST_WIDTH
