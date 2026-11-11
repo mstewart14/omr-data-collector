@@ -1,9 +1,9 @@
 """A check that an installed copy of the app can print and read a sheet.
 
 ``omr-data-collector --self-check [report]`` lays out a one-question form, draws
-it filled in as a photo would show it, and scans it, in a throwaway folder. That
-runs Qt's drawing, the QR code, OpenCV and OMRChecker from wherever the app was
-installed, so the installer builds use it to fail on a missing library rather
+it filled in as a photo would show it, saves that as a PDF scan and scans the
+PDF's page, in a throwaway folder. That runs Qt's drawing and PDF reading, the
+QR code, OpenCV and OMRChecker from wherever the app was installed, so the installer builds use it to fail on a missing library rather
 than on someone's computer. It exits 0 when the answer reads back, 1 otherwise,
 and writes what happened to ``report`` if given: a windowed app has no console.
 """
@@ -24,10 +24,15 @@ from omr_data_collector.models.AnswerSpec import AnswerSpec, Choice
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.models.Question import Question
-from omr_data_collector.rendering.page_photo import begin_page_photo, fill_bubble
+from omr_data_collector.rendering.page_photo import (
+    begin_page_photo,
+    fill_bubble,
+    save_as_pdf,
+)
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.storage.form_store import mark_printed, save_form
 from omr_data_collector.storage.organization_store import save_organization
+from omr_data_collector.storage.pdf_pages import PAGE_DPI, pdf_page_images
 
 if TYPE_CHECKING:
     from omr_data_collector.layout.form_layout import FormLayout
@@ -104,14 +109,25 @@ def check(folder: Path) -> str:
         mark_printed(connection, form.form_id, form.version, printed_layout(layout))
         photo = folder / "sheet.png"
         _draw_filled_in(form, organization, layout, photo)
-        page = scan_sheet(connection, photo, organization.paper_size, folder / "work")
+        # Read from a PDF, as Capture reads a phone scanning app's.
+        scan = save_as_pdf(folder / "scan.pdf", photo, dpi=PAGE_DPI)
+        pages = pdf_page_images(scan, folder / "pages")
+        if len(pages) != 1:
+            msg = f"the PDF scan has {len(pages)} pages, not 1"
+            raise SelfCheckError(msg)
+        page = scan_sheet(
+            connection, pages[0].image, organization.paper_size, folder / "work"
+        )
     finally:
         connection.close()
     values = page.answers[0].values
     if values != (CHOICES[MARKED],):
         msg = f"read {values!r} where {CHOICES[MARKED]!r} was marked"
         raise SelfCheckError(msg)
-    return f"version {version} read {values!r} from form {page.identity.form_id}"
+    return (
+        f"version {version} read {values!r} from form {page.identity.form_id}"
+        " on a PDF scan's page"
+    )
 
 
 def run(report: Path | None) -> int:
