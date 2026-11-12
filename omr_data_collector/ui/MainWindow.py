@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QLocale, QSize, Qt
+from PySide6.QtCore import QLocale, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
@@ -34,6 +34,7 @@ from omr_data_collector.ui.app_font import (
     save_text_size,
     saved_text_size,
 )
+from omr_data_collector.ui.busy_status import BusyStatus
 from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.font_choices import points
 from omr_data_collector.ui.form_helpers import ask_save_discard_cancel, finish_editing
@@ -58,6 +59,10 @@ if TYPE_CHECKING:
     from omr_data_collector.ui.LibraryPage import LibraryPage
 
 STATUS_MESSAGE_TIMEOUT_MS = 5000
+# The background work the status bar shows (BusyStatus keys).
+ENGINE_WORK = "engine"
+SCANNER_WORK = "scanner"
+SETTLING_WORK = "settling"
 MNEMONIC = re.compile(r"&([^&])")
 
 
@@ -115,6 +120,9 @@ class MainWindow(QMainWindow):
     and ``initial_focus`` (the control that gets focus when the page is opened).
     """
 
+    # From the engine-loading thread to the window: the loading has ended.
+    _engine_loaded = Signal()
+
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
         self.resize(_initial_size())
@@ -148,7 +156,12 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stack)
         # Started by start_scanner_watch once the window shows.
         self.scanner_watch = ScannerWatch(connection, self)
+        self.scanner_watch.started.connect(self._on_scanner_check_started)
         self.scanner_watch.checked.connect(self._on_scanner_checked)
+        # Background work shows at the right of the status bar while it goes on.
+        self.busy = BusyStatus(self)
+        self.statusBar().addPermanentWidget(self.busy)
+        self._engine_loaded.connect(lambda: self.busy.end(ENGINE_WORK))
         self.capture_page.check_scanner_requested.connect(self.check_scanner_now)
         self._build_menus()
         self.forms_page.organization_needed.connect(
@@ -449,6 +462,7 @@ class MainWindow(QMainWindow):
         if chosen is None:
             return
         save_scanner_settings(chosen)
+        self.busy.end(SETTLING_WORK)
         # A newly chosen folder is checked at once.
         self.scanner_watch.apply(chosen)
         self._show_scanner_folder()
@@ -466,7 +480,11 @@ class MainWindow(QMainWindow):
     def check_scanner_now(self) -> None:
         """Check the scanner folder at once; the result comes as a status message."""
         problem = self.scanner_watch.check_now()
-        self.show_status(problem or tr("Checking the scanner folder…"))
+        if problem:
+            self.show_status(problem)
+        else:
+            # The status bar's busy sign shows it; screen readers are told.
+            announce(self, tr("Checking the scanner folder…"))
 
     def _show_scanner_folder(self) -> None:
         settings = self.scanner_watch.settings
@@ -474,7 +492,27 @@ class MainWindow(QMainWindow):
             settings.folder if settings.enabled else "", settings.check_minutes
         )
 
+    def show_engine_loading(self) -> Callable[[], None]:
+        """Show the engine is loading; call what this gives back, from any thread, once it has."""
+        self.busy.begin(ENGINE_WORK, tr("Loading the reading engine…"))
+        return self._engine_loaded.emit
+
+    def _on_scanner_check_started(self, _asked: bool) -> None:  # noqa: FBT001 (a signal's arguments)
+        self.busy.end(SETTLING_WORK)
+        self.busy.begin(SCANNER_WORK, tr("Checking the scanner folder…"))
+
     def _on_scanner_checked(self, result: FolderCheck, asked: bool) -> None:  # noqa: FBT001 (a signal's arguments)
+        self.busy.end(SCANNER_WORK)
+        # Scans left to finish saving are taken at a check in about a minute.
+        if result.still_saving and self.scanner_watch.settings.enabled:
+            self.busy.begin(
+                SETTLING_WORK,
+                tr(
+                    "Waiting for %n scan(s) to finish saving…",
+                    None,
+                    result.still_saving,
+                ),
+            )
         if result.added:
             self.capture_page.refresh_sheets()
         message = check_summary(result, asked=asked)

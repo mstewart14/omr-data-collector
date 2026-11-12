@@ -283,10 +283,10 @@
             </translation>
         </message>
         <message numerus="yes">
-            <source>%n scan(s) may still be being saved; they will be added in a minute or so.</source>
+            <source>Found %n new scan(s): they'll be added in about a minute, once they've surely finished saving.</source>
             <translation>
-                <numerusform>%n scan may still be being saved; they will be added in a minute or so.</numerusform>
-                <numerusform>%n scans may still be being saved; they will be added in a minute or so.</numerusform>
+                <numerusform>Found %n new scan: they'll be added in about a minute, once they've surely finished saving.</numerusform>
+                <numerusform>Found %n new scans: they'll be added in about a minute, once they've surely finished saving.</numerusform>
             </translation>
         </message>
         <message numerus="yes">
@@ -336,6 +336,13 @@
             <translation>
                 <numerusform>Scans saved in {folder} will be added every %n minute while the app is open.</numerusform>
                 <numerusform>Scans saved in {folder} will be added every %n minutes while the app is open.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Waiting for %n scan(s) to finish saving…</source>
+            <translation>
+                <numerusform>Waiting for %n scan to finish saving…</numerusform>
+                <numerusform>Waiting for %n scans to finish saving…</numerusform>
             </translation>
         </message>
     </context>

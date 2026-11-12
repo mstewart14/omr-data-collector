@@ -98,7 +98,7 @@ def test_main_starts_loading_the_engine_once_the_window_shows(
     mocker.patch.object(
         app,
         "preload_engine_later",
-        side_effect=lambda: window_shown_first.append(windows[0].isVisible()),
+        side_effect=lambda **_: window_shown_first.append(windows[0].isVisible()),
     )
 
     app.main()

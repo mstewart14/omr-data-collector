@@ -301,8 +301,8 @@ def check_summary(result: FolderCheck, *, asked: bool) -> str:
     if result.still_saving and (asked or parts):
         parts.append(
             tr(
-                "%n scan(s) may still be being saved; they will be added in a "
-                "minute or so.",
+                "Found %n new scan(s): they'll be added in about a minute, once "
+                "they've surely finished saving.",
                 None,
                 result.still_saving,
             )

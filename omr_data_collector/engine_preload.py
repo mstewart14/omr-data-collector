@@ -15,32 +15,46 @@ from __future__ import annotations
 
 import importlib
 import threading
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ENGINE_MODULE = "omr_data_collector.engine.reading"
 # Long enough for the window to finish drawing before the loading competes with it.
 PRELOAD_DELAY_MS = 1000
 
 
-def preload_engine_later(delay_ms: int = PRELOAD_DELAY_MS) -> None:
-    """Start loading the engine on a thread once the event loop has run a while."""
-    QTimer.singleShot(delay_ms, start_engine_preload)
+def preload_engine_later(
+    delay_ms: int = PRELOAD_DELAY_MS, *, on_done: Callable[[], None] | None = None
+) -> None:
+    """Start loading the engine on a thread once the event loop has run a while.
+
+    ``on_done`` is called on that thread once the loading ends, however it ends.
+    """
+    QTimer.singleShot(delay_ms, lambda: start_engine_preload(on_done=on_done))
 
 
-def start_engine_preload(module: str = ENGINE_MODULE) -> threading.Thread:
+def start_engine_preload(
+    module: str = ENGINE_MODULE, *, on_done: Callable[[], None] | None = None
+) -> threading.Thread:
     # A daemon, so closing the app soon after it opens never waits for the loading.
     thread = threading.Thread(
-        target=_load, args=(module,), name="engine-preload", daemon=True
+        target=_load, args=(module, on_done), name="engine-preload", daemon=True
     )
     thread.start()
     return thread
 
 
-def _load(module: str) -> None:
+def _load(module: str, on_done: Callable[[], None] | None) -> None:
     try:
         importlib.import_module(module)
-    except Exception:
-        # Nothing to report here: the screen that needs the engine imports it
-        # again, and that is where a failure shows, with its reason.
-        return
+    except Exception:  # noqa: S110 (nothing to report here)
+        # The screen that needs the engine imports it again, and that is where
+        # a failure shows, with its reason.
+        pass
+    finally:
+        if on_done is not None:
+            on_done()

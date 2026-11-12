@@ -281,7 +281,8 @@ def test_only_an_asked_for_check_reports_finding_nothing() -> None:
     )
     assert check_summary(FolderCheck(still_saving=1), asked=False) == ""
     assert check_summary(FolderCheck(still_saving=2), asked=True) == (
-        "2 scans may still be being saved; they will be added in a minute or so."
+        "Found 2 new scans: they'll be added in about a minute, once they've "
+        "surely finished saving."
     )
 
 
@@ -298,10 +299,14 @@ def test_the_watch_checks_on_a_thread_and_reports_back(
     watch = ScannerWatch(connection)
     watch.apply(ScannerSettings(str(folder)), first_check_ms=60_000)
 
-    with qtbot.waitSignal(watch.checked, timeout=60_000) as signal:
+    with (
+        qtbot.waitSignal(watch.started) as started,
+        qtbot.waitSignal(watch.checked, timeout=60_000) as signal,
+    ):
         assert watch.check_now() == ""
         assert watch.check_now() == "The scanner folder is being checked already."
 
+    assert started.args == [True]
     assert signal.args is not None
     result, asked = signal.args
     assert asked

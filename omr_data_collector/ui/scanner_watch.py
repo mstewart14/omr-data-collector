@@ -38,10 +38,12 @@ STOP_WAIT_S = 30.0
 class ScannerWatch(QObject):
     """Checks the scanner folder on a timer, and when asked (Check now).
 
-    ``checked`` carries each check's ``FolderCheck`` and whether someone asked
-    for it. Call ``start`` once the window shows, and ``stop`` when it closes.
+    ``started`` says a check has begun; ``checked`` carries each check's
+    ``FolderCheck`` and whether someone asked for it. Call ``start`` once the window shows, and ``stop`` when it closes.
     """
 
+    # A check has begun, and whether someone asked for it.
+    started = Signal(bool)
     checked = Signal(object, bool)
     # From the checking thread to this object's own (the window's).
     _finished = Signal(object, bool)
@@ -108,6 +110,7 @@ class ScannerWatch(QObject):
             daemon=True,
         )
         self._thread.start()
+        self.started.emit(asked)
 
     def _run(self, settings: ScannerSettings, asked: bool) -> None:  # noqa: FBT001 (a thread's arguments)
         result = FolderCheck()

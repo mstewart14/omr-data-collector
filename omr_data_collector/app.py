@@ -134,7 +134,7 @@ def main() -> int:
         window.show()
         window.start_scanner_watch()
         splash.finish(window)
-        preload_engine_later()
+        preload_engine_later(on_done=window.show_engine_loading())
         return app.exec()
     finally:
         connection.close()
