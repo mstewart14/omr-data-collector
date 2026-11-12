@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QMessageBox
 
-from omr_data_collector import APP_NAME
+from omr_data_collector import APP_NAME, app
 from omr_data_collector.app import open_app_database
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.storage.organization_store import (
@@ -240,3 +240,61 @@ def test_a_database_that_cant_be_opened_is_explained(
     assert title == "Couldn't open the app's data"
     assert "newer version of the app" in message
     assert options["icon"] == QMessageBox.Icon.Critical
+
+
+def test_a_database_that_cant_open_yet_is_tried_again(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    # A first launch on Windows: the antivirus holds the new file for a moment.
+    real_open = app.open_database
+    attempts = mocker.patch.object(
+        app,
+        "open_database",
+        side_effect=[
+            sqlite3.OperationalError("database is locked"),
+            OSError("in use"),
+            real_open(tmp_path / "data.sqlite3"),
+        ],
+    )
+    mocker.patch.object(app, "OPEN_RETRY_MS", 1)
+    critical = mocker.patch("omr_data_collector.app.warn")
+
+    connection = open_app_database(tmp_path / "data.sqlite3")
+
+    assert connection is not None
+    connection.close()
+    assert attempts.call_count == 3
+    critical.assert_not_called()
+
+
+def test_a_database_that_stays_locked_is_reported_after_the_splash_closes(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    mocker.patch.object(
+        app, "open_database", side_effect=sqlite3.OperationalError("locked")
+    )
+    mocker.patch.object(app, "OPEN_PATIENCE_S", 0.05)
+    mocker.patch.object(app, "OPEN_RETRY_MS", 1)
+    order: list[str] = []
+    mocker.patch(
+        "omr_data_collector.app.warn", side_effect=lambda *_, **__: order.append("warn")
+    )
+
+    result = open_app_database(
+        tmp_path / "data.sqlite3", before_message=lambda: order.append("close")
+    )
+
+    assert result is None
+    assert order == ["close", "warn"]
+
+
+def test_a_newer_apps_database_is_reported_without_waiting(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    newer = tmp_path / "newer.sqlite3"
+    sqlite3.connect(newer).execute("PRAGMA user_version = 999").connection.close()
+    wait = mocker.patch.object(app, "_wait")
+    mocker.patch("omr_data_collector.app.warn")
+
+    assert open_app_database(newer) is None
+    wait.assert_not_called()
