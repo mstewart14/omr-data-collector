@@ -54,6 +54,8 @@ MAX_CHECK_MINUTES = 60
 # A file is taken once it hasn't changed for this long: a scanner saving a long
 # PDF to a network folder writes it bit by bit.
 SETTLE_SECONDS = 60
+# How far ahead a file's time may be before it's taken to be wrong.
+CLOCK_SLACK_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -134,11 +136,26 @@ def files_to_take(folder: Path, now: float | None = None) -> tuple[list[Path], i
     for path in sorted(folder.iterdir()):
         if path.name.startswith(".") or not is_scan(path) or not path.is_file():
             continue
-        if now - path.stat().st_mtime < SETTLE_SECONDS:
+        if now - last_changed(path, now) < SETTLE_SECONDS:
             saving += 1
         else:
             ready.append(path)
     return ready, saving
+
+
+def last_changed(path: Path, now: float) -> float:
+    """When ``path`` last changed, as far as can be told.
+
+    Unzipped and copied files keep the time they were changed elsewhere, and
+    another computer's clock, or a zip's lack of time zones, can put that time
+    hours ahead. Such a file would never seem finished, so it's judged by when
+    it arrived here instead: its status change (Linux, macOS) or creation
+    (Windows) time.
+    """
+    status = path.stat()
+    if status.st_mtime <= now + CLOCK_SLACK_SECONDS:
+        return status.st_mtime
+    return min(status.st_ctime, now)
 
 
 def move_aside(path: Path, folder_name: str, now: datetime | None = None) -> Path:

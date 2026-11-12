@@ -146,6 +146,17 @@ def test_only_finished_scans_at_the_top_of_the_folder_are_taken(folder: Path) ->
     assert len(files_to_take(folder, later)[0]) == 3
 
 
+def test_a_scan_dated_in_the_future_is_still_taken(folder: Path) -> None:
+    # Unzipped from a computer whose clock is hours ahead: it arrived just now.
+    scan = drop(folder, "unzipped.jpg", b"jpeg")
+    ahead = time.time() + 7 * AN_HOUR
+    os.utime(scan, (ahead, ahead))
+
+    assert files_to_take(folder) == ([], 1)
+    later = time.time() + SETTLE_SECONDS + 1
+    assert files_to_take(folder, later) == ([scan], 0)
+
+
 def test_a_file_moved_aside_never_replaces_one_there(folder: Path) -> None:
     when = datetime(2026, 11, 11, 14, 5, 9).astimezone()
     first = move_aside(drop(folder, "scan.pdf", b"1"), "Added", when)
