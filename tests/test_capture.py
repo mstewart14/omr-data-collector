@@ -461,6 +461,115 @@ def test_removing_a_sheet_asks_first(
     assert page.empty_note.isVisibleTo(page)
 
 
+def blank_images(folder: Path, count: int) -> list[Path]:
+    """``count`` different blank pictures (different, so none is a duplicate)."""
+    import cv2  # noqa: PLC0415 (only this helper draws with it)
+
+    folder.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for number in range(count):
+        path = folder / f"blank {number}.png"
+        cv2.imwrite(str(path), np.full((400, 300 + number), 255, dtype=np.uint8))
+        paths.append(path)
+    return paths
+
+
+def test_several_chosen_sheets_are_removed_together(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, *blank_images(tmp_path / "upload", 4))
+    confirm = mocker.patch(
+        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=True
+    )
+    messages: list[str] = []
+    page.status_message.connect(messages.append)
+    page.sheet_list.setCurrentRow(0)
+    assert page.remove_button.text() == "Remo&ve sheet"
+
+    page.sheet_list.item(2).setSelected(True)
+
+    assert [c.original_name for c in page.chosen_sheets()] == [
+        "blank 0.png",
+        "blank 2.png",
+    ]
+    assert page.remove_button.text() == "Remo&ve 2 sheets"
+    page.remove_sheet()
+
+    question = confirm.call_args.args[2]
+    assert "Remove these 2 sheets" in question
+    assert "blank 0.png\nblank 2.png" in question
+    assert [c.original_name for c in list_captures(connection)] == [
+        "blank 1.png",
+        "blank 3.png",
+    ]
+    assert messages[-1] == "Removed 2 sheets."
+    # The sheet in the first removed one's place is shown.
+    assert page.sheet_list.currentItem().text().startswith("blank 1.png")
+
+
+def test_removing_other_sheets_keeps_the_one_shown(
+    qtbot: QtBot,
+    connection: sqlite3.Connection,
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, *blank_images(tmp_path / "upload", 3))
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=True
+    )
+    page.sheet_list.setCurrentRow(1)
+    # Ctrl+clicks: the others chosen, and the one shown let go of but still current.
+    page.sheet_list.item(0).setSelected(True)
+    page.sheet_list.item(2).setSelected(True)
+    page.sheet_list.item(1).setSelected(False)
+    assert page.sheet_list.currentRow() == 1
+
+    page.remove_sheet()
+
+    assert [c.original_name for c in list_captures(connection)] == ["blank 1.png"]
+    assert page.sheet_list.count() == 1
+    assert page.sheet_list.currentRow() == 0
+    assert page.sheet_list.currentItem().text().startswith("blank 1.png")
+
+
+def test_a_removed_sheet_can_be_added_again(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture, photo: Path
+) -> None:
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, photo)
+    mocker.patch(
+        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=True
+    )
+    page.remove_sheet()
+
+    add_through_page(page, mocker, photo)
+
+    assert [c.original_name for c in list_captures(connection)] == ["photo.jpg"]
+
+
+def test_delete_in_the_sheet_list_removes_the_chosen_sheets(
+    qtbot: QtBot, connection: sqlite3.Connection, mocker: MockerFixture, photo: Path
+) -> None:
+    page = make_page(qtbot, connection)
+    add_through_page(page, mocker, photo)
+    confirm = mocker.patch(
+        "omr_data_collector.ui.CapturePage.confirm_destructive", return_value=True
+    )
+    page.show()
+    page.sheet_list.setFocus()
+    qtbot.waitUntil(page.sheet_list.hasFocus)
+
+    qtbot.keyClick(page.sheet_list, Qt.Key.Key_Delete)
+
+    confirm.assert_called_once()
+    assert list_captures(connection) == []
+
+
 def test_leaving_a_sheet_with_changes_asks_about_them(
     qtbot: QtBot,
     connection: sqlite3.Connection,

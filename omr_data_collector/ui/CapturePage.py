@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QLocale, QObject, QStandardPaths, Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -279,6 +279,19 @@ def same_file(one: Path, other: Path) -> bool:
     return str(one).casefold() == str(other).casefold()
 
 
+# How many sheets' names a question lists before saying how many more.
+NAMES_LISTED = 10
+
+
+def sheet_names(captures: list[Capture]) -> list[str]:
+    """The sheets' file names, one a line, up to NAMES_LISTED then how many more."""
+    names = [capture.original_name for capture in captures[:NAMES_LISTED]]
+    more = len(captures) - NAMES_LISTED
+    if more > 0:
+        names.append(tr("and %n more", None, more))
+    return names
+
+
 def choose_images(parent: QWidget) -> list[Path]:
     """Ask which photos or scans (images or PDFs) to add; none if cancelled."""
     names, _ = QFileDialog.getOpenFileNames(
@@ -333,6 +346,12 @@ class CapturePage(QWidget):
         layout.addWidget(splitter)
 
         self.shortcuts = [add_shortcut(self, "Ctrl+S", self.save_data)]
+        remove_shortcut = add_shortcut(
+            self.sheet_list, QKeySequence.StandardKey.Delete, self.remove_sheet
+        )
+        # Only from the list: elsewhere, Delete deletes text.
+        remove_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self.shortcuts.append(remove_shortcut)
         self.initial_focus: QWidget = self.sheet_list
         QWidget.setTabOrder(self.sheet_list, self.add_button)
         for before, after in (
@@ -714,29 +733,66 @@ class CapturePage(QWidget):
             )
         return choices
 
+    def chosen_sheets(self) -> list[Capture]:
+        """The sheets chosen in the list, in its order; else the one shown."""
+        rows = sorted(index.row() for index in self.sheet_list.selectedIndexes())
+        chosen = [self._captures[row] for row in rows if row < len(self._captures)]
+        if chosen:
+            return chosen
+        return [self._current] if self._current is not None else []
+
     def remove_sheet(self) -> None:
-        capture = self._current
-        if capture is None:
+        """Remove the chosen sheets, asking first (Delete in the list does too).
+
+        A removed sheet is gone from the app, so the same picture can be added
+        again, by hand or from the scanner folder.
+        """
+        doomed = self.chosen_sheets()
+        if not doomed:
             return
-        if not confirm_destructive(
-            self,
-            tr("Remove sheet"),
-            tr(
+        if len(doomed) == 1:
+            title = tr("Remove sheet")
+            question = tr(
                 'Remove "{file}" and any data checked from it? This can\'t be undone.'
-            ).format(file=capture.original_name),
-            tr("Remove"),
-        ):
+            ).format(file=doomed[0].original_name)
+        else:
+            title = tr("Remove sheets")
+            question = (
+                tr(
+                    "Remove these %n sheets and any data checked from them? This "
+                    "can't be undone.",
+                    None,
+                    len(doomed),
+                )
+                + "\n\n"
+                + "\n".join(sheet_names(doomed))
+            )
+        if not confirm_destructive(self, title, question, tr("Remove")):
             return
-        row = self.sheet_list.currentRow()
-        delete_capture(self._connection, capture)
-        self._current = None
-        self._answers = []
-        remaining = [c for c in self._captures if c.capture_id != capture.capture_id]
-        neighbour = remaining[min(row, len(remaining) - 1)] if remaining else None
-        self.reload(select=neighbour.capture_id if neighbour else None)
-        self.status_message.emit(
-            tr('Removed "{file}".').format(file=capture.original_name)
+        doomed_ids = {capture.capture_id for capture in doomed}
+        first_row = min(
+            row
+            for row, capture in enumerate(self._captures)
+            if capture.capture_id in doomed_ids
         )
+        for capture in doomed:
+            delete_capture(self._connection, capture)
+        remaining = [c for c in self._captures if c.capture_id not in doomed_ids]
+        if self._current is not None and self._current.capture_id in doomed_ids:
+            self._current = None
+            self._answers = []
+            neighbour = (
+                remaining[min(first_row, len(remaining) - 1)] if remaining else None
+            )
+            self.reload(select=neighbour.capture_id if neighbour else None)
+        else:
+            # The sheet shown stays, with anything typed on it.
+            self.refresh_sheets()
+        if len(doomed) == 1:
+            message = tr('Removed "{file}".').format(file=doomed[0].original_name)
+        else:
+            message = tr("Removed %n sheets.", None, len(doomed))
+        self.status_message.emit(message)
 
     # --- Checking (wiki 60004) ------------------------------------------------
 
@@ -799,7 +855,18 @@ class CapturePage(QWidget):
     def _build_sheets_box(self) -> QGroupBox:
         box = QGroupBox(tr("Sheets"))
         self.sheet_list = QListWidget()
+        # Several sheets can be chosen at once, to remove them together.
+        self.sheet_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        self.sheet_list.setAccessibleDescription(
+            tr(
+                "Hold Shift or Ctrl to choose several sheets, or press Ctrl+A to "
+                "choose them all."
+            )
+        )
         self.sheet_list.currentRowChanged.connect(self._on_sheet_chosen)
+        self.sheet_list.itemSelectionChanged.connect(self._update_buttons)
         list_label = QLabel(tr("S&heets"))
         list_label.setBuddy(self.sheet_list)
         self.empty_note = QLabel(
@@ -1266,7 +1333,14 @@ class CapturePage(QWidget):
             and self._current.status != CAPTURE_STATUSES.REJECTED
         )
         self.revert_button.setEnabled(self.has_unsaved_changes())
-        self.remove_button.setEnabled(self._current is not None)
+        chosen = len(self.chosen_sheets())
+        self.remove_button.setEnabled(chosen > 0)
+        self.remove_button.setText(
+            tr("Remo&ve %n sheet(s)", None, chosen)
+            if chosen > 1
+            else tr("Remo&ve sheet")
+        )
+        self.remove_button.setToolTip(tr("Remove the chosen sheets (Delete key)"))
         self.read_button.setEnabled(
             any(c.status == CAPTURE_STATUSES.WAITING for c in self._captures)
         )

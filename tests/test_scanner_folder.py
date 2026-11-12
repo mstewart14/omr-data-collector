@@ -23,7 +23,11 @@ from omr_data_collector.scanner_folder import (
     move_aside,
     save_scanner_settings,
 )
-from omr_data_collector.storage.capture_store import add_capture, list_captures
+from omr_data_collector.storage.capture_store import (
+    add_capture,
+    delete_capture,
+    list_captures,
+)
 from omr_data_collector.ui.CapturePage import CapturePage
 from omr_data_collector.ui.MainWindow import MainWindow
 from omr_data_collector.ui.scanner_watch import ScannerWatch
@@ -215,6 +219,22 @@ def test_scans_can_be_left_waiting_to_be_read(
     (capture,) = result.added
     assert capture.status == CAPTURE_STATUSES.WAITING
     assert result.read == 0
+
+
+def test_a_scan_whose_sheet_was_removed_is_taken_again(
+    connection: sqlite3.Connection, folder: Path, pictures: tuple[Path, Path]
+) -> None:
+    drop(folder, "photo.jpg", pictures[0].read_bytes())
+    settings = ScannerSettings(str(folder), read_automatically=False)
+    (capture,) = check_folder(connection, settings).added
+    delete_capture(connection, capture)
+    # Put back in the scanner folder from Added.
+    (folder / "Added" / "photo.jpg").rename(folder / "photo.jpg")
+
+    result = check_folder(connection, settings)
+
+    assert [c.original_name for c in result.added] == ["photo.jpg"]
+    assert result.duplicates == []
 
 
 def test_a_scan_added_before_is_moved_to_added_too(

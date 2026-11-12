@@ -234,6 +234,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>and %n more</source>
+            <translation>
+                <numerusform>and %n more</numerusform>
+                <numerusform>and %n more</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>Scans saved in {folder} are added every %n minute(s) while the app is open.</source>
             <translation>
                 <numerusform>Scans saved in {folder} are added every %n minute while the app is open.</numerusform>
@@ -304,6 +311,20 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>Remove these %n sheets and any data checked from them? This can't be undone.</source>
+            <translation>
+                <numerusform>Remove these %n sheets and any data checked from them? This can't be undone.</numerusform>
+                <numerusform>Remove these %n sheets and any data checked from them? This can't be undone.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Removed %n sheets.</source>
+            <translation>
+                <numerusform>Removed %n sheets.</numerusform>
+                <numerusform>Removed %n sheets.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>%n answer(s) to fix before saving.</source>
             <translation>
                 <numerusform>%n answer to fix before saving.</numerusform>
@@ -315,6 +336,13 @@
             <translation>
                 <numerusform>Press 1 to %n to choose.</numerusform>
                 <numerusform>Press 1 to %n to choose.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
+            <source>Remo&amp;ve %n sheet(s)</source>
+            <translation>
+                <numerusform>Remo&amp;ve %n sheet</numerusform>
+                <numerusform>Remo&amp;ve %n sheets</numerusform>
             </translation>
         </message>
         <message numerus="yes">
