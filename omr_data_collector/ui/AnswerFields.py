@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -190,6 +191,7 @@ class AnswerFields:
         self.check_digit_combo.setToolTip(
             tr("The last digit of each ID is checked, catching most mistyped IDs")
         )
+        self.not_entered_check = _not_entered_check()
 
         for key, label_text, widget in (
             ("answer_type", tr("&Kind of answer"), self.answer_type_combo),
@@ -217,6 +219,7 @@ class AnswerFields:
                 form, label_text, widget
             )
             field_widgets[key] = widget
+        form.addRow("", self.not_entered_check)
 
         self._connect_signals()
         self.set_spec(AnswerSpec.default(ANSWER_TYPES.YES_NO))
@@ -236,6 +239,7 @@ class AnswerFields:
             self.maximum_spin,
             self.date_format_combo,
             self.check_digit_combo,
+            self.not_entered_check,
         ]
 
     def spec(self) -> AnswerSpec:
@@ -256,6 +260,7 @@ class AnswerFields:
             number_maximum=_limit_value(self.maximum_spin),
             date_time_format=self.date_format_combo.currentData(),
             check_digit=self.check_digit_combo.currentData(),
+            entered=not self.not_entered_check.isChecked(),
         ).normalized()
 
     def set_spec(self, spec: AnswerSpec) -> None:
@@ -277,6 +282,7 @@ class AnswerFields:
             self.date_format_combo,
             self.check_digit_combo,
             self.choices_table,
+            self.not_entered_check,
         )
         blockers = [QSignalBlocker(control) for control in controls]
         _set_combo(self.answer_type_combo, spec.answer_type)
@@ -286,6 +292,7 @@ class AnswerFields:
         _set_limit(self.maximum_spin, spec.number_maximum)
         _set_combo(self.date_format_combo, spec.date_time_format)
         _set_combo(self.check_digit_combo, spec.check_digit)
+        self.not_entered_check.setChecked(not spec.entered)
         self._showing_type = spec.answer_type
         self._fill_choices_table()
         del blockers
@@ -338,6 +345,7 @@ class AnswerFields:
         for spin in (self.characters_spin, self.minimum_spin, self.maximum_spin):
             spin.valueChanged.connect(self._changed)
         self.check_digit_combo.currentIndexChanged.connect(self._changed)
+        self.not_entered_check.toggled.connect(self._changed)
         self.choices_table.itemChanged.connect(self._changed)
         self.choices_table.currentCellChanged.connect(self._update_choice_buttons)
         self.add_choice_button.clicked.connect(self.add_choice)
@@ -422,6 +430,7 @@ class AnswerFields:
             self.date_format_combo: written
             and data_type == WRITTEN_DATA_TYPES.DATE_TIME,
             self.check_digit_combo: written and data_type == WRITTEN_DATA_TYPES.ID,
+            self.not_entered_check: written,
         }
         for widget, show in visible.items():
             self._form.setRowVisible(widget, show)
@@ -464,6 +473,18 @@ class AnswerFields:
         self.remove_choice_button.setEnabled(not yes_no and row >= 0)
         self.move_up_button.setEnabled(row > 0)
         self.move_down_button.setEnabled(0 <= row < rows - 1)
+
+
+def _not_entered_check() -> QCheckBox:
+    """Wiki 60016: written on paper, but not typed in when sheets are checked."""
+    check = QCheckBox(tr("Skip w&hen entering data (on paper only)"))
+    explanation = tr(
+        "Still printed for people to fill in, but skipped when sheets are "
+        "checked and left out of exported data, on sheets already printed too"
+    )
+    check.setToolTip(explanation)
+    check.setAccessibleDescription(explanation)
+    return check
 
 
 def _combo(labels: dict[str, str]) -> QComboBox:

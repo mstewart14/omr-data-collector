@@ -31,11 +31,17 @@ from __future__ import annotations
 import csv
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from omr_data_collector.constants import ANSWER_TYPES, CAPTURE_STATUSES
+from omr_data_collector.models.answer_keys import (
+    AnswerKey,
+    answer_key,
+    answer_specs,
+    not_entered,
+)
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
@@ -255,11 +261,17 @@ def collect(
             if loaded is not None:
                 versions[version] = loaded
     ordered = [versions[number] for number in sorted(versions, reverse=True)]
-    detail_columns, question_columns, table_columns = _columns(ordered)
+    # Answers on paper only aren't exported, from sheets of any version.
+    skipped = not_entered(ordered)
+    detail_columns, question_columns, table_columns = _columns(ordered, skipped)
     used = {capture.form_version for capture in captures}
-    missing = _missing_columns(
-        [versions[number] for number in sorted(versions) if number in used]
-    )
+    missing = [
+        column
+        for column in _missing_columns(
+            [versions[number] for number in sorted(versions) if number in used]
+        )
+        if not _is_skipped(column, skipped)
+    ]
 
     combined = chosen is not None
     row_columns = [ROW_COLUMN, COMBINED_ROW_COLUMN] if combined else [ROW_COLUMN]
@@ -275,8 +287,15 @@ def collect(
         version_form = versions.get(capture.form_version or 0)
         if version_form is None:
             continue
+        entered = tuple(
+            answer
+            for answer in capture.answers
+            if answer_key(version_form, answer) not in skipped
+        )
         sheet, document = _sheet(
-            capture, version_form, _answer_specs(form) if latest_values else None
+            replace(capture, answers=entered),
+            version_form,
+            answer_specs(form) if latest_values else None,
         )
         sheets.append(
             {
@@ -541,50 +560,45 @@ def _write_rows(
         )
 
 
+def _is_skipped(column: MissingColumn, skipped: set[AnswerKey]) -> bool:
+    if column.table is not None:
+        return ("table", column.table, column.column) in skipped
+    return ("details", None, column.column) in skipped or (
+        "question",
+        None,
+        column.column,
+    ) in skipped
+
+
 def _columns(
-    versions: list[Form],
+    versions: list[Form], skipped: set[AnswerKey] | None = None
 ) -> tuple[list[str], list[str], dict[str, list[str]]]:
-    """Every sheet detail, question and table column name, latest version first."""
+    """Every sheet detail, question and table column name, latest version first.
+
+    Answers in ``skipped`` (not entered) are left out, and so is a table left
+    with no columns.
+    """
+    skipped = skipped or set()
     details: list[str] = []
     questions: list[str] = []
     tables: dict[str, list[str]] = {}
-
-    def add(names: list[str], name: str) -> None:
-        if name not in names:
-            names.append(name)
-
     for form in versions:
         for block in form.blocks:
-            content = block.content
-            if isinstance(content, SheetDetails):
-                for column in content.fields:
-                    add(details, column.name)
-            elif isinstance(content, Question):
-                add(questions, content.name)
-            elif isinstance(content, TableBlock):
-                columns = tables.setdefault(content.name, [])
-                for column in content.columns:
-                    add(columns, column.name)
-    return details, questions, tables
-
-
-AnswerKey = tuple[str, str | None, str]
-
-
-def _answer_specs(form: Form) -> dict[AnswerKey, AnswerSpec]:
-    """Each of ``form``'s answers by what it's exported as: its kind and names."""
-    specs: dict[AnswerKey, AnswerSpec] = {}
-    for block in form.blocks:
-        content = block.content
-        if isinstance(content, SheetDetails):
-            for column in content.fields:
-                specs["details", None, column.name] = column.answer
-        elif isinstance(content, Question):
-            specs["question", None, content.name] = content.answer
-        elif isinstance(content, TableBlock):
-            for column in content.columns:
-                specs["table", content.name, column.name] = column.answer
-    return specs
+            # A table is listed even if it has no rows of answers yet.
+            if isinstance(block.content, TableBlock):
+                tables.setdefault(block.content.name, [])
+        for key in answer_specs(form):
+            kind, table, name = key
+            names = (
+                details
+                if kind == "details"
+                else questions
+                if kind == "question"
+                else tables.setdefault(table or "", [])
+            )
+            if key not in skipped and name not in names:
+                names.append(name)
+    return details, questions, {name: cols for name, cols in tables.items() if cols}
 
 
 def _translated(

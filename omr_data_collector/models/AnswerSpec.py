@@ -56,6 +56,14 @@ class AnswerSpec:
     number_maximum: int | None = None
     date_time_format: str = DATE_TIME_FORMATS[0]
     check_digit: str = CHECK_DIGIT_SCHEMES.NONE
+    # A written answer can be on paper only (wiki 60016): printed for people to
+    # fill in, but skipped when sheets are checked and left out of the data.
+    entered: bool = True
+
+    @property
+    def is_entered(self) -> bool:
+        """Whether it's checked and exported: unless written and not entered."""
+        return self.entered or self.answer_type != ANSWER_TYPES.WRITTEN
 
     @classmethod
     def default(cls, answer_type: str) -> AnswerSpec:
@@ -205,6 +213,9 @@ class AnswerSpec:
             ]
             return data
         data["dataType"] = self.data_type
+        # Only written when off, so answers stored before it are unchanged.
+        if not self.entered:
+            data["entered"] = False
         if self.data_type == WRITTEN_DATA_TYPES.DATE_TIME:
             data["dateTimeFormat"] = self.date_time_format
             return data
@@ -244,6 +255,7 @@ class AnswerSpec:
             number_maximum=data.get("numberMaximum"),
             date_time_format=data.get("dateTimeFormat", defaults.date_time_format),
             check_digit=data.get("checkDigit", defaults.check_digit),
+            entered=data.get("entered", True),
         )
         # Stored without a length when the format implies it.
         if spec.data_type == WRITTEN_DATA_TYPES.DATE_TIME:

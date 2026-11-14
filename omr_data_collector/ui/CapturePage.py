@@ -52,6 +52,7 @@ from omr_data_collector.layout.omr_template import (
     page_template,
     with_writing_areas,
 )
+from omr_data_collector.models.answer_keys import answer_key, not_entered
 from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
@@ -73,6 +74,7 @@ from omr_data_collector.storage.export_store import (
 from omr_data_collector.storage.form_store import (
     list_forms,
     load_form_version,
+    load_form_versions,
     load_printed_layout,
 )
 from omr_data_collector.storage.organization_store import load_organization
@@ -322,8 +324,11 @@ class CapturePage(QWidget):
         self._current: Capture | None = None
         self._form: Form | None = None
         self._template: PageTemplate | None = None
-        # The answers as being checked; saved with Save data.
+        # The answers as being checked; saved with Save data. Answers not
+        # entered (on paper only, wiki 60016) aren't among them: ``_shown_at``
+        # is where each one is among the sheet's own answers.
         self._answers: list[CapturedAnswer] = []
+        self._shown_at: list[int] = []
         # The row of the answer the editor is showing.
         self._editing_row: int | None = None
         # Where exports are saved: the documents folder, then the last used.
@@ -376,7 +381,7 @@ class CapturePage(QWidget):
 
     def has_unsaved_changes(self) -> bool:
         return (
-            self._current is not None and tuple(self._answers) != self._current.answers
+            self._current is not None and self._all_answers() != self._current.answers
         )
 
     def save(self) -> bool:
@@ -781,6 +786,7 @@ class CapturePage(QWidget):
         if self._current is not None and self._current.capture_id in doomed_ids:
             self._current = None
             self._answers = []
+            self._shown_at = []
             neighbour = (
                 remaining[min(first_row, len(remaining) - 1)] if remaining else None
             )
@@ -820,7 +826,7 @@ class CapturePage(QWidget):
             )
             return False
         saved = replace(
-            capture, status=CAPTURE_STATUSES.SAVED, answers=tuple(self._answers)
+            capture, status=CAPTURE_STATUSES.SAVED, answers=self._all_answers()
         )
         save_capture(self._connection, saved)
         # Saved: nothing on it is unsaved now, so moving on asks nothing.
@@ -1018,6 +1024,7 @@ class CapturePage(QWidget):
         """Show a sheet: its image, and its answers to check."""
         self._current = capture
         self._answers = list(capture.answers) if capture else []
+        self._shown_at = list(range(len(self._answers)))
         # The editor's values belong to the sheet shown before: never copy them.
         self._editing_row = None
         self._form = None
@@ -1037,6 +1044,7 @@ class CapturePage(QWidget):
             )
         else:
             self._load_page(capture)
+            self._leave_out_not_entered(capture)
         self.sheet_canvas.set_current(None)
         self.sheet_canvas.set_answers(self._canvas_answers())
         self._fill_answers_table()
@@ -1045,6 +1053,33 @@ class CapturePage(QWidget):
         else:
             self._show_answer(None)
         self._update_buttons()
+
+    def _leave_out_not_entered(self, capture: Capture) -> None:
+        """Keep the answers on paper only out of the ones to check.
+
+        The form's latest version decides, so sheets printed before an answer
+        was set as not entered skip it too.
+        """
+        if self._form is None or capture.form_id is None:
+            return
+        skipped = not_entered(load_form_versions(self._connection, capture.form_id))
+        if not skipped:
+            return
+        self._shown_at = [
+            index
+            for index, answer in enumerate(capture.answers)
+            if answer_key(self._form, answer) not in skipped
+        ]
+        self._answers = [capture.answers[index] for index in self._shown_at]
+
+    def _all_answers(self) -> tuple[CapturedAnswer, ...]:
+        """The sheet's answers with the ones checked here, and those not entered."""
+        if self._current is None:
+            return ()
+        answers = list(self._current.answers)
+        for answer, index in zip(self._answers, self._shown_at, strict=True):
+            answers[index] = answer
+        return tuple(answers)
 
     def _load_page(self, capture: Capture) -> None:
         if capture.form_id is not None and capture.form_version is not None:

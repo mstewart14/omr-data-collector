@@ -68,6 +68,14 @@ def load_form_version(
     )
 
 
+def load_form_versions(connection: sqlite3.Connection, form_id: str) -> list[Form]:
+    """Every stored version of a form, latest first."""
+    return [
+        Form.from_definition(stored.definition, form_id=form_id, version=stored.version)
+        for stored in reversed(stored_versions(connection, form_id))
+    ]
+
+
 def is_printed(connection: sqlite3.Connection, form_id: str, version: int) -> bool:
     row = connection.execute(
         "SELECT printed_at FROM form_version WHERE form_id = ? AND version = ?",

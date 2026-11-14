@@ -367,6 +367,7 @@ def test_tab_order_follows_the_screen(
         fields.maximum_spin,
         fields.date_format_combo,
         fields.check_digit_combo,
+        fields.not_entered_check,
         page.revert_button,
         page.save_button,
     ]

@@ -188,6 +188,13 @@ engine bridge.
   export. `Capture.looks_like` warns when two pictures seem to be one sheet
   (same page, every bubble alike, no typed value different): only a warning,
   since people can mark a short form alike.
+- **Answers on paper only** (wiki 60016): a written answer's `AnswerSpec.entered`
+  (the answer settings' "Skip when entering data" tick box; stored only when
+  off) keeps it printed but out of the Capture page's answers to check and out
+  of export. The form's latest version decides, for sheets of every version,
+  matched by name (`models/answer_keys.not_entered`, `answer_key`); the
+  Capture page keeps the skipped answers stored with the sheet
+  (`CapturePage._all_answers`). Bubbles are always entered (`is_entered`).
 - **PDF scans and the scanner folder** (wiki 60010-60015): Add images takes
   PDFs, each page drawn at 300 dpi on white (`storage/pdf_pages.py`, Qt's PDF
   module imported only then) and added as "<file>, page N". The scanner

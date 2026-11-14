@@ -47,5 +47,12 @@ ANSWER_SPEC_SCHEMA = {
         "numberMaximum": {"type": "integer"},
         "dateTimeFormat": {"enum": list(DATE_TIME_FORMATS)},
         "checkDigit": {"enum": list(CHECK_DIGIT_SCHEMES.values())},
+        "entered": {
+            "description": (
+                "False for a written answer on paper only: printed, but not "
+                "checked on the Capture screen nor exported"
+            ),
+            "type": "boolean",
+        },
     },
 }
