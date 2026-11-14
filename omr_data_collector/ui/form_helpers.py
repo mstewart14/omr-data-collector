@@ -42,13 +42,27 @@ def add_field_row(
         The label, and the error label to pass to ``set_field_error``.
     """
     label = QLabel(label_text)
+    label.setTextFormat(Qt.TextFormat.PlainText)
     label.setBuddy(field)
     form.addRow(label, field)
     error_label = QLabel()
+    error_label.setTextFormat(Qt.TextFormat.PlainText)
     style_error_label(error_label, field.palette())
     form.addRow("", error_label)
     form.setRowVisible(error_label, False)  # noqa: FBT003 (Qt API is positional)
     return label, error_label
+
+
+def note_label() -> QLabel:
+    """A wrapping label for text the app fills in, often with names in it.
+
+    Shown as written: a name such as "<b>Intake</b>" isn't drawn as formatting,
+    as QLabel would by default.
+    """
+    label = QLabel()
+    label.setTextFormat(Qt.TextFormat.PlainText)
+    label.setWordWrap(True)
+    return label
 
 
 def add_shortcut(

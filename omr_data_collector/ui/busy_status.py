@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QRectF, QTimer
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
 
@@ -95,6 +95,7 @@ class BusyStatus(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.label = QLabel()
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
         # No end known: a block slides back and forth.
         self.bar = SweepBar()
         self.bar.setAccessibleName(tr("Working"))

@@ -130,7 +130,8 @@ def read_form_file(path: Path) -> FormFile:
     try:
         too_large = path.stat().st_size > MAX_FILE_BYTES
         data = None if too_large else json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    # RecursionError: JSON nested too deeply to read.
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise FormFileError(
             tr("The file couldn't be read as an exported form: {problem}").format(
                 problem=error

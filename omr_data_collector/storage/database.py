@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import contextlib
+import os
 import sqlite3
 from pathlib import Path
 
 from omr_data_collector.i18n import tr
+
+# Read, write and open for this account alone.
+PRIVATE_FOLDER_MODE = 0o700
 
 # Each entry upgrades the schema by one version; SQLite's user_version records how
 # many have run. Append new migrations, never edit old ones: databases in the field
@@ -147,11 +152,25 @@ MIGRATIONS: list[list[str]] = [
 def open_database(path: Path) -> sqlite3.Connection:
     """Open the app database at ``path``, creating it if needed, and update it."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    make_private(path.parent)
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     migrate(connection)
     return connection
+
+
+def make_private(folder: Path) -> None:
+    """Let only this computer account open ``folder``: the database and sheets.
+
+    The sheets are people's handwriting, often their names. Folders are made
+    open to every account by default on Linux and macOS, and a home folder
+    isn't always closed; on Windows the per-user app data folder already is.
+    """
+    if os.name == "nt":
+        return
+    with contextlib.suppress(OSError):
+        folder.chmod(PRIVATE_FOLDER_MODE)
 
 
 def database_file(connection: sqlite3.Connection) -> Path:
@@ -175,7 +194,15 @@ def migrate(connection: sqlite3.Connection) -> None:
         MIGRATIONS[current_version:], start=current_version + 1
     ):
         # One transaction per migration, so a failure leaves the previous version.
-        with connection:
+        # Begun by hand: Python's sqlite3 begins one by itself only before rows
+        # change, so CREATE and ALTER would otherwise each commit at once, and a
+        # migration stopped halfway would fail at every start after.
+        connection.execute("BEGIN")
+        try:
             for statement in statements:
                 connection.execute(statement)
             connection.execute(f"PRAGMA user_version = {version}")
+        except BaseException:
+            connection.rollback()
+            raise
+        connection.commit()

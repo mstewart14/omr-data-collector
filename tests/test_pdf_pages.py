@@ -11,6 +11,7 @@ import pytest
 from omr_data_collector.constants import CAPTURE_STATUSES
 from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.rendering.page_photo import save_as_pdf
+from omr_data_collector.storage import pdf_pages
 from omr_data_collector.storage.capture_store import add_capture
 from omr_data_collector.storage.pdf_pages import PAGE_DPI, PdfError, pdf_page_images
 from tests.sheets import LETTER, Sheet
@@ -78,6 +79,16 @@ def test_a_file_that_isnt_a_pdf_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(PdfError):
         pdf_page_images(broken, tmp_path / "pages")
+
+
+def test_a_pdf_too_long_to_be_a_scan_is_refused(
+    scan_pdf: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pdf_pages, "MAX_PDF_PAGES", 1)
+
+    with pytest.raises(PdfError):
+        pdf_page_images(scan_pdf, tmp_path / "pages")
+    assert not (tmp_path / "pages").exists()
 
 
 def test_a_pdf_page_is_read_like_a_photo(

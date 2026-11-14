@@ -293,6 +293,7 @@ def test_a_different_form_with_the_same_name_is_refused(
     ("content", "problem"),
     [
         ("not json", "couldn't be read"),
+        ("[" * 100_000 + "]" * 100_000, "couldn't be read"),
         (json.dumps({"format": "something else"}), "isn't a form exported"),
         (
             json.dumps({"format": "omr-data-collector-form", "formatVersion": 99}),

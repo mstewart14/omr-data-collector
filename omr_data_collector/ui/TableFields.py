@@ -29,7 +29,7 @@ from omr_data_collector.i18n import tr
 from omr_data_collector.models.TableBlock import Column, TableBlock
 from omr_data_collector.ui.AnswerFields import date_time_format_labels
 from omr_data_collector.ui.ColumnDialog import ColumnDialog
-from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut
+from omr_data_collector.ui.form_helpers import add_field_row, add_shortcut, note_label
 from omr_data_collector.ui.FormattedTextFields import FormattedTextFields
 from omr_data_collector.ui.TablePreview import (
     TablePreview,
@@ -199,8 +199,7 @@ class TableFields:
         form.addRow(preview_label, self.preview_orientation_combo)
         self.preview = TablePreview()
         form.addRow("", self.preview)
-        self.preview_summary = QLabel()
-        self.preview_summary.setWordWrap(True)
+        self.preview_summary = note_label()
         form.addRow("", self.preview_summary)
         self._connect()
 

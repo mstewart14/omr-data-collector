@@ -26,13 +26,16 @@ if TYPE_CHECKING:
 PAGE_DPI = 300
 MAX_PAGE_PIXELS = 6000
 POINTS_PER_INCH = 72
+# A stack of forms scanned at once is a few hundred pages; a PDF with more is
+# not a scan, and drawing it would fill the disk.
+MAX_PDF_PAGES = 1000
 # The files that can be added as sheets: pictures, and PDF scans.
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")
 SCAN_SUFFIXES = (*IMAGE_SUFFIXES, ".pdf")
 
 
 class PdfError(Exception):
-    """The PDF couldn't be opened (damaged, password-protected or not a PDF)."""
+    """The PDF couldn't be opened (damaged, password-protected, not a PDF, or too long)."""
 
 
 @dataclass(frozen=True)
@@ -70,13 +73,17 @@ def pdf_page_images(pdf: Path, out_dir: Path) -> list[PdfPage]:
     """Draw every page of ``pdf`` as a PNG in ``out_dir``, on white paper.
 
     Raises:
-        PdfError: The file couldn't be opened as a PDF, or has no pages.
+        PdfError: The file couldn't be opened as a PDF, or has no pages, or
+            more than MAX_PDF_PAGES.
     """
     # Imported here: only adding a PDF needs Qt's PDF module, not starting up.
     from PySide6.QtPdf import QPdfDocument  # noqa: PLC0415
 
     document = QPdfDocument()
-    if document.load(str(pdf)) != QPdfDocument.Error.None_ or not document.pageCount():
+    if (
+        document.load(str(pdf)) != QPdfDocument.Error.None_
+        or not 0 < document.pageCount() <= MAX_PDF_PAGES
+    ):
         document.close()
         raise PdfError(pdf.name)
     out_dir.mkdir(parents=True, exist_ok=True)

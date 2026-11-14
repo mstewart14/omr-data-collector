@@ -45,6 +45,7 @@ from omr_data_collector.ui.accessibility import (
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     add_shortcut,
+    note_label,
     save_revert_buttons,
     warn,
 )
@@ -252,8 +253,7 @@ class OrganizationPage(QWidget):
         self.qr_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qr_preview.setMinimumSize(240, 240)
         self.qr_preview.setAccessibleName(tr("QR code"))
-        self.qr_hint = QLabel()
-        self.qr_hint.setWordWrap(True)
+        self.qr_hint = note_label()
         self.qr_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.save_qr_button = QPushButton(tr("Sa&ve QR code…"))
         self.print_qr_button = QPushButton(tr("Pr&int QR code…"))

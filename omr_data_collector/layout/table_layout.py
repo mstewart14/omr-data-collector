@@ -10,11 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from omr_data_collector.constants import ANSWER_TYPES
-from omr_data_collector.layout.text import (  # noqa: F401 (MM_PER_POINT re-exported)
-    MM_PER_POINT,
-    line_height_mm,
-    text_width_mm,
-)
+from omr_data_collector.layout.text import line_height_mm, text_width_mm
 from omr_data_collector.models.AnswerSpec import CHOICE_ANSWER_TYPES
 from omr_data_collector.models.FormFont import STANDARD_FONT, FormFont
 

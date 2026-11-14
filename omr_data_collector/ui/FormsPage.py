@@ -88,6 +88,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_save_first,
     ask_save_path,
     confirm_despite_problems,
+    note_label,
     tell,
     warn,
 )
@@ -501,11 +502,9 @@ class FormsPage(LibraryPage[Form]):
         self.style_combo = QComboBox()
         self.font_size_combo = QComboBox()
         self._fill_font_combos(FormFont())
-        self.version_note = QLabel()
-        self.version_note.setWordWrap(True)
+        self.version_note = note_label()
         # Layout problems to fix before printing, e.g. a table too wide.
-        self.problems_note = QLabel()
-        self.problems_note.setWordWrap(True)
+        self.problems_note = note_label()
         self.block_list = QListWidget()
         self.block_list.setMinimumHeight(
             self.block_list.fontMetrics().lineSpacing() * BLOCK_ROWS_VISIBLE

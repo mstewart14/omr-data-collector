@@ -31,7 +31,7 @@ from omr_data_collector.models.AnswerSpec import (
     AnswerSpec,
     Choice,
 )
-from omr_data_collector.ui.form_helpers import add_field_row
+from omr_data_collector.ui.form_helpers import add_field_row, note_label
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -203,8 +203,7 @@ class AnswerFields:
             field_widgets[key] = widget
         form.addRow("", self.choice_buttons)
         # A warning, not an error: saving goes ahead.
-        self.choices_note = QLabel()
-        self.choices_note.setWordWrap(True)
+        self.choices_note = note_label()
         self.choices_note.hide()
         form.addRow("", self.choices_note)
         for key, label_text, widget in (

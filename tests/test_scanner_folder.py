@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from PySide6.QtCore import Qt
 
 from omr_data_collector.constants import CAPTURE_STATUSES
 from omr_data_collector.rendering.page_photo import save_as_pdf
@@ -148,6 +149,18 @@ def test_only_finished_scans_at_the_top_of_the_folder_are_taken(folder: Path) ->
     assert saving == 1
     later = time.time() + SETTLE_SECONDS + 1
     assert len(files_to_take(folder, later)[0]) == 3
+
+
+@pytest.mark.skipif(os.name == "nt", reason="links need extra rights on Windows")
+def test_a_link_in_the_folder_isnt_taken(folder: Path, tmp_path: Path) -> None:
+    # Anyone who can save into a shared folder could link to any file here.
+    private = tmp_path / "private.txt"
+    private.write_text("someone's notes")
+    (folder / "looks-like-a-scan.jpg").symlink_to(private)
+    old = time.time() - SETTLE_SECONDS - 1
+    os.utime(folder / "looks-like-a-scan.jpg", (old, old), follow_symlinks=False)
+
+    assert files_to_take(folder, time.time() + SETTLE_SECONDS + 1) == ([], 0)
 
 
 def test_a_scan_dated_in_the_future_is_still_taken(folder: Path) -> None:
@@ -419,3 +432,16 @@ def test_refreshing_shows_a_sheet_read_meanwhile(
 
     assert page.sheet_list.item(0).text() == "first.jpg: read, to check"
     assert page.answers_table.rowCount() > 0
+
+
+def test_a_folder_name_is_shown_as_it_is(
+    qtbot: QtBot, connection: sqlite3.Connection
+) -> None:
+    # A name that looks like formatting isn't drawn as formatting.
+    page = CapturePage(connection)
+    qtbot.addWidget(page)
+
+    page.show_scanner_folder("/scans/<b>bold</b>", 10)
+
+    assert page.scanner_note.textFormat() == Qt.TextFormat.PlainText
+    assert "<b>bold</b>" in page.scanner_note.text()

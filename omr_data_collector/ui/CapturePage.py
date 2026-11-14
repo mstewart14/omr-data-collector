@@ -99,6 +99,7 @@ from omr_data_collector.ui.form_helpers import (
     ask_save_discard_cancel,
     ask_save_path,
     confirm_destructive,
+    note_label,
     warn,
 )
 from omr_data_collector.ui.SheetCanvas import CanvasAnswer, SheetCanvas
@@ -910,8 +911,7 @@ class CapturePage(QWidget):
         self.photo_tip.setWordWrap(True)
         self.add_button.setAccessibleDescription(self.photo_tip.text())
         # Shown once a scanner folder is chosen (show_scanner_folder).
-        self.scanner_note = QLabel()
-        self.scanner_note.setWordWrap(True)
+        self.scanner_note = note_label()
         self.check_scanner_button = QPushButton(tr("Chec&k scanner folder now"))
         self.check_scanner_button.clicked.connect(self.check_scanner_requested)
         layout = QVBoxLayout(box)

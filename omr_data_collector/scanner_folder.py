@@ -124,7 +124,8 @@ def files_to_take(folder: Path, now: float | None = None) -> tuple[list[Path], i
 
     Only the folder's own files count, not those in folders inside it (Added
     and Couldn't add among them), nor hidden files, which scanners and network
-    shares use while saving. A file changed less than SETTLE_SECONDS ago may
+    shares use while saving, nor links: a link in a shared folder could name
+    any file on this computer. A file changed less than SETTLE_SECONDS ago may
     still be being saved.
 
     Raises:
@@ -134,7 +135,12 @@ def files_to_take(folder: Path, now: float | None = None) -> tuple[list[Path], i
     ready: list[Path] = []
     saving = 0
     for path in sorted(folder.iterdir()):
-        if path.name.startswith(".") or not is_scan(path) or not path.is_file():
+        if (
+            path.name.startswith(".")
+            or not is_scan(path)
+            or path.is_symlink()
+            or not path.is_file()
+        ):
             continue
         if now - last_changed(path, now) < SETTLE_SECONDS:
             saving += 1

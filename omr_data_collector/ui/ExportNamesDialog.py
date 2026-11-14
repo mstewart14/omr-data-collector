@@ -26,6 +26,7 @@ from omr_data_collector.ui.accessibility import style_error_label
 from omr_data_collector.ui.form_helpers import (
     finish_editing,
     move_buttons,
+    note_label,
     ok_cancel_buttons,
 )
 
@@ -90,9 +91,9 @@ class ExportNamesDialog(QDialog):
         )
         files_label = QLabel(tr("&Files to export"))
         files_label.setBuddy(self.files_list)
-        self.description_label = QLabel()
-        self.description_label.setWordWrap(True)
+        self.description_label = note_label()
         self.columns_label = QLabel()
+        self.columns_label.setTextFormat(Qt.TextFormat.PlainText)
         self.stack = QStackedWidget()
         self.tables: dict[str, QTableWidget] = {}
         self._description = tr(
@@ -111,8 +112,7 @@ class ExportNamesDialog(QDialog):
             lambda _item: self._describe(self.files_list.currentRow())
         )
 
-        self.error_label = QLabel()
-        self.error_label.setWordWrap(True)
+        self.error_label = note_label()
         self.error_label.setVisible(False)
         style_error_label(self.error_label, self.palette())
 

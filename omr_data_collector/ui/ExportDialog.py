@@ -24,6 +24,7 @@ from omr_data_collector.i18n import tr
 from omr_data_collector.ui.form_helpers import (
     add_field_row,
     move_buttons,
+    note_label,
     ok_cancel_buttons,
 )
 
@@ -114,8 +115,7 @@ class ExportDialog(QDialog):
             )
         )
         self.note.setWordWrap(True)
-        self.warning = QLabel()
-        self.warning.setWordWrap(True)
+        self.warning = note_label()
         self.warning.setVisible(False)
 
         self.buttons = ok_cancel_buttons(self)

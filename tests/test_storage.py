@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 import sqlite3
+import stat
 from typing import TYPE_CHECKING
 
 import pytest
 
 from omr_data_collector.constants import PAGE_ORIENTATIONS, PAPER_SIZES
 from omr_data_collector.models.Organization import Organization
-from omr_data_collector.storage.database import MIGRATIONS, open_database
+from omr_data_collector.storage import database
+from omr_data_collector.storage.database import MIGRATIONS, migrate, open_database
 from omr_data_collector.storage.organization_store import (
     load_organization,
     save_organization,
@@ -48,6 +51,42 @@ def test_refuses_a_database_from_a_newer_app(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="newer version"):
         open_database(path)
+
+
+def test_a_migration_that_fails_halfway_leaves_nothing_done(
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    halfway = [
+        "CREATE TABLE half (x TEXT)",
+        "ALTER TABLE organization ADD COLUMN half TEXT",
+        "NOT SQL",
+    ]
+    monkeypatch.setattr(database, "MIGRATIONS", [*MIGRATIONS, halfway])
+
+    with pytest.raises(sqlite3.OperationalError):
+        migrate(connection)
+
+    (version,) = connection.execute("PRAGMA user_version").fetchone()
+    assert version == len(MIGRATIONS)
+    tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
+    assert "half" not in tables
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(organization)")}
+    assert "half" not in columns
+    # Fixed, it runs again from the start.
+    monkeypatch.setattr(database, "MIGRATIONS", [*MIGRATIONS, halfway[:2]])
+    migrate(connection)
+    (version,) = connection.execute("PRAGMA user_version").fetchone()
+    assert version == len(MIGRATIONS) + 1
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows keeps app data per user")
+def test_the_data_folder_is_open_to_this_account_only(tmp_path: Path) -> None:
+    folder = tmp_path / "data"
+    folder.mkdir(mode=0o755)
+
+    open_database(folder / "app.sqlite3").close()
+
+    assert stat.S_IMODE(folder.stat().st_mode) == 0o700
 
 
 def test_no_organization_before_one_is_saved(connection: sqlite3.Connection) -> None:
