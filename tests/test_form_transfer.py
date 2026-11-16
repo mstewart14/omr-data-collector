@@ -313,6 +313,9 @@ def test_a_different_form_with_the_same_name_is_refused(
             "damaged",
         ),
     ],
+    # Named, not shown: pytest puts the test's name in an environment variable,
+    # and Windows refuses one as long as the deeply nested file.
+    ids=["not JSON", "nested too deep", "another format", "newer", "damaged"],
 )
 def test_a_file_that_isnt_an_exported_form_is_refused(
     tmp_path: Path, content: str, problem: str
