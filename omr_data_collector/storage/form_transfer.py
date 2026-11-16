@@ -43,7 +43,16 @@ FILE_SUFFIX = ".omrform"
 # stays well under this. A larger file is read no further.
 MAX_FILE_BYTES = 20 * 1024 * 1024
 
+# Real exports nest a dozen or so deep. Python's JSON reader goes one level
+# deeper on the stack for each, and on Windows, whose stack is small, a file
+# nested thousands deep crashes the app before Python can stop it: so a file
+# nested deeper than this is refused before it's read.
+MAX_JSON_DEPTH = 64
+
 _ID = re.compile(r"^[0-9a-f]{32}$")
+# What nesting depends on: brackets, and the quotes and escapes that make
+# brackets inside strings just text.
+_JSON_STRUCTURE = re.compile(r'[\[\]{}"\\]')
 
 
 class FormFileError(Exception):
@@ -129,8 +138,10 @@ def read_form_file(path: Path) -> FormFile:
     """
     try:
         too_large = path.stat().st_size > MAX_FILE_BYTES
-        data = None if too_large else json.loads(path.read_text(encoding="utf-8"))
-    # RecursionError: JSON nested too deeply to read.
+        text = "" if too_large else path.read_text(encoding="utf-8")
+        too_deep = _too_deep(text)
+        data = None if too_large or too_deep else json.loads(text)
+    # RecursionError: nested too deeply for Python, on a system with a big stack.
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise FormFileError(
             tr("The file couldn't be read as an exported form: {problem}").format(
@@ -139,6 +150,10 @@ def read_form_file(path: Path) -> FormFile:
         ) from error
     if too_large:
         raise FormFileError(tr("The file is too large to be an exported form."))
+    if too_deep:
+        raise FormFileError(
+            tr("The file is damaged or incomplete, so the form can't be imported.")
+        )
     if not isinstance(data, dict) or data.get("format") != FILE_FORMAT:
         raise FormFileError(tr("The file isn't a form exported by this app."))
     if data.get("formatVersion") != FILE_FORMAT_VERSION:
@@ -160,6 +175,35 @@ def read_form_file(path: Path) -> FormFile:
         raise FormFileError(
             tr("The file is damaged or incomplete, so the form can't be imported.")
         ) from error
+
+
+def _too_deep(text: str) -> bool:
+    """Whether the JSON ``text`` nests deeper than MAX_JSON_DEPTH.
+
+    Counted without reading it as JSON, which is what could crash: brackets
+    inside strings don't count.
+    """
+    depth = 0
+    in_string = False
+    escaped_at = -1
+    for match in _JSON_STRUCTURE.finditer(text):
+        char, at = match.group(), match.start()
+        if at == escaped_at:
+            continue
+        if in_string:
+            if char == "\\":
+                escaped_at = at + 1
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_JSON_DEPTH:
+                return True
+        elif char in "]}":
+            depth -= 1
+    return False
 
 
 def _parse(data: dict[str, Any]) -> FormFile:

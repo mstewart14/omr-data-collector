@@ -293,7 +293,8 @@ def test_a_different_form_with_the_same_name_is_refused(
     ("content", "problem"),
     [
         ("not json", "couldn't be read"),
-        ("[" * 100_000 + "]" * 100_000, "couldn't be read"),
+        # Deep enough to crash Python's JSON reader on Windows if it were read.
+        ("[" * 100_000 + "]" * 100_000, "damaged"),
         (json.dumps({"format": "something else"}), "isn't a form exported"),
         (
             json.dumps({"format": "omr-data-collector-form", "formatVersion": 99}),
@@ -321,6 +322,20 @@ def test_a_file_that_isnt_an_exported_form_is_refused(
 
     with pytest.raises(FormFileError, match=problem):
         read_form_file(path)
+
+
+def test_brackets_in_names_dont_count_as_nesting(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    form = save_form(connection, intake_form())
+    exported = form_file(connection, form.form_id).to_dict()
+    # Far more brackets than nesting allows, but in text, which is no nesting,
+    # with quotes and backslashes, written escaped.
+    exported["note"] = '"\\[{' * 1000
+    path = tmp_path / f"brackets{FILE_SUFFIX}"
+    path.write_text(json.dumps(exported), encoding="utf-8")
+
+    assert read_form_file(path).name == form.name
 
 
 # --- The editor's commands -------------------------------------------------------
