@@ -270,6 +270,11 @@ engine bridge.
   steps and marker file, bounded sizes), and files over `MAX_FILE_BYTES`
   aren't read. The organization isn't moved:
   pages printed on the other computer show its own header.
+  A sheet is only read with a version printed on this computer
+  (`scan_sheet`): a version that's unprinted here may have been exported as
+  a draft, changed and printed elsewhere, so its sheet is set aside
+  (`FormMissingError`, keeping the form it waits for) until that form is
+  imported, which sets it waiting again (`wait_again_for_form`).
 - **Form versions:** `storage/form_store.save_form` updates the latest version
   until `mark_printed` freezes it, then saves create a new version. A printed
   version's definition must never change: scanning a sheet looks up the exact

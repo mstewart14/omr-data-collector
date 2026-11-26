@@ -49,7 +49,10 @@ from omr_data_collector.models.ordering import move_by, move_to
 from omr_data_collector.models.Organization import paper_size_of
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.rendering.print_form import render_form, save_pdf
-from omr_data_collector.storage.capture_store import list_captures
+from omr_data_collector.storage.capture_store import (
+    list_captures,
+    wait_again_for_form,
+)
 from omr_data_collector.storage.form_store import (
     delete_form,
     is_printed,
@@ -421,6 +424,8 @@ class FormsPage(LibraryPage[Form]):
 
     # Printing needs the organization's details; the window opens them.
     organization_needed = Signal()
+    # Sheets set waiting again by an import, to be shown on the Capture page.
+    sheets_waiting = Signal()
 
     def texts(self) -> LibraryTexts:
         return LibraryTexts(
@@ -1260,7 +1265,17 @@ class FormsPage(LibraryPage[Form]):
         if stored is not None:
             self._select(stored.form_id)
             self._edit(stored)
-        self.status_message.emit(import_summary(result, new_form=plan.new_form))
+        message = import_summary(result, new_form=plan.new_form)
+        waiting = wait_again_for_form(self._connection, result.form_id)
+        if waiting:
+            message += " " + tr(
+                "%n sheet(s) that needed this form can be read now: use Read "
+                "waiting sheets on the Capture page.",
+                None,
+                waiting,
+            )
+            self.sheets_waiting.emit()
+        self.status_message.emit(message)
 
     def _ask_import_choices(self, plan: ImportPlan) -> tuple[bool, AddLibrary] | None:
         """Whose changes to keep, and what to do with library blocks; None to cancel."""

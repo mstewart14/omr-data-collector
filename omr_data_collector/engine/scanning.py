@@ -49,6 +49,7 @@ from omr_data_collector.models.Question import Question
 from omr_data_collector.models.SheetDetails import SheetDetails
 from omr_data_collector.models.TableBlock import TableBlock
 from omr_data_collector.storage.form_store import (
+    is_printed,
     load_form_version,
     load_printed_layout,
 )
@@ -86,6 +87,18 @@ logger = logging.getLogger(__name__)
 
 class ScanError(Exception):
     """A sheet that couldn't be read, with a message to show the person scanning."""
+
+
+class FormMissingError(ScanError):
+    """The version of the form a sheet was printed from isn't on this computer.
+
+    Either the form isn't here, or this computer's copy of that version was
+    never printed here. ``identity`` says which form and version it waits for.
+    """
+
+    def __init__(self, message: str, identity: SheetIdentity) -> None:
+        super().__init__(message)
+        self.identity = identity
 
 
 @dataclass(frozen=True)
@@ -246,9 +259,22 @@ def scan_sheet(  # noqa: PLR0913 (where to read from, keep and look)
     if form is None:
         msg = tr(
             "This sheet is from version {version} of a form that isn't on this "
-            "computer."
+            "computer. Import the form from the computer that printed it (File > "
+            "Import form), then read the sheet again."
         ).format(version=identity.form_version)
-        raise ScanError(msg)
+        raise FormMissingError(msg, identity)
+    if not is_printed(connection, identity.form_id, identity.form_version):
+        # Not printed here, so printed elsewhere: maybe after changes made
+        # there (an exported draft, changed and printed on the other computer),
+        # so this computer's copy can't say where the sheet's bubbles are.
+        msg = tr(
+            'This sheet was printed from version {version} of "{form}" on '
+            "another computer, and this computer's version {version} hasn't been "
+            "printed, so it may not be what was printed there. Import the form "
+            "from the computer that printed it (File > Import form), then read "
+            "the sheet again."
+        ).format(version=identity.form_version, form=form.name)
+        raise FormMissingError(msg, identity)
     template = _stored_page_template(connection, form, identity, paper_size)
     upright, corners = turn_upright(image, found.corners)
     picture: np.ndarray | None = None if upright is image else upright

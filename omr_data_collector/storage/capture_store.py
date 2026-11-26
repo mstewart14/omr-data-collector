@@ -8,6 +8,7 @@ import shutil
 import uuid
 from typing import TYPE_CHECKING
 
+from omr_data_collector.constants import CAPTURE_STATUSES
 from omr_data_collector.models.Capture import Capture, CapturedAnswer
 from omr_data_collector.storage.database import database_file
 
@@ -136,6 +137,21 @@ def save_capture(connection: sqlite3.Connection, capture: Capture) -> None:
                 capture.capture_id,
             ),
         )
+
+
+def wait_again_for_form(connection: sqlite3.Connection, form_id: str) -> int:
+    """Set the sheets that couldn't be read for want of this form waiting again.
+
+    Once the form is imported, they can be read. Returns how many there were.
+    """
+    with connection:
+        cursor = connection.execute(
+            "UPDATE capture SET status = ?, problem = '',"
+            " updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+            " WHERE status = ? AND form_id = ?",
+            (CAPTURE_STATUSES.WAITING, CAPTURE_STATUSES.UNREADABLE, form_id),
+        )
+    return cursor.rowcount
 
 
 def delete_capture(connection: sqlite3.Connection, capture: Capture) -> None:

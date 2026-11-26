@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.busy)
         self._engine_loaded.connect(lambda: self.busy.end(ENGINE_WORK))
         self.capture_page.check_scanner_requested.connect(self.check_scanner_now)
+        self.forms_page.sheets_waiting.connect(self.capture_page.refresh_sheets)
         self._build_menus()
         self.forms_page.organization_needed.connect(
             lambda: self.open_section(

@@ -136,6 +136,13 @@
             </translation>
         </message>
         <message numerus="yes">
+            <source>%n sheet(s) that needed this form can be read now: use Read waiting sheets on the Capture page.</source>
+            <translation>
+                <numerusform>%n sheet that needed this form can be read now: use Read waiting sheets on the Capture page.</numerusform>
+                <numerusform>%n sheets that needed this form can be read now: use Read waiting sheets on the Capture page.</numerusform>
+            </translation>
+        </message>
+        <message numerus="yes">
             <source>moved %n block(s)</source>
             <translation>
                 <numerusform>moved %n block</numerusform>

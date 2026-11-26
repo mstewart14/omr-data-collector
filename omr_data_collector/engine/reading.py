@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from omr_data_collector.constants import CAPTURE_STATUSES
-from omr_data_collector.engine.scanning import ScanError, scan_sheet
+from omr_data_collector.engine.scanning import FormMissingError, ScanError, scan_sheet
 from omr_data_collector.models.Capture import Capture, CapturedAnswer
 from omr_data_collector.storage.capture_store import (
     image_path,
@@ -49,6 +49,18 @@ def read_capture(
                 page_image=page_image_path(connection, capture),
                 reframe=reframe,
             )
+    except FormMissingError as error:
+        # Kept with the form it waits for: importing that form sets it
+        # waiting to be read again (capture_store.wait_again_for_form).
+        updated = replace(
+            capture,
+            status=CAPTURE_STATUSES.UNREADABLE,
+            problem=str(error),
+            form_id=error.identity.form_id,
+            form_version=error.identity.form_version,
+            page=error.identity.page,
+            answers=(),
+        )
     except ScanError as error:
         updated = replace(
             capture,

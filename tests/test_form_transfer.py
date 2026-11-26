@@ -8,13 +8,15 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from omr_data_collector.constants import PAPER_SIZES
+from omr_data_collector.constants import CAPTURE_STATUSES, PAPER_SIZES
+from omr_data_collector.engine.reading import read_capture
 from omr_data_collector.engine.scanning import scan_sheet
 from omr_data_collector.layout.form_layout import layout_form
 from omr_data_collector.layout.frozen_layout import printed_layout
 from omr_data_collector.models.Form import Form, FormBlock
 from omr_data_collector.models.Organization import Organization
 from omr_data_collector.models.TextBlock import TextBlock
+from omr_data_collector.storage.capture_store import add_capture, list_captures
 from omr_data_collector.storage.database import open_database
 from omr_data_collector.storage.form_store import (
     list_forms,
@@ -22,6 +24,7 @@ from omr_data_collector.storage.form_store import (
     load_printed_layout,
     mark_printed,
     save_form,
+    store_versions,
 )
 from omr_data_collector.storage.form_transfer import (
     FILE_SUFFIX,
@@ -424,6 +427,61 @@ def test_import_form_opens_the_imported_form(  # noqa: PLR0913 (fixtures)
     assert statuses[-1] == (
         'Imported the form "Intake" with 1 version. Added 1 library block.'
     )
+
+
+def test_a_sheet_from_a_version_printed_elsewhere_waits_for_its_form(  # noqa: PLR0913 (fixtures)
+    connection: sqlite3.Connection,
+    other: sqlite3.Connection,
+    organization: Organization,
+    printed_form: tuple[Form, FormLayout],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    """A draft exported to another computer, printed there, and not sent back.
+
+    The other computer has version 1 too, but never printed it: what was
+    printed may have been changed first, so its sheets aren't read with it.
+    """
+    form, layout = printed_form
+    (printed,) = stored_versions(connection, form.form_id)
+    draft = replace(printed, printed_at=None, printed_layout=None)
+    store_versions(other, form.form_id, form.name, [draft])
+    sheet = Sheet(form, organization, layout)
+    sheet.fill_question(1, 0, 3)
+    capture = add_capture(other, sheet.photograph(tmp_path / "photo.jpg"))
+
+    unread = read_capture(other, capture, LETTER)
+
+    assert unread.status == CAPTURE_STATUSES.UNREADABLE
+    assert unread.problem.startswith(
+        'This sheet was printed from version 1 of "Intake" on another computer'
+    )
+    assert "Import the form from the computer that printed it" in unread.problem
+    assert (unread.form_id, unread.form_version) == (form.form_id, 1)
+
+    # The form comes back from the computer that printed it.
+    path = tmp_path / f"Intake{FILE_SUFFIX}"
+    write_form_file(path, form_file(connection, form.form_id))
+    there = FormsPage(other)
+    qtbot.addWidget(there)
+    mocker.patch(f"{PAGE_MODULE}.choose_form_file_to_import", return_value=path)
+    mocker.patch(f"{PAGE_MODULE}.ask_whose_changes", return_value=False)
+    mocker.patch(f"{PAGE_MODULE}.ask_add_library", return_value=AddLibrary.ADD_NEW)
+    statuses = statuses_of(there)
+
+    with qtbot.waitSignal(there.sheets_waiting):
+        there.import_form()
+
+    assert statuses[-1].endswith(
+        "1 sheet that needed this form can be read now: use Read waiting sheets "
+        "on the Capture page."
+    )
+    (waiting,) = list_captures(other)
+    assert (waiting.status, waiting.problem) == (CAPTURE_STATUSES.WAITING, "")
+    read = read_capture(other, waiting, LETTER)
+    assert read.status == CAPTURE_STATUSES.READ
+    assert ("food", "other") in [answer.values for answer in read.answers]
 
 
 def test_import_form_explains_a_bad_file(
