@@ -138,8 +138,12 @@ engine bridge.
   every empty bubble as marked on an unevenly lit photo of light pencil.
   `engine/marks.py` judges each bubble against the paper around it, leaves
   ones in between for a person ("Couldn't tell…"), and refuses a page with
-  many. Its limits are from real phone photos; retune them only against real
-  photos. `tests/test_scanning.py` is the round-trip test (`Sheet.use_mark`
+  many, unless one clear gap on the page parts them from its marks or its
+  empty bubbles (`page_split`; they're then read by side, still flagged). A
+  bubble well darker than the page's median (its typical empty bubble) is
+  never taken as empty: scanners set that level higher than phones. Its
+  limits are from real phone photos and one scanner's PDF; retune them only
+  against real scans. `tests/test_scanning.py` is the round-trip test (`Sheet.use_mark`
   and `radius_mm` draw pale and part-filled marks).
 - **Lining a page up** (`engine/alignment.py`, `tests/test_alignment.py`): the
   QR reader gives the code's corners in the code's own order, so

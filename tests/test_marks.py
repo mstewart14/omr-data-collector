@@ -92,3 +92,66 @@ def test_a_phone_photo_that_misread_page_wide_reads_bubble_by_bubble() -> None:
         "b": FieldMarks(marked=(1,)),
         "c": FieldMarks(marked=(2,)),
     }
+
+
+def page_of_ratios(ratios: list[float]) -> MeasuredPage:
+    """One bubble per field, each this dark against white paper."""
+    return page_of(
+        [(f"f{row}", [250.0 * ratio]) for row, ratio in enumerate(ratios)], paper=[250]
+    )
+
+
+# A scanner's PDF that came out lighter than phone photos: its empty bubbles
+# at 0.80-0.85, its marks at 0.5 and, slashed or scribbled, lighter.
+SCANNED_EMPTY = [0.80, 0.81, 0.82, 0.82, 0.83, 0.84, 0.85] * 3
+
+
+def test_light_marks_a_clear_gap_parts_from_the_empty_ones_are_read() -> None:
+    light = [0.62, 0.63, 0.64, 0.645]
+    page = page_of_ratios([0.50, 0.52, 0.55, *light, *SCANNED_EMPTY])
+
+    read = read_marks(page)
+
+    # Four in between once made the page unreadable; now they're read as
+    # marked, and still left for a person to check.
+    for row in range(3):
+        assert read[f"f{row}"] == FieldMarks(marked=(0,))
+    for row in range(3, 7):
+        assert read[f"f{row}"] == FieldMarks(marked=(0,), unclear=True)
+    assert all(read[f"f{row}"] == FieldMarks() for row in range(7, 28))
+
+
+def test_marks_in_between_with_no_clear_gap_still_make_the_page_unreadable() -> None:
+    # Evenly spread from the marks to the empty bubbles: nothing parts them.
+    page = page_of_ratios([0.50, 0.55, 0.60, 0.63, 0.66, 0.68, 0.72, *SCANNED_EMPTY])
+
+    with pytest.raises(MarksUnclearError):
+        read_marks(page)
+
+
+def test_a_light_mark_past_the_band_is_checked_when_the_empty_ones_are_lighter() -> (
+    None
+):
+    # 0.72 would be empty in a phone photo, but on this page every empty
+    # bubble is 0.80 or more: it's a light mark, or something on the paper.
+    page = page_of_ratios([0.50, 0.72, *SCANNED_EMPTY])
+
+    read = read_marks(page)
+
+    assert read["f0"] == FieldMarks(marked=(0,))
+    assert read["f1"] == FieldMarks(unclear=True)
+    assert all(not marks.unclear for label, marks in read.items() if label != "f1")
+
+
+def test_a_phone_photos_empty_bubbles_arent_checked() -> None:
+    # Measured from real phone photos: empty bubbles at 0.71-0.83, around 0.75.
+    phone_empty = [0.71, 0.72, 0.73, 0.74, 0.75, 0.75, 0.76, 0.77, 0.79, 0.83] * 2
+
+    read = read_marks(page_of_ratios([0.47, 0.53, 0.56, *phone_empty]))
+
+    assert not any(marks.unclear for marks in read.values())
+    assert [label for label, marks in read.items() if marks.marked] == [
+        "f0",
+        "f1",
+        "f2",
+    ]
